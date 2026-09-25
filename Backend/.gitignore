@@ -1,0 +1,5 @@
+# Purpose: tells git what NOT to upload to GitHub.
+# /vendor/ = installed libraries from "composer install", anyone can reinstall them, no need to upload.
+/vendor/
+# .env = contains your real Atlas password, must stay on your PC only.
+.env

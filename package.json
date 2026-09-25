@@ -1,0 +1,15 @@
+{
+  "name": "gamehub-2-0",
+  "private": true,
+  "version": "1.0.0",
+  "description": "GameHub_2.0 dev runner: PHP Backend (port 8000) + static Frontend with live-reload (port 5500). Sprint scope: the agreed 10 functional requirements only.",
+  "scripts": {
+    "dev": "concurrently --kill-others -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "php -S localhost:8000 -t Backend/public",
+    "dev:frontend": "live-server Frontend --host=localhost --port=5500"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "live-server": "^1.2.2"
+  }
+}

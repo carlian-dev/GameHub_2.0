@@ -1,0 +1,15 @@
+{
+    "name": "gamehub/backend",
+    "description": "GameHub_2.0 PHP Backend - MongoDB Atlas (gamehub_2_0)",
+    "type": "project",
+    "require": {
+        "php": ">=8.1",
+        "mongodb/mongodb": "^2.1",
+        "vlucas/phpdotenv": "^5.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    }
+}

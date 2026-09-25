@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<!--
+  function/login.html - shared login for admin (AD-001) and cashier (CA-001).
+  Pair: this page <-> Backend/function/login.php.
+  Purpose: one door, two destinations. After login the role decides:
+  admin -> ./cashiers.html, cashier -> ../index.html.
+  Pending accounts see "awaiting admin approval" (403), archived see
+  "account archived" (403), wrong password sees "invalid credentials" (401).
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log in — GameHub_2.0</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Log in</h1>
+    <section class="card">
+      <label>Email <input id="email" type="email" placeholder="you@example.com" /></label><br /><br />
+      <label>Password <input id="password" type="password" /></label><br /><br />
+      <button id="go">Log in</button>
+      <div id="msg"></div>
+      <p><a href="./register.html">New cashier? Register</a> · <a href="../index.html">Home</a></p>
+    </section>
+  </main>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="./login.js"></script>
+</body>
+</html>

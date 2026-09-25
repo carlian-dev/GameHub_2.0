@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!--
+  function/register.html - cashier self-registration (CA-001.1).
+  Pair: this page <-> Backend/function/register.php.
+  Purpose: lets an applicant create an account with a personal email.
+  New accounts start as "pending" and cannot log in until an admin approves
+  them (AD-003). Shows exact Backend messages: duplicate -> "email already
+  used" (409), short password -> "at least 8 characters" (422).
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register cashier — GameHub_2.0</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Cashier registration</h1>
+    <p>Accounts start as <strong>pending</strong> and need admin approval before login.</p>
+    <section class="card">
+      <label>Email <input id="email" type="email" placeholder="you@example.com" /></label><br /><br />
+      <label>Password (min 8) <input id="password" type="password" /></label><br /><br />
+      <label>Confirm <input id="confirm" type="password" /></label><br /><br />
+      <button id="go">Create account</button>
+      <div id="msg"></div>
+      <p><a href="./login.html">Already approved? Log in</a> · <a href="../index.html">Home</a></p>
+    </section>
+  </main>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="./register.js"></script>
+</body>
+</html>

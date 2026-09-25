@@ -1,0 +1,4 @@
+# Purpose: keep install artifacts and secrets out of git.
+node_modules/
+Backend/vendor/
+Backend/.env

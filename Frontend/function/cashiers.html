@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!--
+  function/cashiers.html - admin staff office (AD-004 view, AD-003 approve,
+  AD-005 update, AD-006 archive).
+  Pair: this page <-> Backend/function/cashiers.php.
+  Purpose: admin-only table of cashiers with a status filter. Pending rows get
+  an Approve button, every row gets Edit (display name + schedule) and Archive.
+  Non-admins are bounced to ./login.html via getMe(). Password hashes are never
+  shown because the Backend never sends them.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cashiers — GameHub_2.0 admin</title>
+  <link rel="stylesheet" href="../css/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Cashier accounts</h1>
+    <p>
+      <button data-f="pending">Pending</button>
+      <button data-f="active">Active</button>
+      <button data-f="archived">Archived</button>
+      <button data-f="all">All</button>
+      <button id="out">Log out</button>
+    </p>
+    <section class="card">
+      <div id="msg">Loading...</div>
+      <table id="tbl" border="1" cellpadding="6" cellspacing="0">
+        <thead><tr><th>Email</th><th>Status</th><th>Name</th><th>Schedule</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p><a href="../index.html">Home</a></p>
+    </section>
+  </main>
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="./cashiers.js"></script>
+</body>
+</html>

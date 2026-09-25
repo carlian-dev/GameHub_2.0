@@ -1,0 +1,9 @@
+# Purpose: Apache-only helper so pretty URLs like /api/health work.
+# Without this, Apache looks for a real folder named "api" (not found).
+# With this, every request that is not a real file/folder is sent to index.php.
+# Example: /api/health -> index.php handles it. Real files like /style.css are left alone.
+# Note: not needed for "php -S localhost:8000", only for XAMPP/Apache.
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]

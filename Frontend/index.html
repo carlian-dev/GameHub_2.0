@@ -1,0 +1,38 @@
+<!--
+  GameHub_2.0 Frontend - page skeleton (index.html)
+  Purpose in plain words: this is the only page the user opens. It shows a title,
+  a short description, and a "Backend status" card with a Retry button.
+  It loads shared js/config.js (address) + js/api.js (fetch) and its own
+  logic in function/index.js (display). Example: opening this via Live Server shows
+  "Connected: db=gamehub_2_0 ..." if Backend is running on port 8000.
+  (Stays at root because static servers look for index.html here.)
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GameHub_2.0</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>GameHub_2.0</h1>
+    <!-- CU-001 landing: what GameHub is, plus doors to register / login. -->
+    <p>Your neighborhood billiard hall. Walk-ins welcome, reservations available.</p>
+    <p>Open daily. Regular play and special rates — ask the cashier.</p>
+    <p>
+      <a href="function/register.html">Cashier applicants: create an account</a> ·
+      <a href="function/login.html">Staff log in</a>
+    </p>
+    <section class="card">
+      <h2>Backend status</h2>
+      <div id="status">Checking...</div>
+      <button id="retry">Retry</button>
+    </section>
+  </main>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="function/index.js"></script>
+</body>
+</html>

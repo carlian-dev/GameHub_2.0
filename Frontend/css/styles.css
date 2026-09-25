@@ -1,0 +1,15 @@
+/*
+  GameHub_2.0 styles (css/styles.css)
+  Purpose in plain words: makes the page dark and readable.
+  .container = centers content, max 720px wide.
+  .card = dark box holding Backend status.
+  #status.ok (green) = connected, #status.err (red) = not connected.
+  button = rounded Retry button. No frameworks, pure CSS.
+*/
+:root { font-family: system-ui, Arial, sans-serif; }
+body { margin: 0; background: #0f172a; color: #e2e8f0; }
+.container { max-width: 720px; margin: 40px auto; padding: 0 16px; }
+.card { background: #1e293b; border-radius: 12px; padding: 16px; margin-top: 16px; }
+#status.ok { color: #4ade80; }
+#status.err { color: #f87171; }
+button { margin-top: 12px; padding: 8px 16px; border-radius: 8px; border: 0; cursor: pointer; }

@@ -25,6 +25,7 @@ require_once __DIR__ . '/../src/function/auth/invite.php';
 require_once __DIR__ . '/../src/function/tables/tables.php';
 require_once __DIR__ . '/../src/function/tables/rates.php';
 require_once __DIR__ . '/../src/function/tables/sessions.php';
+require_once __DIR__ . '/../src/function/cashiers/tables.php';
 // Teammate slots (B/C/D re-add with their files):
 // B: require tables/rates.php + GET/PUT /api/admin/rates
 // C: require tables/sessions.php + /api/admin/sessions + /api/cashier/sessions*
@@ -71,5 +72,6 @@ return [
     ['POST', '/api/cashier/sessions/{id}/cancel', 'sessions_cancel'],
     // D owns: GET /api/cashier/tables (tables_cashier_list)
     // Public availability stays here (handler lives in tables/tables.php).
+    ['GET', '/api/cashier/tables', 'tables_cashier_list'],
     ['GET', '/api/tables/availability', 'tables_public_list'],
 ];

@@ -1,32 +1,69 @@
 <!DOCTYPE html>
 <!--
-  function/login.html - shared login for admin (AD-001) and cashier (CA-001).
-  Pair: this page <-> Backend/function/login.php.
-  Purpose: one door, two destinations. After login the role decides:
-  admin -> ./cashiers.html, cashier -> ../index.html.
-  Pending accounts see "awaiting admin approval" (403), archived see
-  "account archived" (403), wrong password sees "invalid credentials" (401).
+  src/function/auth/login.html - staff login (AD-001 + CA-001).
+  Pair: this page <-> Backend/src/function/auth/login.php.
+  Layout matches the approved screenshot: mini-nav (BACK TO SITE), gold
+  STAFF PORTAL eyebrow, serif heading, card WITHOUT role toggle (backend
+  returns the role, so login.js redirects by response), green SIGN IN,
+  href-only "Forgot password?" (backend later), restricted-area footer note.
+  No registration door here: cashiers register only from an emailed admin
+  invitation link. Reachable via /login URL (see login/index.html) — never
+  linked on landing.
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Log in — GameHub_2.0</title>
-  <link rel="stylesheet" href="../css/styles.css" />
+  <title>Staff Login — GameHub</title>
+  <link rel="stylesheet" href="../../../css/styles.css" />
 </head>
-<body>
-  <main class="container">
-    <h1>Log in</h1>
-    <section class="card">
-      <label>Email <input id="email" type="email" placeholder="you@example.com" /></label><br /><br />
-      <label>Password <input id="password" type="password" /></label><br /><br />
-      <button id="go">Log in</button>
-      <div id="msg"></div>
-      <p><a href="./register.html">New cashier? Register</a> · <a href="../index.html">Home</a></p>
+<body class="staff">
+  <header class="nav nav-slim">
+    <a class="brand" href="/index.html" aria-label="GameHub home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" />
+        <circle cx="16" cy="16" r="4" fill="#3fa46a" />
+        <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" />
+      </svg>
+      <span class="brand-name">GameHub</span>
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="/index.html">&larr; Back to site</a>
+    </nav>
+    <button class="theme-icon" aria-label="Toggle theme">
+      <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2Z" /></svg>
+      <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></svg>
+    </button>
+  </header>
+
+  <main class="staff-main">
+    <p class="eyebrow eyebrow-gold"><span></span>Staff Portal<span></span></p>
+    <h1 class="staff-title">Staff Login</h1>
+    <p class="staff-sub">Sign in to access the management dashboard.</p>
+
+    <section class="staff-card" id="step1">
+      <label class="field">
+        <span>username</span>
+        <input id="email" type="text" placeholder="Juan.Cashier" autocomplete="username" />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+      </label>
+      <button id="go" class="btn btn-solid btn-block">Sign In</button>
+      <div id="msg" role="status"></div>
+      <p class="forgot"><a href="#">Forgot password?</a></p>
+      <p style="text-align:center;color:#8d877b;font-size:13px">— or —</p>
+      <div id="gbtn" style="display:flex;justify-content:center"></div>
     </section>
+
+    <p class="restricted">This area is restricted to authorized GameHub staff only.<br />Unauthorized access attempts are logged.</p>
   </main>
-  <script src="../js/config.js"></script>
-  <script src="../js/api.js"></script>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="../../../js/config.js"></script>
+  <script src="../../../js/api.js"></script>
+  <script src="../../../js/theme.js"></script>
   <script src="./login.js"></script>
 </body>
 </html>

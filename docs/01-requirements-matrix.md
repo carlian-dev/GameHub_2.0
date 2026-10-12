@@ -2,23 +2,23 @@
 
 | CODE | Functional Requirement |
 |---|---|
-**| AD-001 | Administrator should be able to log in to the GameHub system.** |
-**| AD-002 | Administrator should be able to log out of the GameHub system.** |
-**| AD-003 | Administrator should be able to approve cashiers personal email application.** |
-**| AD-004 | Administrator should be able to view cashier accounts.** |
-**| AD-005 | Administrator should be able to update cashier account information.** |
-**| AD-006 | Administrator should be able to archive cashier accounts.** |
-| AD-007 | Administrator should be able to view the current duty status of cashiers. |
-| AD-008 | Administrator should be able to configure cashier operating schedules. |
-| AD-009 | Administrator should be able to add billiard tables. |
-| AD-010 | Administrator should be able to rename billiard tables. |
-| AD-011 | Administrator should be able to archive billiard tables. |
-| AD-012 | Administrator should be able to configure table maintenance status. |
-| AD-013 | Administrator should be able to view current table statuses. |
-| AD-014 | Administrator should be able to view active customer sessions. |
+| AD-001 | Administrator should be able to log in to the GameHub system. |
+| AD-002 | Administrator should be able to log out of the GameHub system. |
+| AD-003 | Administrator should be able to approve cashiers personal email application. |
+| AD-004 | Administrator should be able to view cashier accounts. |
+| AD-005 | Administrator should be able to update cashier account information. |
+| AD-006 | Administrator should be able to archive cashier accounts. |
+**| AD-007 | Administrator should be able to unarchive cashiers account |**
+**| AD-008 | Administrator should be able to unarchive billiard tables |**
+**| AD-009 | Administrator should be able to add billiard tables. |**
+**| AD-010 | Administrator should be able to rename billiard tables. |**
+**| AD-011 | Administrator should be able to archive billiard tables. |**
+**| AD-012 | Administrator should be able to configure table maintenance status. |**
+**| AD-013 | Administrator should be able to view current table statuses. |**
+**| AD-014 | Administrator should be able to view active customer sessions. |**
 | AD-015 | Administrator should be able to view customer and transaction information relevant to current operations. |
-| AD-016 | Administrator should be able to configure regular hourly table rates. |
-| AD-017 | Administrator should be able to configure special hourly table rates. |
+**| AD-016 | Administrator should be able to configure regular hourly table rates. |**
+**| AD-017 | Administrator should be able to configure special hourly table rates. |**
 | AD-018 | Administrator should be able to update table rates with an effective date/time. |
 | AD-019 | Administrator should be able to view daily income reports. |
 | AD-020 | Administrator should be able to view monthly income reports. |
@@ -40,9 +40,9 @@
 -----------------------------------------------------------------------------------------------------
 
 
-**|CA-001.1| Cashier should be able to create an account using their personal email.**
-**| CA-001 | Cashier should be able to log in to the GameHub system using personal email.** |
-**| CA-002 | Cashier should be able to log out of the GameHub system.** |
+|CA-001.1| Cashier should be able to create an account using their personal email.
+| CA-001 | Cashier should be able to log in to the GameHub system using personal email. |
+| CA-002 | Cashier should be able to log out of the GameHub system. |
 | CA-003 | Cashier should be able to view current table statuses. |
 | CA-004 | Cashier should be able to view active customer sessions. |
 | CA-005 | Cashier should be able to view customer and transaction information relevant to current operations. |
@@ -76,7 +76,7 @@
 -----------------------------------------------------------------------------------------------------
 
 
-**| CU-001 | Customer should be able to view information about the GameHub establishment and its services.** |
+| CU-001 | Customer should be able to view information about the GameHub establishment and its services. |
 | CU-002 | Customer should be able to view currently available tables. |
 | CU-003 | Customer should be able to view applicable table rates. |
 | CU-004 | Customer should be able to select a preferred table, reservation date, and reservation time. |

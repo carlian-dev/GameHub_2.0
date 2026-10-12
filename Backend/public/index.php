@@ -75,8 +75,14 @@ foreach ($routes as [$routeMethod, $routePath, $handler]) {
             $data = call_user_func($handler, $params);
             json_response($data);
         } catch (Throwable $e) {
+            // Database outages must never leak topology (hostnames) or driver
+            // internals to the Frontend. Log the detail, answer generically.
+            if ($e instanceof \MongoDB\Driver\Exception\Exception) {
+                error_log('[gamehub] db error: ' . $e->getMessage());
+                json_response(['ok' => false, 'error' => 'database unavailable, try again later'], 503);
+            }
             $code = $e->getCode();
-            if (!in_array($code, [400, 401, 403, 404, 409, 422], true)) {
+            if (!in_array($code, [400, 401, 403, 404, 409, 410, 422, 502, 503], true)) {
                 $code = 500;
             }
             json_response(['ok' => false, 'error' => $e->getMessage()], $code);

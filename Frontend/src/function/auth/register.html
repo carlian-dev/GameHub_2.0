@@ -1,34 +1,87 @@
 <!DOCTYPE html>
 <!--
-  function/register.html - cashier self-registration (CA-001.1).
-  Pair: this page <-> Backend/function/register.php.
-  Purpose: lets an applicant create an account with a personal email.
-  New accounts start as "pending" and cannot log in until an admin approves
-  them (AD-003). Shows exact Backend messages: duplicate -> "email already
-  used" (409), short password -> "at least 8 characters" (422).
+  src/function/auth/register.html - invitation-gated cashier signup.
+  Pair: this page <-> Backend/src/function/auth/register.php (token enforced
+  server-side; page checks are convenience only, never trust).
+  Opened ONLY from the emailed link (?token=...). No token or a dead link
+  shows a dead-end state naming the administrator as contact. Valid link:
+  invited email shown locked, first/last/username/password form, account
+  is active immediately (invite IS the approval, no waiting).
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Register cashier — GameHub_2.0</title>
-  <link rel="stylesheet" href="../css/styles.css" />
+  <title>Create cashier account — GameHub</title>
+  <link rel="stylesheet" href="../../../css/styles.css" />
 </head>
-<body>
-  <main class="container">
-    <h1>Cashier registration</h1>
-    <p>Accounts start as <strong>pending</strong> and need admin approval before login.</p>
-    <section class="card">
-      <label>Email <input id="email" type="email" placeholder="you@example.com" /></label><br /><br />
-      <label>Password (min 8) <input id="password" type="password" /></label><br /><br />
-      <label>Confirm <input id="confirm" type="password" /></label><br /><br />
-      <button id="go">Create account</button>
-      <div id="msg"></div>
-      <p><a href="./login.html">Already approved? Log in</a> · <a href="../index.html">Home</a></p>
+<body class="staff">
+  <header class="nav nav-slim">
+    <a class="brand" href="../../index.html" aria-label="GameHub home">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" />
+        <circle cx="16" cy="16" r="4" fill="#3fa46a" />
+        <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" />
+      </svg>
+      <span class="brand-name">GameHub</span>
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="../../index.html">&larr; Back to site</a>
+    </nav>
+    <button class="theme-icon" aria-label="Toggle theme">
+      <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2Z" /></svg>
+      <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></svg>
+    </button>
+  </header>
+
+  <main class="staff-main">
+    <p class="eyebrow eyebrow-gold"><span></span>Create account<span></span></p>
+    <h1 class="staff-title">Create cashier account</h1>
+    <p class="staff-sub" id="lede">Your invitation is pre-approved — your account is <strong>active</strong> immediately and you can log in right away.</p>
+
+    <section class="staff-card" id="dead" hidden>
+      <p class="staff-sub" id="deadMsg"></p>
+      <p class="cta-row">
+        <a class="btn btn-ghost" href="../../index.html">&larr; Back to site</a>
+      </p>
     </section>
+
+    <section class="staff-card" id="form" hidden>
+      <label class="field">
+        <span>First name</span>
+        <input id="first" type="text" placeholder="Juan" autocomplete="given-name" />
+      </label>
+      <label class="field">
+        <span>Last name</span>
+        <input id="last" type="text" placeholder="Dela Cruz" autocomplete="family-name" />
+      </label>
+      <label class="field">
+        <span>Email (from your invitation — locked)</span>
+        <input id="email" type="email" readonly autocomplete="email" />
+      </label>
+      <label class="field">
+        <span>Username (3-30: letters, numbers, . _ -)</span>
+        <input id="username" type="text" placeholder="juan.cashier" autocomplete="username" />
+      </label>
+      <label class="field">
+        <span>Password (min 8)</span>
+        <input id="password" type="password" autocomplete="new-password" />
+      </label>
+      <label class="field">
+        <span>Confirm</span>
+        <input id="confirm" type="password" autocomplete="new-password" />
+      </label>
+      <button id="go" class="btn btn-solid btn-block">Create account</button>
+      <div id="msg" role="status"></div>
+    </section>
+
+    <p class="cta-row">
+      <a class="btn btn-ghost" href="./login.html">Log in</a>
+    </p>
   </main>
-  <script src="../js/config.js"></script>
-  <script src="../js/api.js"></script>
+  <script src="../../../js/config.js"></script>
+  <script src="../../../js/api.js"></script>
+  <script src="../../../js/theme.js"></script>
   <script src="./register.js"></script>
 </body>
 </html>

@@ -1,14 +1,12 @@
 <?php
 /**
- * function/cashiers.php - Backend logic for admin staff management.
+ * src/function/admin/cashiers.php - Backend logic for admin staff management.
  *
- * Pair: Frontend/function/cashiers.html <-> this file.
- * AD-004 lists everyone (password hashes never leave the server).
- * AD-003 approves email applications (pending -> active, unlocks login).
- * AD-005 edits safe fields only (display name, schedule — never role,
- * email, or passwordHash, so nobody escalates via edit forms).
- * AD-006 archives (history kept, future logins blocked).
- * Approve/archive are written to activityLogs. All four are admin-only:
+ * Pair: Frontend/src/function/admin/cashiers.html <-> this file.
+ * Staff list + edit safe fields (never role, email, or passwordHash).
+ * Archive/unarchive cashiers only (admins protected). Invite link IS the
+ * approval — new cashiers arrive "active", no approve/decline step.
+ * Archive/unarchive are written to activityLogs. All are admin-only:
  * guests get 401, cashiers get 403.
  */
 declare(strict_types=1);
@@ -39,23 +37,32 @@ function cashiers_shape($doc): array
 {
     return [
         'id' => (string)$doc['_id'],
-        'email' => $doc['email'] ?? '',
+        'email' => $doc['email'] ?? null,
+        'username' => $doc['username'] ?? null,
         'role' => $doc['role'] ?? 'cashier',
+        'authProvider' => $doc['authProvider'] ?? 'password',
         'status' => $doc['status'] ?? '',
+        'firstName' => $doc['firstName'] ?? '',
+        'lastName' => $doc['lastName'] ?? '',
         'displayName' => $doc['displayName'] ?? '',
+        'emailVerified' => (bool)($doc['emailVerified'] ?? false),
         'schedule' => $doc['schedule'] ?? '',
         'createdAt' => isset($doc['createdAt'])
             ? $doc['createdAt']->toDateTime()->format(DATE_ATOM) : null,
     ];
 }
 
-/** AD-004: view cashier accounts, optional ?status=pending|active|archived|all. */
+/** Staff list. ?status=active|archived|declined|all & ?role=cashier|admin|all. */
 function cashiers_list(array $params = []): array
 {
     require_admin();
     $status = strtolower(trim((string)($_GET['status'] ?? 'all')));
-    $filter = ['role' => 'cashier'];
-    if (in_array($status, ['pending', 'active', 'archived'], true)) {
+    $role = strtolower(trim((string)($_GET['role'] ?? 'all')));
+    $filter = [];
+    if (in_array($role, ['cashier', 'admin'], true)) {
+        $filter['role'] = $role;
+    }
+    if (in_array($status, ['pending', 'active', 'archived', 'declined'], true)) {
         $filter['status'] = $status;
     }
     $cursor = cashiers_users()->find($filter, [
@@ -69,30 +76,6 @@ function cashiers_list(array $params = []): array
     return ['ok' => true, 'cashiers' => $out];
 }
 
-/** AD-003: approve a pending email application (pending -> active). */
-function cashiers_approve(array $params = []): array
-{
-    $admin = require_admin();
-    $user = cashiers_users()->findOne(['_id' => cashiers_id($params['id'] ?? '')]);
-    if ($user === null || ($user['role'] ?? '') !== 'cashier') {
-        api_abort('cashier not found', 404);
-    }
-    if (($user['status'] ?? '') !== 'pending') {
-        api_abort('only pending cashier applications can be approved', 422);
-    }
-    cashiers_users()->updateOne(
-        ['_id' => $user['_id']],
-        ['$set' => ['status' => 'active']]
-    );
-    cashiers_logs()->insertOne([
-        'actorId' => $admin['id'],
-        'action' => 'approve_cashier',
-        'target' => (string)$user['_id'],
-        'at' => new UTCDateTime(),
-    ]);
-    return ['ok' => true, 'id' => (string)$user['_id'], 'status' => 'active'];
-}
-
 /** AD-005: update safe cashier fields (name, schedule). */
 function cashiers_update(array $params = []): array
 {
@@ -103,7 +86,11 @@ function cashiers_update(array $params = []): array
         $set['displayName'] = trim((string)$data['displayName']);
     }
     if (array_key_exists('schedule', $data)) {
-        $set['schedule'] = trim((string)$data['schedule']);
+        $schedule = trim((string)$data['schedule']);
+        if ($schedule !== '' && !preg_match('/^([01]\d|2[0-3]):[0-5]\d - ([01]\d|2[0-3]):[0-5]\d$/', $schedule)) {
+            api_abort('schedule must be HH:MM - HH:MM (or empty to clear)', 422);
+        }
+        $set['schedule'] = $schedule;
     }
     if ($set === []) {
         api_abort('nothing to update (allowed: displayName, schedule)', 422);
@@ -118,17 +105,25 @@ function cashiers_update(array $params = []): array
     return ['ok' => true, 'cashier' => cashiers_shape($fresh)];
 }
 
-/** AD-006: archive a cashier (keeps history, blocks future logins). */
+/**
+ * Archive a cashier in one step (no OTP): the Frontend confirm dialog is the
+ * only gate. Keeps history, blocks future logins. AD-006.1: admins can NEVER
+ * be archived. Idempotent: archiving twice is fine, it just stays archived.
+ */
 function cashiers_archive(array $params = []): array
 {
     $admin = require_admin();
-    $id = cashiers_id($params['id'] ?? '');
-    $user = cashiers_users()->findOne(['_id' => $id]);
-    if ($user === null || ($user['role'] ?? '') !== 'cashier') {
+    $user = cashiers_users()->findOne(['_id' => cashiers_id($params['id'] ?? '')]);
+    if ($user === null) {
+        api_abort('account not found', 404);
+    }
+    if (($user['role'] ?? '') === 'admin') {
+        api_abort('admin accounts cannot be archived', 403);
+    }
+    if (($user['role'] ?? '') !== 'cashier') {
         api_abort('cashier not found', 404);
     }
-    // Idempotent: archiving twice is fine, it just stays archived.
-    cashiers_users()->updateOne(['_id' => $id], ['$set' => ['status' => 'archived']]);
+    cashiers_users()->updateOne(['_id' => $user['_id']], ['$set' => ['status' => 'archived']]);
     cashiers_logs()->insertOne([
         'actorId' => $admin['id'],
         'action' => 'archive_cashier',
@@ -136,4 +131,32 @@ function cashiers_archive(array $params = []): array
         'at' => new UTCDateTime(),
     ]);
     return ['ok' => true, 'id' => (string)$user['_id'], 'status' => 'archived'];
+}
+
+/** Unarchive a cashier (archived -> active, login works again). */
+function cashiers_unarchive(array $params = []): array
+{
+    $admin = require_admin();
+    $id = cashiers_id($params['id'] ?? '');
+    $user = cashiers_users()->findOne(['_id' => $id]);
+    if ($user === null) {
+        api_abort('account not found', 404);
+    }
+    if (($user['role'] ?? '') === 'admin') {
+        api_abort('admin accounts cannot be archived', 403);
+    }
+    if (($user['role'] ?? '') !== 'cashier') {
+        api_abort('cashier not found', 404);
+    }
+    if (($user['status'] ?? '') !== 'archived') {
+        api_abort('only archived accounts can be unarchived', 422);
+    }
+    cashiers_users()->updateOne(['_id' => $id], ['$set' => ['status' => 'active']]);
+    cashiers_logs()->insertOne([
+        'actorId' => $admin['id'],
+        'action' => 'unarchive_cashier',
+        'target' => (string)$user['_id'],
+        'at' => new UTCDateTime(),
+    ]);
+    return ['ok' => true, 'id' => (string)$user['_id'], 'status' => 'active'];
 }

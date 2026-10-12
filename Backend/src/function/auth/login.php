@@ -1,12 +1,11 @@
 <?php
 /**
- * function/login.php - Backend logic for login, logout, and "who am I".
+ * src/function/auth/login.php - Backend logic for login, logout, and "who am I".
  *
- * Pair: Frontend/function/login.html <-> this file.
- * CA-001 + AD-001 (login, both roles, email only), CA-002 + AD-002 (logout),
- * plus auth_me used by every guarded page. Flow:
- * register (pending) -> approve (cashiers.php) -> login (active only).
- * Login writes the user into $_SESSION; later requests read it back.
+ * Pair: Frontend/src/function/auth/login.html <-> this file.
+ * Dual identifier: input containing "@" logs in by EMAIL (admins + legacy
+ * email cashiers); anything else by USERNAME (cashiers). Valid ACTIVE
+ * accounts get a direct session — no second step, never at login.
  */
 declare(strict_types=1);
 
@@ -16,14 +15,24 @@ use MongoDB\BSON\ObjectId;
 function auth_login(array $params = []): array
 {
     $data = json_body();
-    $email = strtolower(trim((string)($data['email'] ?? '')));
+    $login = trim((string)($data['email'] ?? $data['username'] ?? ''));
     $password = (string)($data['password'] ?? '');
 
-    if ($email === '' || $password === '') {
-        api_abort('email and password are required', 422);
+    if ($login === '' || $password === '') {
+        api_abort('login and password are required', 422);
     }
 
-    $user = DatabaseConnection::db()->selectCollection('users')->findOne(['email' => $email]);
+    $users = DatabaseConnection::db()->selectCollection('users');
+    if (str_contains($login, '@')) {
+        // EMAIL path: admins + legacy email cashiers.
+        $user = $users->findOne(['email' => strtolower($login)]);
+    } else {
+        // USERNAME path: cashiers only, password-only (no email to send to).
+        $user = $users->findOne([
+            'username' => strtolower($login),
+            'role' => 'cashier',
+        ]);
+    }
     if ($user === null || !password_verify($password, (string)($user['passwordHash'] ?? ''))) {
         api_abort('invalid credentials', 401);
     }
@@ -33,14 +42,26 @@ function auth_login(array $params = []): array
     if (($user['status'] ?? '') === 'archived') {
         api_abort('account archived', 403);
     }
+    if (($user['status'] ?? '') === 'declined') {
+        api_abort('application was declined', 403);
+    }
+    if (($user['status'] ?? '') !== 'active') {
+        api_abort('account is not active', 403);
+    }
 
+    // Valid active account: direct session, no second step.
     $_SESSION['user'] = [
         'id' => (string)$user['_id'],
-        'email' => $user['email'],
+        'username' => $user['username'] ?? null,
+        'email' => $user['email'] ?? null,
         'role' => $user['role'],
     ];
-
-    return ['ok' => true, 'email' => $user['email'], 'role' => $user['role']];
+    return [
+        'ok' => true,
+        'username' => $user['username'] ?? null,
+        'email' => $user['email'] ?? null,
+        'role' => $user['role'],
+    ];
 }
 
 function auth_logout(array $params = []): array
@@ -63,7 +84,8 @@ function auth_me(array $params = []): array
     }
     return [
         'ok' => true,
-        'email' => $doc['email'],
+        'username' => $doc['username'] ?? null,
+        'email' => $doc['email'] ?? null,
         'role' => $doc['role'],
         'status' => $doc['status'],
     ];

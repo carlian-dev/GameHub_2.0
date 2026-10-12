@@ -1,8 +1,8 @@
 <?php
 /**
- * function/health.php - Backend logic for the landing-page status card.
+ * src/function/shared/health.php - Backend logic for the landing-page status card.
  *
- * Pair: Frontend/function/index.js (status check) <-> this file.
+ * Pair: Frontend/src/function/shared/index.js (status check) <-> this file.
  * Answers "Is the Backend + Database alive?" by pinging Atlas and counting
  * the "healthcheck" collection. Example reply:
  *   {"ok":true,"db":"gamehub_2_0","ping":"ok","healthcheck_count":1}
@@ -17,7 +17,7 @@ function health_handle(array $params = []): array
     $db = DatabaseConnection::db();
     // Ping Atlas
     $db->command(['ping' => 1]);
-    // Count healthcheck docs (created in Compass)
+    // Count healthcheck docs (created in Atlas Data Explorer)
     $count = $db->selectCollection('healthcheck')->countDocuments();
 
     return [

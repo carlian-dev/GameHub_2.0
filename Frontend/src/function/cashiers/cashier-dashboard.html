@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<!--
+  src/function/cashiers/cashier-dashboard.html - cashier home in the dashboard shell.
+  Pair: cashier-dashboard.js (guard + identity + sessions lifecycle) + js/dash.js (shell).
+  Sidebar: Dashboard (active), Sessions (-> live panel below), Tables (-> panel).
+  Sessions live here (CA-004..CA-014): start form (table + customer + planned
+  duration, e.g. "2 hrs" -> 120 min) + active sessions with per-second timers.
+  Tables panel stays read-only (CA-003/CA-017).
+  Guard: logged-in cashiers stay (admins go to their dashboard, guests login).
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — GameHub cashier</title>
+  <link rel="stylesheet" href="../../../css/dashboard.css" />
+</head>
+<body class="dash" data-theme="dark">
+  <div class="dash-app">
+    <aside class="dash-side" aria-label="Cashier navigation">
+      <a class="dash-brand" href="./cashier-dashboard.html">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#3fa46a" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" /></svg>
+        <span>GameHub</span>
+      </a>
+      <nav class="dash-nav">
+        <a href="./cashier-dashboard.html" class="active" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="#sessions-panel" title="Active sessions with live timers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4a3 3 0 0 1 6 0" /><path d="M9 11h6M9 15h4" /></svg>
+          <span>Sessions</span>
+        </a>
+        <a href="#tables-panel" title="Tables live on this dashboard (read-only)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.6" /></svg>
+          <span>Tables</span>
+        </a>
+      </nav>
+      <div class="dash-user">
+        <span class="avatar-circle" id="avatar">C</span>
+        <div><strong id="who">Checking...</strong><small>Cashier</small></div>
+      </div>
+    </aside>
+
+    <div class="dash-main">
+      <header class="dash-top">
+        <button class="dash-iconbtn dash-menu" aria-label="Open menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <div class="dash-top-right">
+          <button class="dash-theme" aria-label="Toggle theme">
+            <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2Z" /></svg>
+            <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></svg>
+          </button>
+          <button class="dash-logout" id="out">Log out</button>
+        </div>
+      </header>
+
+      <main class="dash-content">
+        <div class="dash-pagehead"><h1>Dashboard</h1><span data-today></span></div>
+
+        <div class="dash-panel start-panel" id="start-panel" style="margin-bottom:16px">
+          <div class="start-head">
+            <div>
+              <p class="start-eyebrow">New session</p>
+              <h2>Start session</h2>
+            </div>
+            <span class="start-avail" id="availCount" title="Tables ready for play">… available</span>
+          </div>
+          <div class="dash-msg" id="startMsg" role="status"></div>
+          <div class="start-grid">
+            <div class="start-fields">
+              <label class="field" for="startTable">
+                <span class="field-label">Table</span>
+                <span class="select-wrap">
+                  <select id="startTable"></select>
+                </span>
+                <span class="field-hint">Available tables only</span>
+              </label>
+              <label class="field" for="startCustomer">
+                <span class="field-label">Customer</span>
+                <input id="startCustomer" type="text" placeholder="e.g. Juan Dela Cruz" maxlength="60" autocomplete="off" />
+                <span class="field-hint">Walk-in name for this session</span>
+              </label>
+            </div>
+            <div class="start-duration">
+              <span class="field-label" id="durLabel">Planned duration</span>
+              <div class="dur-row" role="group" aria-labelledby="durLabel">
+                <div class="stepper">
+                  <button type="button" class="step-btn" data-target="startHours" data-delta="-1" aria-label="Decrease hours">−</button>
+                  <label>Hrs<input id="startHours" type="number" min="0" max="24" step="1" value="2" inputmode="numeric" /></label>
+                  <button type="button" class="step-btn" data-target="startHours" data-delta="1" aria-label="Increase hours">+</button>
+                </div>
+                <span class="dur-sep" aria-hidden="true">:</span>
+                <div class="stepper">
+                  <button type="button" class="step-btn" data-target="startMins" data-delta="-15" aria-label="Decrease minutes">−</button>
+                  <label>Min<input id="startMins" type="number" min="0" max="59" step="1" value="0" inputmode="numeric" /></label>
+                  <button type="button" class="step-btn" data-target="startMins" data-delta="15" aria-label="Increase minutes">+</button>
+                </div>
+              </div>
+              <div class="quick-row">
+                <button class="chip" data-quick="30">30m</button>
+                <button class="chip on" data-quick="120">2h</button>
+                <button class="chip" data-quick="60">1h</button>
+                <button class="chip" data-quick="180">3h</button>
+              </div>
+              <p class="start-summary" id="startSummary">2h 0m · ends ~…</p>
+              <button class="start-btn" id="startBtn">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" /></svg>
+                <span>Start session</span>
+              </button>
+              <p class="start-limit">5 min – 24 h allowed</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-panel" id="sessions-panel" style="margin-bottom:16px">
+          <h2>Active sessions</h2>
+          <p>Live timers count down to the planned end. Overtime shows in red. Refreshes every 30 seconds.</p>
+          <div class="dash-msg" id="sessMsg">Loading...</div>
+          <div class="dash-tablewrap">
+            <table id="sessTbl">
+              <thead><tr><th>Table</th><th>Customer</th><th>Started</th><th>Ends</th><th>Time left</th><th>Actions</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p id="sessEmpty" hidden>No active sessions right now. Start one above.</p>
+        </div>
+
+        <div class="dash-panel" id="tables-panel">
+          <h2>Tables</h2>
+          <p>Live table statuses (read-only). Refreshes every 30 seconds.</p>
+          <div class="dash-tabs" role="tablist" aria-label="Filter tables by status">
+            <button data-t="all" class="on">All</button>
+            <button data-t="available">Available</button>
+            <button data-t="occupied">Occupied</button>
+            <button data-t="reserved">Reserved</button>
+            <button data-t="maintenance">Maintenance</button>
+          </div>
+          <div class="dash-msg" id="tablesMsg">Loading...</div>
+          <div class="dash-tablewrap">
+            <table id="cashierTbl">
+              <thead><tr><th>Name</th><th>Status</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p><small id="tablesUpdated"></small></p>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="../../../js/config.js"></script>
+  <script src="../../../js/api.js"></script>
+  <script src="../../../js/dash.js"></script>
+  <script src="./cashier-dashboard.js"></script>
+</body>
+</html>

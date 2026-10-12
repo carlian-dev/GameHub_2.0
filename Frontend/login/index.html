@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<!--
+  login/index.html - makes bare /login URL work on static servers.
+  Purpose: static hosts only resolve real files, so /login alone would 404.
+  This redirect file lives at /login/ and instantly forwards to the real
+  staff login at ../src/function/auth/login.html (which stays unlinked from landing).
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="refresh" content="0; url=../src/function/auth/login.html" />
+  <title>Staff login — GameHub</title>
+</head>
+<body>
+  <p>Redirecting to staff login… <a href="../src/function/auth/login.html">continue</a></p>
+</body>
+</html>

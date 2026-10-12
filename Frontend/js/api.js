@@ -126,4 +126,29 @@ async function setRate(type, pricePerHour) {
   });
 }
 // C owns: listSessions()/listCashierSessions()/start/extend/end/cancelSession() — re-added with sessions.php
+async function listSessions(status = "active") {
+  return api(/api/admin/sessions?status=${encodeURIComponent(status)});
+}
+// --- Session lifecycle (CA-004..CA-014): cashier operates, admin watches ---
+async function listCashierSessions(status = "active") {
+  return api(/api/cashier/sessions?status=${encodeURIComponent(status)});
+}
+async function startSession(tableId, customerName, durationMinutes) {
+  return api("/api/cashier/sessions", {
+    method: "POST",
+    body: JSON.stringify({ tableId, customerName, durationMinutes }),
+  });
+}
+async function extendSession(id, extraMinutes) {
+  return api(/api/cashier/sessions/${id}/extend, {
+    method: "POST",
+    body: JSON.stringify({ extraMinutes }),
+  });
+}
+async function endSession(id) {
+  return api(/api/cashier/sessions/${id}/end, { method: "POST" });
+}
+async function cancelSession(id) {
+  return api(/api/cashier/sessions/${id}/cancel, { method: "POST" });
+}
 // D owns: listCashierTables()/listPublicTables() — re-added with cashiers/tables.php

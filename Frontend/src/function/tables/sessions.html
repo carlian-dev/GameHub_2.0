@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<!--
+  src/function/tables/sessions.html - customer sessions view (AD-014 active, AD-027 history).
+  Pair: sessions.js <-> Backend/src/function/tables/sessions.php (enriched list).
+  Cashiers operate sessions from their dashboard (start with planned duration,
+  extend, end); this page is the admin watch: who operated it (cashier), which
+  table/customer, planned end + live time-left timer for occupied tables.
+  Admin-only page in the dashboard shell.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sessions — GameHub admin</title>
+  <link rel="stylesheet" href="../../../css/dashboard.css" />
+</head>
+<body class="dash" data-theme="dark">
+  <div class="dash-app">
+    <aside class="dash-side" aria-label="Admin navigation">
+      <a class="dash-brand" href="../admin/admin-dashboard.html">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#3fa46a" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" /></svg>
+        <span>GameHub</span>
+      </a>
+      <nav class="dash-nav">
+        <a href="../admin/admin-dashboard.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="../admin/cashiers.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 15.2c1.7.8 2.7 2.3 3 4.8" /></svg>
+          <span>Staff</span>
+        </a>
+        <a href="./tables.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.6" /></svg>
+          <span>Tables</span>
+        </a>
+        <a href="./rates.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9Z" /><circle cx="8" cy="8" r="1.6" /></svg>
+          <span>Rates</span>
+        </a>
+        <a href="./sessions.html" class="active" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4a3 3 0 0 1 6 0" /><path d="M9 11h6M9 15h4" /></svg>
+          <span>Sessions</span>
+        </a>
+        <a class="disabled" aria-disabled="true" title="Coming in the reports sprint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V4" /><path d="M4 20h16" /><path d="M8 16v-5M12 16V8M16 16v-3M20 16V6" /></svg>
+          <span>Reports</span><small>Soon</small>
+        </a>
+      </nav>
+      <div class="dash-user">
+        <span class="avatar-circle" id="avatar">A</span>
+        <div><strong id="who">Checking...</strong><small>Admin</small></div>
+      </div>
+    </aside>
+
+    <div class="dash-main">
+      <header class="dash-top">
+        <button class="dash-iconbtn dash-menu" aria-label="Open menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <div class="dash-top-right">
+          <button class="dash-theme" aria-label="Toggle theme">
+            <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2Z" /></svg>
+            <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></svg>
+          </button>
+          <button class="dash-logout" id="out">Log out</button>
+        </div>
+      </header>
+
+      <main class="dash-content">
+        <div class="dash-pagehead"><h1>Sessions</h1><span data-today></span></div>
+        <div class="dash-tabs" role="tablist" aria-label="Filter sessions by status">
+          <button data-t="active" class="on">Active</button>
+          <button data-t="closed">Closed</button>
+          <button data-t="all">All</button>
+        </div>
+        <div class="dash-panel">
+          <p>Sessions operated by cashiers. Active rows show a live timer counting down to the planned end (set from what the customer asked, e.g. 2 hrs). Overtime shows in red.</p>
+          <div class="dash-msg" id="msg">Loading...</div>
+          <div class="dash-tablewrap">
+            <table id="tbl">
+              <thead><tr><th>Table</th><th>Customer</th><th>Cashier</th><th>Started</th><th>Planned end</th><th>Time left</th><th>Status</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p id="empty" hidden>No sessions in this view yet.</p>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="../../../js/config.js"></script>
+  <script src="../../../js/api.js"></script>
+  <script src="../../../js/dash.js"></script>
+  <script src="./sessions.js"></script>
+</body>
+</html>

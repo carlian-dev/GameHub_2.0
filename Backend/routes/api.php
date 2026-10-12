@@ -23,6 +23,7 @@ require_once __DIR__ . '/../src/function/admin/cashiers.php';
 require_once __DIR__ . '/../src/function/auth/google.php';
 require_once __DIR__ . '/../src/function/auth/invite.php';
 require_once __DIR__ . '/../src/function/tables/tables.php';
+require_once __DIR__ . '/../src/function/tables/rates.php';
 // Teammate slots (B/C/D re-add with their files):
 // B: require tables/rates.php + GET/PUT /api/admin/rates
 // C: require tables/sessions.php + /api/admin/sessions + /api/cashier/sessions*
@@ -57,7 +58,8 @@ return [
     ['PUT', '/api/admin/tables/{id}/status', 'tables_status'],
     ['POST', '/api/admin/tables/{id}/archive', 'tables_archive'],
     ['POST', '/api/admin/tables/{id}/unarchive', 'tables_unarchive'],
-    // B owns: GET/PUT /api/admin/rates (rates_list/rates_set)
+    ['GET', '/api/admin/rates', 'rates_list'],
+    ['PUT', '/api/admin/rates', 'rates_set'],
     // C owns: GET /api/admin/sessions + session lifecycle (CA-004..CA-014)
     // D owns: GET /api/cashier/tables (tables_cashier_list)
     // Public availability stays here (handler lives in tables/tables.php).

@@ -116,6 +116,6 @@ async function archiveTable(id) {
 async function unarchiveTable(id) {
   return api(`/api/admin/tables/${id}/unarchive`, { method: "POST" });
 }
-// B owns: getRates()/setRate() — re-added with rates.php
+  getRates()/setRate()
 // C owns: listSessions()/listCashierSessions()/start/extend/end/cancelSession() — re-added with sessions.php
 // D owns: listCashierTables()/listPublicTables() — re-added with cashiers/tables.php

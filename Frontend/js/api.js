@@ -116,6 +116,14 @@ async function archiveTable(id) {
 async function unarchiveTable(id) {
   return api(`/api/admin/tables/${id}/unarchive`, { method: "POST" });
 }
-// B owns: getRates()/setRate() — re-added with rates.php
+  async function getRates() {
+  return api("/api/admin/rates");
+}
+async function setRate(type, pricePerHour) {
+  return api("/api/admin/rates", {
+    method: "PUT",
+    body: JSON.stringify({ type, pricePerHour }),
+  });
+}
 // C owns: listSessions()/listCashierSessions()/start/extend/end/cancelSession() — re-added with sessions.php
 // D owns: listCashierTables()/listPublicTables() — re-added with cashiers/tables.php

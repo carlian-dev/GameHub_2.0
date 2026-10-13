@@ -61,6 +61,12 @@ return [
     ['GET', '/api/admin/rates', 'rates_list'],
     ['PUT', '/api/admin/rates', 'rates_set'],
     // C owns: GET /api/admin/sessions + session lifecycle (CA-004..CA-014)
+    // Session lifecycle (CA-004..CA-014): cashiers operate, admin watches.
+    ['GET', '/api/cashier/sessions', 'sessions_cashier_list'],
+    ['POST', '/api/cashier/sessions', 'sessions_start'],
+    ['POST', '/api/cashier/sessions/{id}/extend', 'sessions_extend'],
+    ['POST', '/api/cashier/sessions/{id}/end', 'sessions_end'],
+    ['POST', '/api/cashier/sessions/{id}/cancel', 'sessions_cancel'],
     // D owns: GET /api/cashier/tables (tables_cashier_list)
     // Public availability stays here (handler lives in tables/tables.php).
     ['GET', '/api/tables/availability', 'tables_public_list'],

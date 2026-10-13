@@ -152,3 +152,9 @@ async function cancelSession(id) {
   return api(`/api/cashier/sessions/${id}/cancel`, { method: "POST" });
 }
 // D owns: listCashierTables()/listPublicTables() — re-added with cashiers/tables.php
+async function listCashierTables(status = "all") {
+  return api(`/api/cashier/tables?status=${encodeURIComponent(status)}`);
+}
+async function listPublicTables() {
+  return api('/api/tables/availability');
+}

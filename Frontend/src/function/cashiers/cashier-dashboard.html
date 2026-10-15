@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 <!--
-  src/function/cashiers/cashier-dashboard.html - cashier home in the dashboard shell.
-  Pair: cashier-dashboard.js (guard + identity + sessions lifecycle) + js/dash.js (shell).
-  Sidebar: Dashboard (active), Sessions (-> live panel below), Tables (-> panel).
-  Sessions live here (CA-004..CA-014): start form (table + customer + planned
-  duration, e.g. "2 hrs" -> 120 min) + active sessions with per-second timers.
-  Tables panel stays read-only (CA-003/CA-017).
+  src/function/cashiers/cashier-dashboard.html - cashier Dashboard page.
+  Pair: cashier-dashboard.js (start form + overview counts) + cashier-common.js
+  (guard/timers) + js/dash.js (shell). Sidebar links to the three cashier
+  pages: Dashboard (here), Sessions, Tables. Sessions lifecycle lives on
+  cashier-sessions.html; read-only tables on cashier-tables.html.
   Guard: logged-in cashiers stay (admins go to their dashboard, guests login).
 -->
 <html lang="en">
@@ -27,11 +26,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
           <span>Dashboard</span>
         </a>
-        <a href="#sessions-panel" title="Active sessions with live timers">
+        <a href="./cashier-sessions.html" title="Active sessions with live timers">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4a3 3 0 0 1 6 0" /><path d="M9 11h6M9 15h4" /></svg>
           <span>Sessions</span>
         </a>
-        <a href="#tables-panel" title="Tables live on this dashboard (read-only)">
+        <a href="./cashier-tables.html" title="Tables live statuses (read-only)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.6" /></svg>
           <span>Tables</span>
         </a>
@@ -59,7 +58,13 @@
       <main class="dash-content">
         <div class="dash-pagehead"><h1>Dashboard</h1><span data-today></span></div>
 
-        <div class="dash-panel start-panel" id="start-panel" style="margin-bottom:16px">
+        <div class="dash-cards" style="margin-bottom:16px">
+          <a class="dash-stat" href="./cashier-sessions.html"><small>Active sessions</small><strong id="statActive">–</strong><em>live timers</em></a>
+          <a class="dash-stat" href="./cashier-tables.html"><small>Available tables</small><strong id="statAvail">–</strong><em>ready for play</em></a>
+          <a class="dash-stat" href="./cashier-sessions.html#to-bill"><small>To bill</small><strong id="statBill">–</strong><em>closed, unpaid</em></a>
+        </div>
+
+        <div class="dash-panel start-panel" id="start-panel">
           <div class="start-head">
             <div>
               <p class="start-eyebrow">New session</p>
@@ -113,45 +118,13 @@
             </div>
           </div>
         </div>
-
-        <div class="dash-panel" id="sessions-panel" style="margin-bottom:16px">
-          <h2>Active sessions</h2>
-          <p>Live timers count down to the planned end. Overtime shows in red. Refreshes every 30 seconds.</p>
-          <div class="dash-msg" id="sessMsg">Loading...</div>
-          <div class="dash-tablewrap">
-            <table id="sessTbl">
-              <thead><tr><th>Table</th><th>Customer</th><th>Started</th><th>Ends</th><th>Time left</th><th>Actions</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <p id="sessEmpty" hidden>No active sessions right now. Start one above.</p>
-        </div>
-
-        <div class="dash-panel" id="tables-panel">
-          <h2>Tables</h2>
-          <p>Live table statuses (read-only). Refreshes every 30 seconds.</p>
-          <div class="dash-tabs" role="tablist" aria-label="Filter tables by status">
-            <button data-t="all" class="on">All</button>
-            <button data-t="available">Available</button>
-            <button data-t="occupied">Occupied</button>
-            <button data-t="reserved">Reserved</button>
-            <button data-t="maintenance">Maintenance</button>
-          </div>
-          <div class="dash-msg" id="tablesMsg">Loading...</div>
-          <div class="dash-tablewrap">
-            <table id="cashierTbl">
-              <thead><tr><th>Name</th><th>Status</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <p><small id="tablesUpdated"></small></p>
-        </div>
       </main>
     </div>
   </div>
   <script src="../../../js/config.js"></script>
   <script src="../../../js/api.js"></script>
   <script src="../../../js/dash.js"></script>
+  <script src="./cashier-common.js"></script>
   <script src="./cashier-dashboard.js"></script>
 </body>
 </html>

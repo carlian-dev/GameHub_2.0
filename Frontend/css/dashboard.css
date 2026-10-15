@@ -68,7 +68,7 @@
 }
 .dash-brand svg { width: 26px; height: 26px; }
 .dash-brand span { font-family: Georgia, 'Times New Roman', serif; font-size: 19px; }
-.dash-nav { flex: 1; padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; }
+.dash-nav { flex: 1; padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; position: relative; }
 .dash-nav a {
   display: flex;
   align-items: center;
@@ -78,11 +78,41 @@
   color: var(--d-muted);
   text-decoration: none;
   font-size: 14px;
+  position: relative;
+  z-index: 1;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 .dash-nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
 .dash-nav a:hover { background: rgba(63, 164, 106, 0.12); color: var(--d-text); }
 .dash-nav a.active { background: rgba(63, 164, 106, 0.16); color: var(--d-text); }
 .dash-nav a.active svg { color: var(--d-green-soft); }
+/* Sliding green indicator: dash.js injects .dash-nav-pill and translates it to
+   the active link so the highlight physically moves (click + scroll + hash). */
+.dash-nav-pill {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 0;
+  height: 0;
+  border-radius: 8px;
+  background: rgba(63, 164, 106, 0.16);
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.3s ease, height 0.3s ease, opacity 0.2s ease;
+}
+.dash-nav.has-pill a.active { background: transparent; }
+.dash-nav.has-pill a.active svg { color: var(--d-green-soft); }
+@media (prefers-reduced-motion: reduce) {
+  .dash-nav a { transition: none; }
+  .dash-nav-pill { transition: none; }
+}
+/* In-page anchors sit under the sticky top header without this offset. */
+#sessions-panel, #tables-panel, #start-panel { scroll-margin-top: 88px; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
 .dash-nav a.disabled { opacity: 0.45; cursor: not-allowed; }
 .dash-nav a.disabled small { margin-left: auto; font-size: 10px; letter-spacing: 1px; color: var(--d-faint); }
 .dash-user {

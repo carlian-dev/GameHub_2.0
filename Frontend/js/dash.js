@@ -35,6 +35,140 @@
       weekday: "long", month: "short", day: "numeric",
     });
   });
+
+  // ---- Sidebar active indicator (slides the green highlight) ----
+  // Cashier sidebar mixes a page link (Dashboard) with in-page anchors
+  // (#sessions-panel, #tables-panel). Without this, .active stays stuck on
+  // Dashboard. This moves .active + a sliding pill on click, hash change,
+  // and scroll (IntersectionObserver scrollspy), and repositions on resize.
+  const nav = document.querySelector(".dash-nav");
+  if (nav) {
+    const links = Array.from(nav.querySelectorAll("a[href]"));
+    let pill = nav.querySelector(".dash-nav-pill");
+    if (!pill) {
+      pill = document.createElement("span");
+      pill.className = "dash-nav-pill";
+      pill.setAttribute("aria-hidden", "true");
+      nav.prepend(pill);
+    }
+    nav.classList.add("has-pill");
+
+    const movePill = (link) => {
+      if (!link) { pill.style.opacity = "0"; return; }
+      pill.style.opacity = "1";
+      pill.style.height = `${link.offsetHeight}px`;
+      pill.style.transform = `translateY(${link.offsetTop}px)`;
+    };
+
+    const setActive = (link, { hash = null } = {}) => {
+      if (!link) return;
+      links.forEach((a) => {
+        const on = a === link;
+        a.classList.toggle("active", on);
+        if (on) a.setAttribute("aria-current", "page");
+        else a.removeAttribute("aria-current");
+      });
+      movePill(link);
+      // Keep the URL hash in sync for deep-linking without jumping twice.
+      if (hash !== null) {
+        const target = link.getAttribute("href") || "";
+        if (target.startsWith("#") && location.hash !== target) {
+          history.replaceState(null, "", target);
+        } else if (!target.startsWith("#") && location.hash) {
+          const url = location.pathname + location.search;
+          history.replaceState(null, "", url);
+        }
+      }
+    };
+
+    const linkForHash = (h) =>
+      links.find((a) => (a.getAttribute("href") || "") === h) || null;
+
+    // Click: activate immediately so the pill slides even before scroll ends.
+    links.forEach((a) => {
+      a.addEventListener("click", (e) => {
+        const href = a.getAttribute("href") || "";
+        if (href.startsWith("#")) {
+          setActive(a, { hash: true });
+          if (window.innerWidth <= 860 && side) side.classList.remove("open");
+          return;
+        }
+        // Same-page Dashboard link (./cashier-dashboard.html with no hash):
+        // scroll to top instead of reloading so the pill visibly slides back.
+        try {
+          const url = new URL(a.href, location.href);
+          const samePage =
+            url.pathname.replace(/\/$/, "") ===
+              location.pathname.replace(/\/$/, "") && !url.hash;
+          if (samePage) {
+            e.preventDefault();
+            setActive(a, { hash: true });
+            window.scrollTo({ top: 0, behavior: "smooth" });
+            if (window.innerWidth <= 860 && side) side.classList.remove("open");
+          }
+        } catch { /* external URL: let it navigate */ }
+      });
+    });
+
+    // Back/forward + manual hash edits.
+    window.addEventListener("hashchange", () => {
+      const match = linkForHash(location.hash);
+      if (match) setActive(match);
+      else if (!location.hash && links.length) setActive(links[0]);
+    });
+
+    // Scrollspy: while scrolling, the section in view owns the highlight.
+    const hashLinks = links.filter((a) =>
+      (a.getAttribute("href") || "").startsWith("#"));
+    const sections = hashLinks
+      .map((a) => document.querySelector(a.getAttribute("href")))
+      .filter(Boolean);
+    if (sections.length && "IntersectionObserver" in window) {
+      let current = null;
+      const spy = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          const link = linkForHash(`#${e.target.id}`);
+          if (link && link !== current) {
+            current = link;
+            setActive(link, { hash: true });
+          }
+        }
+      }, { rootMargin: "-30% 0px -55% 0px", threshold: 0 });
+      sections.forEach((s) => spy.observe(s));
+      // Near the very top, Dashboard owns the highlight again.
+      window.addEventListener("scroll", () => {
+        if (window.scrollY < 120 && links.length && current !== links[0]) {
+          current = links[0];
+          setActive(links[0], { hash: true });
+        }
+      }, { passive: true });
+    }
+
+    // Initial state: honor a deep link (#sessions-panel), else current .active.
+    const initial =
+      (location.hash && linkForHash(location.hash)) ||
+      nav.querySelector("a.active") ||
+      links[0];
+    // Apply the class too (deep link may differ from the hardcoded .active).
+    links.forEach((a) => {
+      const on = a === initial;
+      a.classList.toggle("active", on);
+      if (on) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    });
+    // Layout must settle (fonts/sidebar width) before measuring offsets.
+    requestAnimationFrame(() => movePill(initial));
+    // Fonts shift link heights after load; re-pin the pill once settled.
+    window.addEventListener("load", () => {
+      const cur = nav.querySelector("a.active") || initial;
+      movePill(cur);
+    });
+    window.addEventListener("resize", () => {
+      const cur = nav.querySelector("a.active") || initial;
+      movePill(cur);
+    });
+  }
 })();
 
 // ---- Shared Yes/No + input + select + schedule dialogs (all popups go through here) ----

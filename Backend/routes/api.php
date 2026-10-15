@@ -26,6 +26,8 @@ require_once __DIR__ . '/../src/function/tables/tables.php';
 require_once __DIR__ . '/../src/function/tables/rates.php';
 require_once __DIR__ . '/../src/function/tables/sessions.php';
 require_once __DIR__ . '/../src/function/cashiers/tables.php';
+require_once __DIR__ . '/../src/function/cashiers/transactions.php';
+require_once __DIR__ . '/../src/function/admin/reports.php';
 // Teammate slots (B/C/D re-add with their files):
 // B: require tables/rates.php + GET/PUT /api/admin/rates
 // C: require tables/sessions.php + /api/admin/sessions + /api/cashier/sessions*
@@ -74,4 +76,12 @@ return [
     // Public availability stays here (handler lives in tables/tables.php).
     ['GET', '/api/cashier/tables', 'tables_cashier_list'],
     ['GET', '/api/tables/availability', 'tables_public_list'],
+    // Sprint 3: billing close-out (CA-020/022/023/024) + lists (AD-020) + reports (AD-019/021).
+    ['POST', '/api/cashier/transactions', 'transactions_create'],
+    ['GET', '/api/cashier/transactions', 'transactions_cashier_list'],
+    ['GET', '/api/cashier/transactions/{ref}', 'transactions_cashier_get'],
+    ['GET', '/api/admin/transactions', 'transactions_admin_list'],
+    ['GET', '/api/admin/transactions/{ref}', 'transactions_admin_get'],
+    ['GET', '/api/admin/reports/daily', 'reports_daily'],
+    ['GET', '/api/admin/reports/export', 'reports_export'],
 ];

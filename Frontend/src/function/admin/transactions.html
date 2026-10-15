@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!--
+  src/function/admin/transactions.html - bills + daily income (Sprint 3).
+  Pair: transactions.js <-> Backend/src/function/cashiers/transactions.php
+  (transactions_admin_list) + Backend/src/function/admin/reports.php
+  (reports_daily/export). Admin-only page in the dashboard shell.
+  Header card shows today's income (getDailyReport); table lists
+  ref|paid|table|customer|total|method|change; Export CSV downloads via
+  anchor (credentials:include cookies, not api() JSON); receipt opens
+  shared/receipt.html?ref=... for print-to-PDF.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transactions — GameHub admin</title>
+  <link rel="stylesheet" href="../../../css/dashboard.css" />
+</head>
+<body class="dash" data-theme="dark">
+  <div class="dash-app">
+    <aside class="dash-side" aria-label="Admin navigation">
+      <a class="dash-brand" href="./admin-dashboard.html">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#3fa46a" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" /></svg>
+        <span>GameHub</span>
+      </a>
+      <nav class="dash-nav">
+        <a href="./admin-dashboard.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="./cashiers.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 15.2c1.7.8 2.7 2.3 3 4.8" /></svg>
+          <span>Staff</span>
+        </a>
+        <a href="../tables/tables.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.6" /></svg>
+          <span>Tables</span>
+        </a>
+        <a href="../tables/rates.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9Z" /><circle cx="8" cy="8" r="1.6" /></svg>
+          <span>Rates</span>
+        </a>
+        <a href="../tables/sessions.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4a3 3 0 0 1 6 0" /><path d="M9 11h6M9 15h4" /></svg>
+          <span>Sessions</span>
+        </a>
+        <a href="./transactions.html" class="active" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V4" /><path d="M4 20h16" /><path d="M8 16v-5M12 16V8M16 16v-3M20 16V6" /></svg>
+          <span>Transactions</span>
+        </a>
+      </nav>
+      <div class="dash-user">
+        <span class="avatar-circle" id="avatar">A</span>
+        <div><strong id="who">Checking...</strong><small>Admin</small></div>
+      </div>
+    </aside>
+
+    <div class="dash-main">
+      <header class="dash-top">
+        <button class="dash-iconbtn dash-menu" aria-label="Open menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <div class="dash-top-right">
+          <button class="dash-theme" aria-label="Toggle theme">
+            <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2Z" /></svg>
+            <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></svg>
+          </button>
+          <button class="dash-logout" id="out">Log out</button>
+        </div>
+      </header>
+
+      <main class="dash-content">
+        <div class="dash-pagehead"><h1>Transactions</h1><span data-today></span></div>
+        <div class="dash-cards" id="incomeCards">
+          <div class="dash-stat"><small>Income (selected day)</small><strong id="incGross">–</strong><em id="incCount">–</em></div>
+          <div class="dash-stat"><small>Cash</small><strong id="incCash">–</strong><em id="incCashCount">–</em></div>
+          <div class="dash-stat"><small>GCash</small><strong id="incGcash">–</strong><em id="incGcashCount">–</em></div>
+        </div>
+        <div class="dash-panel" style="margin-bottom:16px">
+          <h2>Filter</h2>
+          <p>Date range + method. Daily card follows the From date (or today).</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+            <label class="field" for="fFrom"><span class="field-label">From</span>
+              <input id="fFrom" type="date" style="background:#0a0d0e;border:1px solid var(--d-border);border-radius:6px;color:var(--d-text);padding:9px 12px" />
+            </label>
+            <label class="field" for="fTo"><span class="field-label">To</span>
+              <input id="fTo" type="date" style="background:#0a0d0e;border:1px solid var(--d-border);border-radius:6px;color:var(--d-text);padding:9px 12px" />
+            </label>
+            <label class="field" for="fMethod"><span class="field-label">Method</span>
+              <span class="select-wrap"><select id="fMethod">
+                <option value="all">All</option>
+                <option value="cash">Cash</option>
+                <option value="gcash">GCash</option>
+              </select></span>
+            </label>
+            <button class="rowbtn go" id="apply">Apply</button>
+            <button class="rowbtn" id="export">Export CSV</button>
+          </div>
+        </div>
+        <div class="dash-panel">
+          <div class="dash-msg" id="msg">Loading...</div>
+          <div class="dash-tablewrap">
+            <table id="tbl">
+              <thead><tr><th>Ref</th><th>Paid</th><th>Table</th><th>Customer</th><th>Total</th><th>Method</th><th>Change</th><th>Receipt</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p id="empty" hidden>No transactions in this view yet.</p>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script src="../../../js/config.js"></script>
+  <script src="../../../js/api.js"></script>
+  <script src="../../../js/dash.js"></script>
+  <script src="./transactions.js"></script>
+</body>
+</html>

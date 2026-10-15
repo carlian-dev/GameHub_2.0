@@ -196,9 +196,13 @@ function paintSessions(list) {
       if (!yes) return;
       try {
         const r = await endSession(s.id);
-        setSessMsg(r.amount !== undefined ? `Session ended. Charge ₱${Number(r.amount).toFixed(2)}.` : "Session ended.");
+        const total = Number(r.amount !== undefined ? r.amount : 0);
+        setSessMsg(`Session ended. Charge ₱${total.toFixed(2)}. Opening billing…`);
         loadSessions(true);
         loadCashierTables(true);
+        loadBilling(true);
+        // Two-step close-out then pay (Sprint 3): bill the just-closed session now.
+        await billFlow(s.id, s.tableName, s.customerName, total);
       } catch (e) { setSessMsg(e.message); }
     };
     const vd = document.createElement("button");
@@ -237,7 +241,168 @@ async function loadSessions(quiet = false) {
 }
 
 async function refreshAll(quiet = true) {
-  await Promise.all([loadSessions(quiet), loadCashierTables(quiet)]);
+  await Promise.all([loadSessions(quiet), loadCashierTables(quiet), loadBilling(quiet)]);
+}
+
+// ---- Sprint 3 billing (CA-020/022/023/024/025): close-out then pay ----
+// End returns the charge; billFlow collects method + received via the shared
+// dash dialogs (no native popups), shows a live change preview in the confirm
+// step, then posts createTransaction. Success offers a receipt PDF preview.
+function peso2(n) { return `₱${Number(n || 0).toFixed(2)}`; }
+
+function estimateTotal(s) {
+  const start = s.startTime ? new Date(s.startTime).getTime() : NaN;
+  const end = s.closedAt ? new Date(s.closedAt).getTime() : Date.now();
+  if (isNaN(start)) return 0;
+  const secs = Math.max(0, (end - start) / 1000);
+  return Math.round((secs / 3600) * Number(s.pricePerHour || 120) * 100) / 100;
+}
+
+async function billFlow(sessionId, tableName, customerName, total) {
+  const label = `${tableName || "session"} (${customerName || "customer"}) · total ${peso2(total)}`;
+  const method = await dashSelect({
+    message: `Collect payment for ${label}. Cash or GCash only.`,
+    label: "Payment method",
+    options: [
+      { value: "cash", label: "Cash" },
+      { value: "gcash", label: "GCash" },
+    ],
+    value: "cash",
+    title: "Payment method",
+  });
+  if (method === null) {
+    setSessMsg(`Billing deferred for ${label}. Use the To-bill list below to collect it.`);
+    loadBilling(true);
+    return false;
+  }
+  const raw = await dashPrompt(
+    `Total ${peso2(total)} via ${method}. Enter the amount received (change shows next).`,
+    "Amount received (₱)",
+    Number(total).toFixed(2),
+    "Collect payment"
+  );
+  if (raw === null) {
+    setSessMsg(`Billing deferred for ${label}. Use the To-bill list below to collect it.`);
+    loadBilling(true);
+    return false;
+  }
+  const received = Number(String(raw).replace(/[^0-9.]/g, ""));
+  if (!(received > 0) || received > 1000000) {
+    setSessMsg(`Invalid amount "${raw}". Enter a number > 0 (max 1000000).`);
+    return false;
+  }
+  if (received < total) {
+    await dashConfirm(
+      `Short payment: received ${peso2(received)} < total ${peso2(total)} (short ${peso2(total - received)}). Ask for more before confirming.`,
+      "Insufficient"
+    );
+    setSessMsg(`Short payment blocked: received ${peso2(received)} < total ${peso2(total)}.`);
+    return false;
+  }
+  const change = Math.round((received - total) * 100) / 100;
+  const ok = await dashConfirm(
+    `Table: ${tableName || "—"}\nCustomer: ${customerName || "—"}\nTotal: ${peso2(total)}\nMethod: ${method}\nReceived: ${peso2(received)}\nChange: ${peso2(change)}\n\nConfirm payment?`,
+    "Confirm payment"
+  );
+  if (!ok) {
+    setSessMsg(`Payment not confirmed for ${label}. It stays in To-bill.`);
+    loadBilling(true);
+    return false;
+  }
+  try {
+    const { transaction: t } = await createTransaction(sessionId, method, received);
+    setSessMsg(`Paid ${peso2(t.total)} · ref ${t.ref} · change ${peso2(t.change)}.`);
+    loadBilling(true);
+    const print = await dashConfirm(
+      `Payment recorded.\nRef: ${t.ref}\nChange: ${peso2(t.change)}\n\nOpen the receipt to save PDF now?`,
+      "Payment recorded"
+    );
+    if (print) window.open(`../shared/receipt.html?ref=${encodeURIComponent(t.ref)}`, "_blank", "noopener");
+    return true;
+  } catch (e) {
+    setSessMsg(e.message);
+    return false;
+  }
+}
+
+// Unbilled closed sessions + recent bills, rendered under the active table
+// without touching cashier-dashboard.html (wiring-only change per plan §6).
+function billingPanels() {
+  const host = document.getElementById("sessions-panel");
+  if (!host) return {};
+  let unbilled = document.getElementById("unbilledWrap");
+  if (!unbilled) {
+    unbilled = document.createElement("div");
+    unbilled.id = "unbilledWrap";
+    unbilled.innerHTML = `<h3 style="margin:18px 0 6px">To bill (closed, unpaid)</h3>
+      <div class="dash-msg" id="billMsg">Loading...</div>
+      <div class="dash-tablewrap"><table id="billTbl">
+      <thead><tr><th>Table</th><th>Customer</th><th>Est. total</th><th>Action</th></tr></thead>
+      <tbody></tbody></table></div>
+      <h3 style="margin:18px 0 6px">Recent bills</h3>
+      <div class="dash-tablewrap"><table id="paidTbl">
+      <thead><tr><th>Ref</th><th>Customer</th><th>Total</th><th>Method</th><th>Change</th><th>Receipt</th></tr></thead>
+      <tbody></tbody></table></div>`;
+    host.appendChild(unbilled);
+  }
+  return {
+    billMsg: document.getElementById("billMsg"),
+    billBody: document.querySelector("#billTbl tbody"),
+    paidBody: document.querySelector("#paidTbl tbody"),
+  };
+}
+
+async function loadBilling(quiet = false) {
+  const { billMsg, billBody, paidBody } = billingPanels();
+  if (!billMsg) return;
+  if (!quiet) billMsg.textContent = "Loading...";
+  try {
+    const [{ sessions: closed }, { transactions }] = await Promise.all([
+      listCashierSessions("closed"),
+      listTransactions({}, false),
+    ]);
+    const billed = new Set((transactions || []).map((t) => String(t.sessionId || "")));
+    const unbilled = (closed || []).filter((s) => !billed.has(String(s.id)));
+    billBody.innerHTML = "";
+    if (unbilled.length === 0) {
+      billMsg.textContent = "Nothing awaiting payment.";
+    } else {
+      billMsg.textContent = `${unbilled.length} closed session(s) awaiting payment.`;
+    }
+    for (const s of unbilled.slice(0, 20)) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td></td><td></td><td></td><td></td>`;
+      tr.children[0].textContent = s.tableName || "—";
+      tr.children[1].textContent = s.customerName || "—";
+      const est = estimateTotal(s);
+      tr.children[2].textContent = peso2(est);
+      const btn = document.createElement("button");
+      btn.textContent = "Bill";
+      btn.className = "rowbtn go";
+      btn.onclick = () => billFlow(s.id, s.tableName, s.customerName, est);
+      tr.children[3].appendChild(btn);
+      billBody.appendChild(tr);
+    }
+    paidBody.innerHTML = "";
+    for (const t of (transactions || []).slice(0, 10)) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td></td><td></td><td></td><td></td><td></td><td></td>`;
+      tr.children[0].textContent = t.ref || "—";
+      tr.children[1].textContent = t.customerName || "—";
+      tr.children[2].textContent = peso2(t.total);
+      tr.children[3].textContent = t.method || "—";
+      tr.children[4].textContent = peso2(t.change);
+      const a = document.createElement("a");
+      a.href = `../shared/receipt.html?ref=${encodeURIComponent(t.ref || "")}`;
+      a.textContent = "Print";
+      a.target = "_blank";
+      a.rel = "noopener";
+      tr.children[5].appendChild(a);
+      paidBody.appendChild(tr);
+    }
+  } catch (e) {
+    billMsg.textContent = e.message;
+  }
 }
 
 document.querySelectorAll("[data-t]").forEach((b) =>

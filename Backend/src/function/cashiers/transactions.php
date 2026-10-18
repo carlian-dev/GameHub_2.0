@@ -12,8 +12,9 @@
  *
  * Collection `transactions`: one doc per paid sessionId.
  *   {ref unique GH-YYYYMMDD-XXXX, sessionId unique, tableId, tableName,
- *    customerName, cashierId, cashierName, minutes (ceil display),
- *    pricePerHour (snapshot copy), total, method cash|gcash,
+ *    customerName, cashierId, cashierName, minutes (actual elapsed, ceil),
+ *    billedHours (ceil hours, min 1), pricePerHour (snapshot copy),
+ *    rateType regular|special (snapshot copy), total, method cash|gcash,
  *    received, change, paidAt, createdAt}
  *
  * Indexes live in Backend/scripts/setup_transactions_indexes.php (one-time,
@@ -66,7 +67,9 @@ function transactions_shape($doc): array
         'cashierId' => isset($doc['cashierId']) ? (string)$doc['cashierId'] : null,
         'cashierName' => $doc['cashierName'] ?? '—',
         'minutes' => isset($doc['minutes']) ? (int)$doc['minutes'] : 0,
+        'billedHours' => isset($doc['billedHours']) ? (int)$doc['billedHours'] : 0,
         'pricePerHour' => isset($doc['pricePerHour']) ? (float)$doc['pricePerHour'] : 0,
+        'rateType' => $doc['rateType'] ?? null,
         'total' => isset($doc['total']) ? (float)$doc['total'] : 0,
         'method' => $doc['method'] ?? '',
         'received' => isset($doc['received']) ? (float)$doc['received'] : 0,
@@ -186,8 +189,9 @@ function transactions_create(array $params = []): array
         api_abort('session already billed (' . ($dup['ref'] ?? 'billed') . ')', 409);
     }
 
-    // Total reuses sessions_charge(): per-second billing on the snapshot rate.
-    // Closed sessions bill up to closedAt; fallback to now for legacy docs.
+    // Total mirrors sessions_charge(): per-hour billing on the snapshot
+    // rate — ceil(elapsed/1h) x rate, minimum 1 hour. Closed sessions bill
+    // up to closedAt; fallback to now for legacy docs.
     $start = $session['startTime'] instanceof UTCDateTime
         ? $session['startTime']->toDateTime() : null;
     if ($start === null) {
@@ -197,16 +201,24 @@ function transactions_create(array $params = []): array
         ? $session['closedAt']->toDateTime()
         : new DateTimeImmutable('now', new DateTimeZone('UTC'));
     $secs = $until->getTimestamp() - $start->getTimestamp();
-    if ($secs < 0) {
-        $secs = 0;
+    if (function_exists('sessions_billed_hours') && function_exists('sessions_charge')) {
+        $billedHours = sessions_billed_hours($secs);
+        $total = sessions_charge($session, $until);
+        $price = isset($session['pricePerHour']) ? (float)$session['pricePerHour'] : 140.0;
+    } else {
+        if ($secs < 0) {
+            $secs = 0;
+        }
+        $price = isset($session['pricePerHour']) ? (float)$session['pricePerHour'] : 140.0;
+        $billedHours = max(1, (int)ceil($secs / 3600));
+        $total = round($billedHours * $price, 2);
     }
-    $price = isset($session['pricePerHour']) ? (float)$session['pricePerHour'] : 120.0;
-    $total = round(($secs / 3600) * $price, 2);
+    $rateType = $session['rateType'] ?? null;
     if ($received < $total) {
         api_abort('short payment: received ' . $received . ' < total ' . $total, 422);
     }
     $change = round($received - $total, 2);
-    $minutes = (int)ceil($secs / 60);
+    $minutes = (int)ceil(max(0, $secs) / 60);
 
     $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
     $ref = '';
@@ -224,7 +236,9 @@ function transactions_create(array $params = []): array
                     'cashierId' => (string)($me['id'] ?? ''),
                     'cashierName' => transactions_cashier_name($me),
                     'minutes' => $minutes,
+                    'billedHours' => $billedHours,
                     'pricePerHour' => $price,
+                    'rateType' => $rateType,
                     'total' => $total,
                     'method' => $method,
                     'received' => $received,

@@ -80,5 +80,14 @@ function estimateTotal(s) {
   const end = s.closedAt ? new Date(s.closedAt).getTime() : Date.now();
   if (isNaN(start)) return 0;
   const secs = Math.max(0, (end - start) / 1000);
-  return Math.round((secs / 3600) * Number(s.pricePerHour || 120) * 100) / 100;
+  const hours = Math.max(1, Math.ceil(secs / 3600));
+  return Math.round(hours * Number(s.pricePerHour || 140) * 100) / 100;
+}
+
+function estimateHours(s) {
+  const start = s.startTime ? new Date(s.startTime).getTime() : NaN;
+  const end = s.closedAt ? new Date(s.closedAt).getTime() : Date.now();
+  if (isNaN(start)) return 1;
+  const secs = Math.max(0, (end - start) / 1000);
+  return Math.max(1, Math.ceil(secs / 3600));
 }

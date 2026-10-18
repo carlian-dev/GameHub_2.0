@@ -1,6 +1,7 @@
 // src/function/cashiers/cashier-dashboard.js - Dashboard page logic.
 // Pair: cashier-dashboard.html. Owns the start-session form (table +
-// customer + planned duration, e.g. "2 hrs" -> 120 min) + overview counts.
+// customer + planned duration in whole hours, e.g. "2 hrs" -> 120 min,
+// 1-hour minimum) + overview counts.
 // Sessions lifecycle lives on cashier-sessions.js; tables on
 // cashier-tables.js. Shared guard/timers in cashier-common.js.
 
@@ -21,8 +22,8 @@ function updateStartSummary() {
   const total = hrs * 60 + mins;
   document.querySelectorAll(".chip[data-quick]").forEach((c) =>
     c.classList.toggle("on", Number(c.dataset.quick) === total));
-  if (!(total >= 5 && total <= 1440)) {
-    box.textContent = "Pick 5 min – 24 h (e.g. 2 hrs = 120 min).";
+  if (!(total >= 60 && total <= 1440)) {
+    box.textContent = "Pick 1 hour – 24 h in whole hours (e.g. 2 hrs = 120 min).";
     return;
   }
   const ends = new Date(Date.now() + total * 60000)
@@ -131,7 +132,7 @@ document.getElementById("startBtn")?.addEventListener("click", async () => {
   const total = hrs * 60 + mins;
   if (!tableId) { setStartMsg("No available table to start on.", "err"); return; }
   if (customer === "") { setStartMsg("Customer name is required.", "err"); return; }
-  if (!(total >= 5 && total <= 1440)) { setStartMsg("Duration must be 5 min – 24 h (e.g. 2 hrs = 120 min).", "err"); return; }
+  if (!(total >= 60 && total <= 1440)) { setStartMsg("Duration must be 1 hour – 24 h in whole hours (e.g. 2 hrs = 120 min).", "err"); return; }
   setStartMsg("Starting…");
   btn.disabled = true;
   try {

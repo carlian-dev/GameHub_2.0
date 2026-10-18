@@ -9,12 +9,18 @@
  *   {tableId, tableName (denormalized), customerName, cashierId, cashierName,
  *    startTime, endTime (planned end = start + plannedMinutes, moved by extend),
  *    plannedMinutes, status: active|closed|cancelled, pricePerHour (snapshot),
- *    closedAt, createdAt, updatedAt}
+ *    rateType: regular|special (snapshot at start), closedAt, createdAt, updatedAt}
  *
- * Timer rule: the cashier inputs the planned duration (e.g. customer says
- * "2 hrs" -> 120 min). endTime is the countdown target; the Frontend ticks
- * remaining = endTime - now every second. Extend pushes endTime forward.
- * Table flips to occupied on start, back to available on end/cancel.
+ * Timer rule: the cashier inputs the planned duration in whole hours
+ * (minimum 1 hour, e.g. "2 hrs" -> 120 min). endTime is the countdown
+ * target; the Frontend ticks remaining = endTime - now every second.
+ * Extend pushes endTime forward by whole hours only. Table flips to
+ * occupied on start, back to available on end/cancel.
+ * Billing rule (per-hour, 1-hour minimum): charge = ceil(elapsed/1h) x
+ * snapshot rate, so ending before 1 hour still bills 1 full hour.
+ * Rate snapshot rule (V1): start hour in 18:00-24:00 Asia/Manila uses the
+ * special rate, otherwise the regular rate. The snapshot never flips
+ * mid-session.
  * Every mutation writes activityLogs (CA-033).
  */
 declare(strict_types=1);
@@ -75,6 +81,7 @@ function sessions_shape($doc, array $tableMap = [], array $userMap = []): array
         'plannedMinutes' => (int)($doc['plannedMinutes'] ?? 0),
         'status' => $doc['status'] ?? '',
         'pricePerHour' => isset($doc['pricePerHour']) ? (float)$doc['pricePerHour'] : null,
+        'rateType' => $doc['rateType'] ?? null,
         'closedAt' => isset($doc['closedAt']) ? $doc['closedAt']->toDateTime()->format(DATE_ATOM) : null,
     ];
 }
@@ -135,6 +142,32 @@ function sessions_status_filter(): array
     return ['status' => 'active'];
 }
 
+/**
+ * Rate window (V1, snapshot at start): 18:00-24:00 Asia/Manila uses the
+ * special rate, otherwise the regular rate. The snapshot never flips
+ * mid-session.
+ */
+function sessions_rate_for_start(DateTimeInterface $startUtc): string
+{
+    try {
+        $manila = (new DateTimeImmutable('@' . $startUtc->getTimestamp()))
+            ->setTimezone(new DateTimeZone('Asia/Manila'));
+        $hour = (int)$manila->format('G');
+    } catch (Throwable $ignored) {
+        return 'regular';
+    }
+    return ($hour >= 18) ? 'special' : 'regular';
+}
+
+/** Billed whole hours for an elapsed span: ceil(secs/3600), minimum 1. */
+function sessions_billed_hours(int $secs): int
+{
+    if ($secs < 0) {
+        $secs = 0;
+    }
+    return max(1, (int)ceil($secs / 3600));
+}
+
 /** AD-014 + AD-027: admin views sessions operated by cashiers (active/closed/cancelled/all). */
 function sessions_list(array $params = []): array
 {
@@ -191,8 +224,8 @@ function sessions_start(array $params = []): array
     if ($customer === '' || mb_strlen($customer) > 60) {
         api_abort('customer name is required (max 60 chars)', 422);
     }
-    if ($minutes < 5 || $minutes > 1440) {
-        api_abort('duration must be 5 to 1440 minutes (e.g. 2 hrs = 120)', 422);
+    if ($minutes < 60 || $minutes > 1440) {
+        api_abort('duration must be 60 to 1440 minutes (1-hour minimum, per-hour)', 422);
     }
 
     $tableId = new ObjectId($tableIdRaw);
@@ -218,10 +251,11 @@ function sessions_start(array $params = []): array
     }
     $cashierName = sessions_actor_name($actor, $me);
 
-    $rateDoc = DatabaseConnection::db()->selectCollection('rates')->findOne(['type' => 'regular']);
-    $price = $rateDoc !== null && isset($rateDoc['pricePerHour']) ? (float)$rateDoc['pricePerHour'] : 120.0;
-
     $start = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $rateType = sessions_rate_for_start($start);
+    $rateDoc = DatabaseConnection::db()->selectCollection('rates')->findOne(['type' => $rateType]);
+    $price = $rateDoc !== null && isset($rateDoc['pricePerHour']) ? (float)$rateDoc['pricePerHour'] : 140.0;
+
     $end = $start->modify('+' . $minutes . ' minutes');
     $res = sessions_col()->insertOne([
         'tableId' => $tableId,
@@ -234,6 +268,7 @@ function sessions_start(array $params = []): array
         'plannedMinutes' => $minutes,
         'status' => 'active',
         'pricePerHour' => $price,
+        'rateType' => $rateType,
         'createdAt' => new UTCDateTime($start),
         'updatedAt' => new UTCDateTime($start),
     ]);
@@ -250,7 +285,8 @@ function sessions_start(array $params = []): array
 
 /**
  * CA-009: extend an active session (customer asks for more time).
- * Body: {extraMinutes} — pushes endTime forward, grows plannedMinutes.
+ * Body: {extraMinutes} — whole hours only (60, 120, ... 720). Pushes
+ * endTime forward, grows plannedMinutes.
  */
 function sessions_extend(array $params = []): array
 {
@@ -258,8 +294,8 @@ function sessions_extend(array $params = []): array
     $data = json_body();
     $extra = $data['extraMinutes'] ?? $data['minutes'] ?? null;
     $extra = is_numeric($extra) ? (int)$extra : 0;
-    if ($extra < 5 || $extra > 720) {
-        api_abort('extraMinutes must be 5 to 720 (e.g. +60 for one more hour)', 422);
+    if ($extra < 60 || $extra > 720 || ($extra % 60) !== 0) {
+        api_abort('extraMinutes must be 60, 120, 180, up to 720 (1-hour minimum, per-hour only)', 422);
     }
     $id = sessions_id($params['id'] ?? '');
     $doc = sessions_col()->findOne(['_id' => $id]);
@@ -311,23 +347,21 @@ function sessions_free_table($tableId): void
     }
 }
 
-/** Per-minute billing preview: elapsed minutes x snapshot rate / 60. */
+/** Per-hour billing: ceil(elapsed/1h) x snapshot rate, minimum 1 hour. */
 function sessions_charge($doc, DateTimeInterface $until): float
 {
     if (!isset($doc['startTime'])) {
         return 0.0;
     }
     $secs = $until->getTimestamp() - $doc['startTime']->toDateTime()->getTimestamp();
-    if ($secs < 0) {
-        $secs = 0;
-    }
-    $rate = isset($doc['pricePerHour']) ? (float)$doc['pricePerHour'] : 120.0;
-    return round(($secs / 3600) * $rate, 2);
+    $hours = sessions_billed_hours($secs);
+    $rate = isset($doc['pricePerHour']) ? (float)$doc['pricePerHour'] : 140.0;
+    return round($hours * $rate, 2);
 }
 
 /**
  * CA-011 + CA-014: end an active session. Frees the table, stamps closedAt,
- * returns the per-minute charge so the cashier can bill it.
+ * returns the per-hour charge (1-hour minimum) so the cashier can bill it.
  */
 function sessions_end(array $params = []): array
 {
@@ -342,6 +376,8 @@ function sessions_end(array $params = []): array
     }
     $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
     $charge = sessions_charge($doc, $now);
+    $secs = $now->getTimestamp() - $doc['startTime']->toDateTime()->getTimestamp();
+    $billedHours = sessions_billed_hours($secs);
     sessions_col()->updateOne(
         ['_id' => $id],
         ['$set' => ['status' => 'closed', 'closedAt' => new UTCDateTime($now), 'updatedAt' => new UTCDateTime($now)]]
@@ -353,7 +389,7 @@ function sessions_end(array $params = []): array
         'target' => (string)$doc['_id'],
         'at' => new UTCDateTime(),
     ]);
-    return ['ok' => true, 'amount' => $charge, 'session' => sessions_shape(sessions_col()->findOne(['_id' => $id]))];
+    return ['ok' => true, 'amount' => $charge, 'billedHours' => $billedHours, 'session' => sessions_shape(sessions_col()->findOne(['_id' => $id]))];
 }
 
 /**

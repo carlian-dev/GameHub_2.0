@@ -17,8 +17,8 @@
 **| AD-013 | Administrator should be able to view current table statuses. |**
 **| AD-014 | Administrator should be able to view active customer sessions. |**
 | AD-015 | Administrator should be able to view customer and transaction information relevant to current operations. |
-**| AD-016 | Administrator should be able to configure regular hourly table rates. |**
-**| AD-017 | Administrator should be able to configure special hourly table rates. |**
+| AD-016 | Administrator should be able to configure regular hourly table rates. |
+| AD-017 | Administrator should be able to configure special hourly table rates. |
 | AD-018 | Administrator should be able to update table rates with an effective date/time. |
 | AD-019 | Administrator should be able to view daily income reports. |
 | AD-020 | Administrator should be able to view monthly income reports. |

@@ -5,8 +5,9 @@
  * Pair: rates card on Frontend/src/function/tables/tables.html <-> this file.
  * AD-016 regular rate, AD-017 special rate. Shape per type:
  * {type: regular|special, pricePerHour, active, updatedAt}.
- * Seeded defaults: regular ₱120/h, special ₱180/h (confirmed decisions).
- * When special rate conditions are decided (Q-001), selection rules attach here.
+ * Seeded defaults: regular ₱140/h, special ₱180/h (confirmed decisions).
+ * Special rate window (V1): 18:00-24:00 Asia/Manila — sessions started in
+ * that window snapshot the special rate (see sessions_rate_for_start()).
  */
 declare(strict_types=1);
 
@@ -14,7 +15,7 @@ use App\Config\DatabaseConnection;
 use MongoDB\BSON\UTCDateTime;
 
 const RATE_TYPES = ['regular', 'special'];
-const RATE_DEFAULTS = ['regular' => 120, 'special' => 180];
+const RATE_DEFAULTS = ['regular' => 140, 'special' => 180];
 
 function rates_col()
 {

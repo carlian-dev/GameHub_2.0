@@ -43,13 +43,18 @@ function buildPdf(t, ref) {
   doc.setLineDashPattern([], 0);
 
   const paid = t.paidAt ? new Date(t.paidAt).toLocaleString() : "-";
+  const billedHrs = Number(t.billedHours || 0) > 0
+    ? Number(t.billedHours)
+    : Math.max(1, Math.ceil(Number(t.minutes || 0) / 60));
+  const rateLabel = t.rateType ? `${php(t.pricePerHour)}/hr (${t.rateType})` : `${php(t.pricePerHour)}/hr`;
   const rows = [
     ["Table", String(t.tableName || "-")],
     ["Customer", String(t.customerName || "-")],
     ["Cashier", String(t.cashierName || "-")],
     ["Paid at", paid],
     ["Time played", `${t.minutes || 0} min`],
-    ["Rate", `${php(t.pricePerHour)}/hr`],
+    ["Billed", `${billedHrs} hr`],
+    ["Rate", rateLabel],
     ["Method", String(t.method || "-")],
     ["Received", php(t.received)],
   ];
@@ -132,7 +137,13 @@ function showPreview() {
     const paid = t.paidAt ? new Date(t.paidAt).toLocaleString() : "—";
     document.getElementById("rPaid").textContent = paid;
     document.getElementById("rMinutes").textContent = `${t.minutes || 0} min`;
-    document.getElementById("rRate").textContent = `${peso(t.pricePerHour)}/hr`;
+    const billedElm = Number(t.billedHours || 0) > 0
+      ? Number(t.billedHours)
+      : Math.max(1, Math.ceil(Number(t.minutes || 0) / 60));
+    document.getElementById("rBilled").textContent = `${billedElm} hr`;
+    document.getElementById("rRate").textContent = t.rateType
+      ? `${peso(t.pricePerHour)}/hr (${t.rateType})`
+      : `${peso(t.pricePerHour)}/hr`;
     document.getElementById("rMethod").textContent = t.method || "—";
     document.getElementById("rReceived").textContent = peso(t.received);
     document.getElementById("rTotal").textContent = peso(t.total);

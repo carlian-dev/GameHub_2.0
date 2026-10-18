@@ -1,7 +1,7 @@
 // src/function/cashiers/cashier-sessions.js - Sessions page logic.
 // Pair: cashier-sessions.html. Owns the session lifecycle (CA-004..CA-014):
-// active sessions with per-second countdowns, extend (+minutes), end (bills
-// per-minute), void (mistakes), plus billing close-out (CA-020/022/023/024/
+// active sessions with per-second countdowns, extend (+whole hours, 1h min),
+// end (bills per-hour, 1-hour minimum), void (mistakes), plus billing close-out (CA-020/022/023/024/
 // 025): to-bill list + recent bills + receipt PDF. Shared guard/timers in
 // cashier-common.js. Refresh: server truth every 30s; cells tick locally.
 
@@ -33,10 +33,9 @@ function paintSessions(list) {
     ex.className = "rowbtn";
     ex.onclick = async () => {
       const pick = await dashSelect({
-        message: `Extend ${s.tableName || "session"} for the customer. Adds to the planned end.`,
+        message: `Extend ${s.tableName || "session"} for the customer. Adds whole hours to the planned end (1-hour minimum).`,
         label: "Extra time",
         options: [
-          { value: "30", label: "+30 min" },
           { value: "60", label: "+1 hour" },
           { value: "120", label: "+2 hours" },
           { value: "180", label: "+3 hours" },
@@ -55,7 +54,7 @@ function paintSessions(list) {
     end.className = "rowbtn go";
     end.onclick = async () => {
       const yes = await dashConfirm(
-        `End session on ${s.tableName || "this table"} (${s.customerName || "customer"})? The table becomes available and the charge is computed.`,
+        `End session on ${s.tableName || "this table"} (${s.customerName || "customer"})? The table becomes available. Billing is per-hour with a 1-hour minimum.`,
         "End session"
       );
       if (!yes) return;

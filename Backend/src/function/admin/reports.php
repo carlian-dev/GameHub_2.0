@@ -123,7 +123,7 @@ function reports_export(array $params = []): array
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $fname . '"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['ref', 'paidAt', 'table', 'customer', 'cashier', 'minutes', 'rate', 'total', 'method', 'received', 'change']);
+    fputcsv($out, ['ref', 'paidAt', 'table', 'customer', 'cashier', 'minutes', 'billedHours', 'rate', 'rateType', 'total', 'method', 'received', 'change']);
     foreach ($cursor as $d) {
         fputcsv($out, [
             $d['ref'] ?? '',
@@ -133,7 +133,9 @@ function reports_export(array $params = []): array
             $d['customerName'] ?? '',
             $d['cashierName'] ?? '',
             $d['minutes'] ?? 0,
+            $d['billedHours'] ?? 0,
             $d['pricePerHour'] ?? 0,
+            $d['rateType'] ?? '',
             $d['total'] ?? 0,
             $d['method'] ?? '',
             $d['received'] ?? 0,

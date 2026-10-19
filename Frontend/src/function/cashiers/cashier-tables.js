@@ -4,9 +4,11 @@
 // cashier-common.js. Refresh: server truth every 30s.
 let cashierTab = "all";
 
-function setTablesMsg(t) {
+function setTablesMsg(t, kind = "") {
   const el = document.getElementById("tablesMsg");
-  if (el) el.textContent = t;
+  if (!el) return;
+  el.textContent = t;
+  el.className = `dash-msg${kind ? " " + kind : ""}`;
 }
 
 function stampTables() {
@@ -35,22 +37,26 @@ function paintCashierTables(list) {
 }
 
 async function loadCashierTables(quiet = false) {
-  if (!quiet) setTablesMsg("Loading...");
+  if (!quiet) {
+    setTablesMsg("Loading…", "loading");
+    dashSkeleton(document.querySelector("#cashierTbl tbody"), 2, 4);
+  }
   try {
     const { tables } = await listCashierTables(cashierTab);
-    setTablesMsg(`${paintCashierTables(tables || [])} shown (${cashierTab}).`);
+    const n = paintCashierTables(tables || []);
+    setTablesMsg(`${n} shown (${cashierTab}).`, "ok");
+    const empty = document.getElementById("tablesEmpty");
+    if (empty) empty.hidden = n > 0;
     stampTables();
   } catch (e) {
-    setTablesMsg(e.message);
+    setTablesMsg(e.message, "err");
+    const empty = document.getElementById("tablesEmpty");
+    if (empty) { empty.hidden = false; empty.textContent = "Couldn't load tables — refresh to retry."; }
   }
 }
 
-document.querySelectorAll("[data-t]").forEach((b) =>
-  b.addEventListener("click", () => {
-    cashierTab = b.dataset.t;
-    document.querySelectorAll("[data-t]").forEach((x) => x.classList.toggle("on", x === b));
-    loadCashierTables();
-  }));
+// Accessible tab strip: click + arrow keys, aria-selected, tabpanel labelledby.
+dashTabsInit((t) => { cashierTab = t; loadCashierTables(); });
 
 (async () => {
   try {

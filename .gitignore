@@ -2,3 +2,5 @@
 node_modules/
 Backend/vendor/
 Backend/.env
+.env
+desktop.ini

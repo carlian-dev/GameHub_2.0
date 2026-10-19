@@ -36,7 +36,13 @@ final class DatabaseConnection
             if ($uri === '') {
                 throw new \RuntimeException('MONGODB_URI is not set in .env');
             }
-            self::$client = new Client($uri);
+            self::$client = new Client($uri, [
+                'serverSelectionTimeoutMS' => 10000,
+                'connectTimeoutMS' => 10000,
+                'socketTimeoutMS' => 30000,
+                'retryWrites' => true,
+                'retryReads' => true,
+            ]);
         }
         return self::$client;
     }

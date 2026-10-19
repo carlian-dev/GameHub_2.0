@@ -1,84 +1,130 @@
 <!DOCTYPE html>
 <!--
   index.html - customer landing page (CU-001 + CU-002).
-  Purpose: hero only, matching the approved screenshot: nav (logo, TABLES /
-  RATES / RESERVE, theme icon, NO staff login), eyebrow, headline, sub,
-  VIEW TABLES + RESERVE NOW buttons, SCROLL hint, live available-tables
-  section (CU-002, 30s auto-refresh via js/tables-public.js), dark lounge backdrop.
-  Staff login lives at src/function/auth/login.html, reachable via /login URL only
-  (see login/index.html redirect) — never linked from here.
+  Reference-matched: emerald hero over billiard photo, gold accents, warm
+  off-white content band with white cards (live available tables CU-002 +
+  Find Us with map), feature strip, footer.
+  Nav: Home / Tables / Location + gold Reserve Now pill (scrolls to the live
+  availability section - there is no reservation backend).
+  Staff login lives at src/function/auth/login.html, reachable via /login URL
+  only (see login/index.html redirect) - never linked from here.
   Scripts: js/config.js + js/api.js + js/tables-public.js (availability),
-  js/theme.js (dark/light toggle, persisted as gh-theme).
+  js/theme.js (light/dark toggle, persisted as gh-theme).
   (Stays at root because static servers look for index.html here.)
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GameHub</title>
+  <title>GameHub — Billiard &amp; More</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
-<body class="landing">
-  <header class="nav">
-    <a class="brand" href="#" aria-label="GameHub home">
-      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-        <circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" />
-        <circle cx="16" cy="16" r="4" fill="#3fa46a" />
-        <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" />
-      </svg>
-      <span class="brand-name">GameHub</span>
-    </a>
-    <nav class="nav-links" aria-label="Primary">
-      <a href="#tables">Tables</a>
-      <a href="#rates">Rates</a>
-      <a href="#reserve">Reserve</a>
-    </nav>
-    <button class="theme-icon" aria-label="Toggle theme">
-      <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2Z" /></svg>
-      <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></svg>
-    </button>
-  </header>
+<body class="landing" id="top">
+  <div class="hero-wrap">
+    <header class="nav">
+      <a class="brand" href="#top" aria-label="GameHub home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="13" fill="none" stroke="#F5F3ED" stroke-width="2" />
+          <circle cx="16" cy="16" r="4" fill="#D4AF37" />
+          <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F5F3ED" stroke-width="2" />
+        </svg>
+        <span class="brand-text">
+          <span class="brand-name">GameHub</span>
+          <span class="brand-tag">Billiard &amp; More</span>
+        </span>
+      </a>
+      <nav class="nav-links" id="navLinks" aria-label="Primary">
+        <a href="#top">Home</a>
+        <a href="#tables">Tables</a>
+        <a href="#location">Location</a>
+        <a class="nav-cta" href="#tables">Reserve Now</a>
+      </nav>
+      <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+      </button>
+      <button class="theme-icon" aria-label="Toggle theme">
+        <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2Z" /></svg>
+        <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></svg>
+      </button>
+    </header>
 
-  <main class="hero">
-    <p class="eyebrow"><span></span>Established 2020<span></span></p>
-    <h1>Where Every<br />Shot <em>Counts</em></h1>
-    <p class="lede">Premium billiard tables, real-time availability, and seamless reservations — all in one place.</p>
-    <p class="cta">
-      <a class="btn btn-solid" href="#tables">View Tables</a>
-      <a class="btn btn-ghost" href="#reserve">Reserve Now</a>
-    </p>
-  </main>
+    <main class="hero">
+      <p class="eyebrow"><span></span>Established 2020</p>
+      <h1>Where Every<br />Shot <em>Counts</em></h1>
+      <p class="lede">Premium billiard tables, real-time availability, and seamless reservations — all in one place.</p>
+      <p class="cta">
+        <a class="btn btn-solid" href="#tables">View Tables</a>
+        <a class="btn btn-ghost" href="#tables">Reserve Now</a>
+      </p>
+    </main>
 
-  <footer class="scroll-hint" aria-hidden="true">
-    <span>Scroll</span>
-    <i></i>
-  </footer>
+    <footer class="scroll-hint" aria-hidden="true">
+      <span>Scroll</span>
+      <i></i>
+    </footer>
+  </div>
 
-  <!-- CU-002: live available tables (available + non-archived only, 30s refresh). -->
-  <section id="tables" class="tables-live" data-state="checking" aria-live="polite">
-    <p class="tables-pill" aria-hidden="true"><span class="live-dot"></span><span id="liveLabel">Checking</span></p>
-    <h2>Available tables</h2>
-    <p class="tables-lede">Open tables right now — updates itself while you watch.</p>
-    <p class="tables-count" id="tablesCount">Checking…</p>
-    <div class="tables-grid" id="tablesGrid"></div>
-    <p class="tables-meta"><span id="tablesUpdated"></span></p>
-    <p class="tables-error" id="tablesError" hidden></p>
-    <noscript><p>Enable JavaScript to see live table availability.</p></noscript>
-  </section>
+  <section class="band">
+    <div class="band-inner">
+      <!-- CU-002: live available tables (available + non-archived only, 30s refresh). -->
+      <section id="tables" class="panel-card tables-live" data-state="checking" aria-live="polite">
+        <div class="panel-head">
+          <h2>Available tables</h2>
+          <p class="tables-pill" aria-hidden="true"><span class="live-dot"></span><span id="liveLabel">Checking</span></p>
+        </div>
+        <p class="panel-lede">Open tables right now — updates itself while you watch.</p>
+        <p class="tables-count" id="tablesCount">Checking…</p>
+        <div class="tables-grid" id="tablesGrid"></div>
+        <p class="tables-meta"><span id="tablesUpdated"></span></p>
+        <p class="tables-error" id="tablesError" hidden></p>
+        <noscript><p>Enable JavaScript to see live table availability.</p></noscript>
+      </section>
 
-  <!-- This is for Google Maps API -->
-  <section id="location" class="location">
-    <p class="eyebrow"><span></span>Find Us<span></span></p>
-    <h2>GameHub Location</h2>
-    <p class="location-address">Rooftop, Paz Building, San Isidro St, Malaybalay City, Bukidnon</p>
-    <p class="location-hours">Open daily · 8:00 AM – 10:00 PM</p>
-    <div class="map-frame">
-      <iframe src="https://www.google.com/maps?q=8.1530406,125.1300626&z=18&output=embed" loading="lazy" title="GameHub location map" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+      <section id="location" class="panel-card findus">
+        <span class="findus-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" /><circle cx="12" cy="10" r="2.6" /></svg>
+        </span>
+        <h2>Find Us</h2>
+        <p class="location-address">Rooftop, Paz Building, San Isidro St, Malaybalay City, Bukidnon</p>
+        <p class="location-hours">Open daily · 8:00 AM – 10:00 PM</p>
+        <div class="map-frame">
+          <iframe src="https://www.google.com/maps?q=8.1530406,125.1300626&z=18&output=embed" loading="lazy" title="GameHub location map" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+        </div>
+      </section>
     </div>
   </section>
+
+  <section class="features" aria-label="Why GameHub">
+    <div class="features-inner">
+      <span class="feature">
+        <i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.6" /></svg></i>
+        Great Tables
+      </span>
+      <span class="feature">
+        <i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg></i>
+        Real-Time Availability
+      </span>
+      <span class="feature">
+        <i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="16" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg></i>
+        Easy Reservations
+      </span>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="features-inner">
+      <span>© 2026 GameHub — Billiard &amp; More</span>
+      <span>Rooftop, Paz Building, Malaybalay City, Bukidnon · Open daily 8:00 AM – 10:00 PM</span>
+    </div>
+  </footer>
+
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>
   <script src="js/tables-public.js"></script>
   <script src="js/theme.js"></script>
+  <script src="js/nav.js"></script>
 </body>
 </html>

@@ -1,18 +1,34 @@
 // js/dash.js - shared dashboard shell behavior (all staff pages).
-// Sidebar toggle (mobile), outside-click close, theme toggle persisted in
-// localStorage (dark default, matching the landing), and [data-today] dates.
+// Sidebar toggle (mobile) + scrim, theme toggle persisted in localStorage,
+// [data-today] dates, sliding nav pill, and the shared dialog system
+// (confirm / prompt / select / edit / alert) with toasts and a11y helpers.
 // Pure local UI: no API calls here; page scripts own guards + data.
 (function () {
   const root = document.querySelector(".dash") || document.body;
   const side = document.querySelector(".dash-side");
   const menu = document.querySelector(".dash-menu");
   if (menu && side) {
-    menu.addEventListener("click", () => side.classList.toggle("open"));
+    // Mobile drawer: hamburger + real backdrop scrim + aria-expanded.
+    const scrim = document.createElement("div");
+    scrim.className = "dash-scrim";
+    scrim.setAttribute("aria-hidden", "true");
+    document.body.appendChild(scrim);
+    const setOpen = (open) => {
+      side.classList.toggle("open", open);
+      scrim.classList.toggle("show", open);
+      menu.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    menu.setAttribute("aria-expanded", "false");
+    menu.addEventListener("click", () => setOpen(!side.classList.contains("open")));
+    scrim.addEventListener("click", () => setOpen(false));
     document.addEventListener("click", (e) => {
       if (window.innerWidth <= 860 && side.classList.contains("open") &&
-        !side.contains(e.target) && !menu.contains(e.target)) {
-        side.classList.remove("open");
+        !side.contains(e.target) && !menu.contains(e.target) && !scrim.contains(e.target)) {
+        setOpen(false);
       }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && side.classList.contains("open")) setOpen(false);
     });
   }
   const themeBtn = document.querySelector(".dash-theme");
@@ -20,8 +36,8 @@
     root.setAttribute("data-theme", t);
     if (themeBtn && themeBtn.classList) themeBtn.classList.toggle("is-light", t === "light");
   };
-  let theme = "dark";
-  try { theme = localStorage.getItem("gh-theme") || "dark"; } catch { /* private mode */ }
+  let theme = "light";
+  try { theme = localStorage.getItem("gh-theme") || "light"; } catch { /* private mode */ }
   applyTheme(theme);
   if (themeBtn) {
     themeBtn.addEventListener("click", () => {
@@ -51,7 +67,6 @@
       pill.setAttribute("aria-hidden", "true");
       nav.prepend(pill);
     }
-    nav.classList.add("has-pill");
 
     const movePill = (link) => {
       if (!link) { pill.style.opacity = "0"; return; }
@@ -90,7 +105,13 @@
         const href = a.getAttribute("href") || "";
         if (href.startsWith("#")) {
           setActive(a, { hash: true });
-          if (window.innerWidth <= 860 && side) side.classList.remove("open");
+          if (window.innerWidth <= 860 && side) {
+            side.classList.remove("open");
+            const sc = document.querySelector(".dash-scrim");
+            if (sc) sc.classList.remove("show");
+            const mm = document.querySelector(".dash-menu");
+            if (mm) mm.setAttribute("aria-expanded", "false");
+          }
           return;
         }
         // Same-page Dashboard link (./cashier-dashboard.html with no hash):
@@ -104,7 +125,11 @@
             e.preventDefault();
             setActive(a, { hash: true });
             window.scrollTo({ top: 0, behavior: "smooth" });
-            if (window.innerWidth <= 860 && side) side.classList.remove("open");
+            if (window.innerWidth <= 860 && side) {
+              side.classList.remove("open");
+              const sc = document.querySelector(".dash-scrim");
+              if (sc) sc.classList.remove("show");
+            }
           }
         } catch { /* external URL: let it navigate */ }
       });
@@ -171,10 +196,129 @@
   }
 })();
 
-// ---- Shared Yes/No + input + select + schedule dialogs (all popups go through here) ----
+// ---- Toasts (success / error / info, corner stack, auto-dismiss) ----
+// dashToast("Saved.", "ok") — max 3 stacked; errors use role="alert".
+function dashToast(message, kind = "info", { title = "", timeout = 4200 } = {}) {
+  let wrap = document.querySelector(".dash-toasts");
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.className = "dash-toasts";
+    document.body.appendChild(wrap);
+  }
+  while (wrap.children.length >= 3) wrap.firstElementChild.remove();
+  const t = document.createElement("div");
+  t.className = `dash-toast ${kind}`;
+  t.setAttribute("role", kind === "err" ? "alert" : "status");
+  const body = document.createElement("div");
+  if (title) {
+    const strong = document.createElement("strong");
+    strong.textContent = title;
+    body.appendChild(strong);
+  }
+  body.appendChild(document.createTextNode(message));
+  const x = document.createElement("button");
+  x.type = "button";
+  x.className = "toast-x";
+  x.setAttribute("aria-label", "Dismiss notification");
+  x.textContent = "\u00d7";
+  t.append(body, x);
+  wrap.appendChild(t);
+  const kill = () => {
+    t.classList.add("leaving");
+    window.setTimeout(() => t.remove(), 260);
+  };
+  x.addEventListener("click", kill);
+  window.setTimeout(kill, timeout);
+  return t;
+}
+
+// ---- Skeleton rows for tables (visual loading state) ----
+// dashSkeleton(document.querySelector("#tbl tbody"), 5) -> shimmer placeholders.
+function dashSkeleton(tbody, cols, rows = 5) {
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  for (let i = 0; i < rows; i++) {
+    const tr = document.createElement("tr");
+    tr.className = "sk-row";
+    tr.setAttribute("aria-hidden", "true");
+    for (let c = 0; c < cols; c++) {
+      const td = document.createElement("td");
+      const bar = document.createElement("span");
+      bar.className = "sk-bar";
+      td.appendChild(bar);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+
+// ---- "Updated h:mm:ss" stamp (set on every successful paint) ----
+function dashStamp(el) {
+  const text = `Updated ${new Date().toLocaleTimeString()}`;
+  if (el) el.textContent = text;
+  return text;
+}
+
+// ---- Per-field validation helper (red border + aria-invalid) ----
+function dashFieldError(input, hasError) {
+  if (!input) return;
+  input.setAttribute("aria-invalid", hasError ? "true" : "false");
+  const field = input.closest(".field") || input.closest(".modal-field");
+  if (field) field.classList.toggle("invalid", hasError);
+}
+
+// ---- Accessible tabs: .dash-tabs [data-t] -> role=tab + arrow keys ----
+// dashTabsInit((tabValue, btn) => load(tabValue)). The panel that follows
+// the strip should carry role="tabpanel".
+function dashTabsInit(onChange) {
+  const strip = document.querySelector(".dash-tabs");
+  if (!strip) return null;
+  const tabs = Array.from(strip.querySelectorAll("[data-t]"));
+  tabs.forEach((b, i) => {
+    b.setAttribute("role", "tab");
+    b.id = b.id || `dashtab-${i}`;
+    const sync = (on) => {
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      b.tabIndex = on ? 0 : -1;
+    };
+    sync(b.classList.contains("on"));
+    b.addEventListener("click", () => {
+      tabs.forEach((x) => {
+        const on = x === b;
+        x.classList.toggle("on", on);
+        x.setAttribute("aria-selected", on ? "true" : "false");
+        x.tabIndex = on ? 0 : -1;
+      });
+      const panel = strip.nextElementSibling;
+      if (panel && panel.getAttribute("role") === "tabpanel") {
+        panel.setAttribute("aria-labelledby", b.id);
+      }
+      if (onChange) onChange(b.dataset.t, b);
+    });
+    b.addEventListener("keydown", (e) => {
+      const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      const next = tabs[(i + d + tabs.length) % tabs.length];
+      next.focus();
+      next.click();
+    });
+  });
+  const on = tabs.find((b) => b.classList.contains("on")) || tabs[0];
+  const panel0 = strip.nextElementSibling;
+  if (on && panel0 && panel0.getAttribute("role") === "tabpanel") {
+    panel0.setAttribute("aria-labelledby", on.id);
+  }
+  return tabs;
+}
+
+// ---- Shared dialogs (all popups go through here) ----
 // dashConfirm({message}) -> true on Yes, false on No.
+// dashAlert(message, title) -> resolves on OK (informational, one button).
 // dashPrompt({message, label, value}) -> typed string on OK, null on Cancel.
-// One generic gold-top modal, side-by-side buttons, injected once per page.
+// dashSelect({message, label, options, value, title}) -> chosen value / null.
+// One generic gold-top modal, a11y: aria-modal + labelledby/describedby,
+// focus trap, initial focus, focus restored to the trigger on close.
 let dashModalEl = null;
 function dashModal() {
   if (dashModalEl) return dashModalEl;
@@ -182,11 +326,13 @@ function dashModal() {
   dashModalEl.className = "dash-modal";
   dashModalEl.setAttribute("role", "dialog");
   dashModalEl.setAttribute("aria-modal", "true");
+  dashModalEl.setAttribute("aria-labelledby", "dashModalTitle");
+  dashModalEl.setAttribute("aria-describedby", "dashModalMsg");
   dashModalEl.innerHTML =
-    `<div class="dash-modal-box">` +
-    `<p class="dash-modal-title" style="font-family:Georgia,'Times New Roman',serif;font-size:20px;margin:0 0 8px"></p>` +
-    `<p class="dash-modal-msg"></p>` +
-    `<label class="modal-field" hidden><span></span><input /></label>` +
+    `<div class="dash-modal-box" tabindex="-1">` +
+    `<p class="dash-modal-title" id="dashModalTitle"></p>` +
+    `<p class="dash-modal-msg" id="dashModalMsg"></p>` +
+    `<label class="modal-field" hidden><span></span><input /><span class="modal-err"></span></label>` +
     `<label class="modal-select" hidden><span></span><select></select></label>` +
     `<div class="modal-schedule" hidden>` +
     `<label class="modal-field"><span>Display name</span><input class="modal-schedule-name" type="text" autocomplete="off" /></label>` +
@@ -201,7 +347,40 @@ function dashModal() {
   return dashModalEl;
 }
 
-function dashAsk({ title = "", message = "", okLabel = "Yes", cancelLabel = "No", prompt = null }) {
+let dashLastFocus = null;
+function dashTrapTab(e) {
+  if (e.key !== "Tab" || !dashModalEl || !dashModalEl.classList.contains("open")) return;
+  const focusables = dashModalEl.querySelectorAll(
+    'button:not([hidden]):not(:disabled), input:not([hidden]), select:not([hidden]), [tabindex]:not([tabindex="-1"])'
+  );
+  const list = Array.from(focusables).filter((el) => el.offsetParent !== null);
+  if (!list.length) return;
+  const first = list[0];
+  const last = list[list.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  else if (!dashModalEl.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+}
+
+function dashModalOpen(m, initialEl) {
+  dashLastFocus = document.activeElement;
+  document.addEventListener("keydown", dashTrapTab, true);
+  document.body.style.overflow = "hidden";
+  m.classList.add("open");
+  (initialEl || m.querySelector(".dash-modal-box")).focus();
+}
+
+function dashModalClose(m) {
+  m.classList.remove("open");
+  document.removeEventListener("keydown", dashTrapTab, true);
+  document.body.style.overflow = "";
+  if (dashLastFocus && dashLastFocus.focus) {
+    try { dashLastFocus.focus(); } catch { /* trigger removed */ }
+  }
+  dashLastFocus = null;
+}
+
+function dashAsk({ title = "", message = "", okLabel = "Yes", cancelLabel = "No", prompt = null, hideCancel = false } = {}) {
   return new Promise((resolve) => {
     const m = dashModal();
     m.querySelector(".dash-modal-title").textContent = title;
@@ -212,10 +391,15 @@ function dashAsk({ title = "", message = "", okLabel = "Yes", cancelLabel = "No"
     if (sched) sched.hidden = true;
     const field = m.querySelector(".modal-field");
     const input = m.querySelector(".modal-field input");
+    const err = m.querySelector(".modal-field .modal-err");
     const ok = m.querySelector(".dash-ok");
     const cancel = m.querySelector(".dash-cancel");
     ok.textContent = okLabel;
     cancel.textContent = cancelLabel;
+    cancel.hidden = hideCancel;
+    field.classList.remove("invalid");
+    input.removeAttribute("aria-invalid");
+    if (err) err.textContent = "";
     if (prompt) {
       field.hidden = false;
       field.querySelector("span").textContent = prompt.label || "";
@@ -225,19 +409,30 @@ function dashAsk({ title = "", message = "", okLabel = "Yes", cancelLabel = "No"
       field.hidden = true;
     }
     const done = (v) => {
-      m.classList.remove("open");
       ok.onclick = cancel.onclick = null;
+      document.removeEventListener("keydown", onKey);
+      m.removeEventListener("click", onBackdrop);
+      dashModalClose(m);
       resolve(v);
     };
+    const onKey = (e) => { if (e.key === "Escape") done(prompt ? null : hideCancel ? true : false); };
+    const onBackdrop = (e) => { if (e.target === m) done(prompt ? null : hideCancel ? true : false); };
     ok.onclick = () => done(prompt ? input.value : true);
     cancel.onclick = () => done(prompt ? null : false);
-    m.classList.add("open");
-    if (prompt) input.focus();
+    m.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
+    dashModalOpen(m, prompt ? input : null);
   });
 }
 
 function dashConfirm(message, title = "Please confirm") {
   return dashAsk({ title, message, okLabel: "Yes", cancelLabel: "No" });
+}
+
+// dashAlert(message, title) - OK-only dialog for informational states
+// (replaces using dashConfirm to "inform", which forced a Yes click).
+function dashAlert(message, title = "Notice") {
+  return dashAsk({ title, message, okLabel: "OK", hideCancel: true });
 }
 
 function dashPrompt(message, label, value = "", title = "Enter a value") {
@@ -272,18 +467,22 @@ function dashSelect({ message = "", label = "", options = [], value = "", title 
     const cancel = m.querySelector(".dash-cancel");
     ok.textContent = "Save";
     cancel.textContent = "Cancel";
+    cancel.hidden = false;
     const done = (v) => {
-      m.classList.remove("open");
       ok.onclick = cancel.onclick = null;
       wrap.hidden = true;
-      ok.textContent = "Yes";
-      cancel.textContent = "No";
+      document.removeEventListener("keydown", onKey);
+      m.removeEventListener("click", onBackdrop);
+      dashModalClose(m);
       resolve(v);
     };
+    const onKey = (e) => { if (e.key === "Escape") done(null); };
+    const onBackdrop = (e) => { if (e.target === m) done(null); };
     ok.onclick = () => done(sel.value);
     cancel.onclick = () => done(null);
-    m.classList.add("open");
-    sel.focus();
+    m.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
+    dashModalOpen(m, sel);
   });
 }
 
@@ -328,14 +527,17 @@ function dashEditCashier({ message = "", displayName = "", schedule = "", title 
     const cancel = m.querySelector(".dash-cancel");
     ok.textContent = "Save";
     cancel.textContent = "Cancel";
+    cancel.hidden = false;
     const done = (v) => {
-      m.classList.remove("open");
       ok.onclick = cancel.onclick = null;
       sched.hidden = true;
-      ok.textContent = "Yes";
-      cancel.textContent = "No";
+      document.removeEventListener("keydown", onKey);
+      m.removeEventListener("click", onBackdrop);
+      dashModalClose(m);
       resolve(v);
     };
+    const onKey = (e) => { if (e.key === "Escape") done(null); };
+    const onBackdrop = (e) => { if (e.target === m) done(null); };
     ok.onclick = () => {
       const s = startInput.value;
       const e = endInput.value;
@@ -348,7 +550,8 @@ function dashEditCashier({ message = "", displayName = "", schedule = "", title 
       done({ displayName: nameInput.value, schedule: s && e ? `${s} - ${e}` : "" });
     };
     cancel.onclick = () => done(null);
-    m.classList.add("open");
-    nameInput.focus();
+    m.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
+    dashModalOpen(m, nameInput);
   });
 }

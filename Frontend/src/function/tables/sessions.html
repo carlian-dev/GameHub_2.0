@@ -5,21 +5,24 @@
   Cashiers operate sessions from their dashboard (start with planned duration,
   extend, end); this page is the admin watch: who operated it (cashier), which
   table/customer, planned end + live time-left timer for occupied tables.
-  Admin-only page in the dashboard shell.
+  ARIA tabs (Active / Closed / All) over one tabpanel. Admin-only page.
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sessions — GameHub admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../../../css/dashboard.css" />
 </head>
-<body class="dash" data-theme="dark">
+<body class="dash" data-theme="light">
   <div class="dash-app">
     <aside class="dash-side" aria-label="Admin navigation">
       <a class="dash-brand" href="../admin/admin-dashboard.html">
-        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#3fa46a" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" /></svg>
-        <span>GameHub</span>
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#F5F3ED" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#D4AF37" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F5F3ED" stroke-width="2" /></svg>
+        <span class="brand-text"><span class="brand-name">GameHub</span><span class="brand-tag">Billiard &amp; More</span></span>
       </a>
       <nav class="dash-nav">
         <a href="../admin/admin-dashboard.html">
@@ -39,7 +42,7 @@
           <span>Rates</span>
         </a>
         <a href="./sessions.html" class="active" aria-current="page">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4a3 3 0 0 1 6 0" /><path d="M9 11h6M9 15h4" /></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg>
           <span>Sessions</span>
         </a>
         <a href="../admin/transactions.html">
@@ -68,23 +71,32 @@
       </header>
 
       <main class="dash-content">
-        <div class="dash-pagehead"><h1>Sessions</h1><span data-today></span></div>
-        <div class="dash-tabs" role="tablist" aria-label="Filter sessions by status">
-          <button data-t="active" class="on">Active</button>
-          <button data-t="closed">Closed</button>
-          <button data-t="all">All</button>
+        <div class="dash-pagehead">
+          <h1>Sessions</h1>
+          <span data-today></span>
         </div>
-        <div class="dash-panel">
-          <p>Sessions operated by cashiers. Active rows show a live timer counting down to the planned end (set from what the customer asked, e.g. 2 hrs). Overtime shows in red.</p>
-          <div class="dash-msg" id="msg">Loading...</div>
+
+        <div class="dash-tabs" role="tablist" aria-label="Filter sessions by status">
+          <button type="button" data-t="active" class="on">Active</button>
+          <button type="button" data-t="closed">Closed</button>
+          <button type="button" data-t="all">All</button>
+        </div>
+
+        <section class="dash-panel" id="sessPanel" role="tabpanel" tabindex="0" aria-label="Sessions list">
+          <div class="panel-head">
+            <h2>Live watch</h2>
+            <span class="dash-stamp" id="stamp"></span>
+          </div>
+          <p>Operated by cashiers. Active rows count down to the planned end (from what the customer asked, e.g. 2 hrs). Overtime shows in red. Data refetches every 30s.</p>
+          <div class="dash-msg" id="msg" role="status">Loading…</div>
           <div class="dash-tablewrap">
             <table id="tbl">
               <thead><tr><th>Table</th><th>Customer</th><th>Cashier</th><th>Started</th><th>Planned end</th><th>Time left</th><th>Status</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
-          <p id="empty" hidden>No sessions in this view yet.</p>
-        </div>
+          <p class="dash-empty" id="empty" hidden>No sessions in this view yet.</p>
+        </section>
       </main>
     </div>
   </div>

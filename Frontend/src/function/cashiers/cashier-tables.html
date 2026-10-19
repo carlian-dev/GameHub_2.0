@@ -2,7 +2,7 @@
 <!--
   src/function/cashiers/cashier-tables.html - cashier Tables page (read-only).
   Pair: cashier-tables.js (filter + live statuses CA-003/CA-017) +
-  cashier-common.js (guard) + js/dash.js (shell).
+  cashier-common.js (guard) + js/dash.js (shell + ARIA tabs).
   Sidebar: Dashboard, Sessions, Tables (active). Guard: cashiers stay.
 -->
 <html lang="en">
@@ -10,14 +10,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tables — GameHub cashier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../../../css/dashboard.css" />
 </head>
-<body class="dash" data-theme="dark">
+<body class="dash" data-theme="light">
   <div class="dash-app">
     <aside class="dash-side" aria-label="Cashier navigation">
       <a class="dash-brand" href="./cashier-dashboard.html">
-        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#3fa46a" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" /></svg>
-        <span>GameHub</span>
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#F5F3ED" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#D4AF37" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F5F3ED" stroke-width="2" /></svg>
+        <span class="brand-text"><span class="brand-name">GameHub</span><span class="brand-tag">Billiard &amp; More</span></span>
       </a>
       <nav class="dash-nav">
         <a href="./cashier-dashboard.html">
@@ -55,24 +58,29 @@
 
       <main class="dash-content">
         <div class="dash-pagehead"><h1>Tables</h1><span data-today></span></div>
-        <div class="dash-panel" id="tables-panel">
-          <h2>Tables</h2>
-          <p>Live table statuses (read-only). Refreshes every 30 seconds.</p>
-          <div class="dash-tabs" role="tablist" aria-label="Filter tables by status">
-            <button data-t="all" class="on">All</button>
-            <button data-t="available">Available</button>
-            <button data-t="occupied">Occupied</button>
-            <button data-t="reserved">Reserved</button>
+
+        <div class="dash-tabs" role="tablist" aria-label="Filter tables by status">
+          <button type="button" data-t="all" class="on">All</button>
+          <button type="button" data-t="available">Available</button>
+          <button type="button" data-t="occupied">Occupied</button>
+          <button type="button" data-t="reserved">Reserved</button>
+        </div>
+
+        <section class="dash-panel" id="tables-panel" role="tabpanel" tabindex="0" aria-label="Tables list">
+          <div class="panel-head">
+            <h2>Live table statuses</h2>
+            <span class="dash-stamp" id="tablesUpdated"></span>
           </div>
-          <div class="dash-msg" id="tablesMsg">Loading...</div>
+          <p>Read-only view of the hall. Refreshes every 30 seconds.</p>
+          <div class="dash-msg" id="tablesMsg" role="status">Loading…</div>
           <div class="dash-tablewrap">
             <table id="cashierTbl">
               <thead><tr><th>Name</th><th>Status</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
-          <p><small id="tablesUpdated"></small></p>
-        </div>
+          <p class="dash-empty" id="tablesEmpty" hidden>No tables in this view.</p>
+        </section>
       </main>
     </div>
   </div>

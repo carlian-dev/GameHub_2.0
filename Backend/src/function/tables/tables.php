@@ -20,12 +20,8 @@ const TABLE_STATUSES = ['available', 'occupied', 'reserved', 'maintenance'];
 
 function tables_col()
 {
-    $col = DatabaseConnection::db()->selectCollection('tables');
-    try {
-        $col->createIndex(['name' => 1], ['unique' => true]);
-    } catch (Throwable $ignored) {
-    }
-    return $col;
+    // Index creation is one-time setup (see scripts/); never per request.
+    return DatabaseConnection::db()->selectCollection('tables');
 }
 
 function tables_id(string $raw): ObjectId

@@ -70,9 +70,29 @@
     const sub = document.createElement("span");
     sub.className = "table-sub";
     sub.textContent = "Open now · walk-ins welcome";
+    // top-down pool-table illustration (aria-hidden: the badge already
+    // states availability) + right-edge chevron matching the reference card
+    const art = document.createElement("span");
+    art.className = "table-art";
+    art.setAttribute("aria-hidden", "true");
+    art.innerHTML =
+      '<svg viewBox="0 0 120 76" xmlns="http://www.w3.org/2000/svg">' +
+      '<rect x="2" y="2" width="116" height="72" rx="10" fill="#0B3D2E" />' +
+      '<rect x="13" y="13" width="94" height="50" rx="4" fill="#24704F" />' +
+      '<rect x="13" y="13" width="94" height="50" rx="4" fill="none" stroke="#17513A" stroke-width="2.5" />' +
+      '<g fill="#05130E"><circle cx="15" cy="15" r="5.4" /><circle cx="105" cy="15" r="5.4" /><circle cx="15" cy="61" r="5.4" /><circle cx="105" cy="61" r="5.4" /><circle cx="60" cy="11.5" r="4.6" /><circle cx="60" cy="64.5" r="4.6" /></g>' +
+      '<g><circle cx="45" cy="40" r="4.3" fill="#F5F3ED" /><circle cx="72" cy="31" r="4.3" fill="#D4AF37" /><circle cx="81" cy="45" r="4.3" fill="#DC2626" /></g>' +
+      "</svg>";
+    const go = document.createElement("span");
+    go.className = "table-go";
+    go.setAttribute("aria-hidden", "true");
+    go.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6" /></svg>';
     card.appendChild(top);
     card.appendChild(name);
     card.appendChild(sub);
+    card.appendChild(art);
+    card.appendChild(go);
     if (!reduceMotion) {
       card.style.animationDelay = `${Math.min(index * 45, 360)}ms`;
       card.classList.add("is-entering");

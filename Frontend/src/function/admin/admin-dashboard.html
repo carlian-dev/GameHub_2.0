@@ -1,23 +1,27 @@
 <!DOCTYPE html>
 <!--
   src/function/admin/admin-dashboard.html - admin home in the dashboard shell.
-  Pair: admin-dashboard.js (guard + live stat counts) + js/dash.js (shell).
-  Sidebar: Dashboard (active), Staff, Tables, Rates, Sessions.
-  Reports stays disabled + Soon. Stat cards read REAL endpoints.
+  Pair: admin-dashboard.js (guard + live stats, table-status list, recent
+  sessions, 7-day revenue chart) + js/dash.js (shell).
+  Sidebar shows real pages only: Dashboard, Staff, Tables, Rates, Sessions,
+  Transactions. All numbers read REAL endpoints - no sample data.
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard — GameHub admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../../../css/dashboard.css" />
 </head>
-<body class="dash" data-theme="dark">
+<body class="dash" data-theme="light">
   <div class="dash-app">
     <aside class="dash-side" aria-label="Admin navigation">
       <a class="dash-brand" href="./admin-dashboard.html">
-        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#3fa46a" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" /></svg>
-        <span>GameHub</span>
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#F5F3ED" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#D4AF37" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F5F3ED" stroke-width="2" /></svg>
+        <span class="brand-text"><span class="brand-name">GameHub</span><span class="brand-tag">Billiard &amp; More</span></span>
       </a>
       <nav class="dash-nav">
         <a href="./admin-dashboard.html" class="active" aria-current="page">
@@ -37,7 +41,7 @@
           <span>Rates</span>
         </a>
         <a href="../tables/sessions.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4a3 3 0 0 1 6 0" /><path d="M9 11h6M9 15h4" /></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg>
           <span>Sessions</span>
         </a>
         <a href="./transactions.html">
@@ -67,16 +71,65 @@
 
       <main class="dash-content">
         <div class="dash-pagehead"><h1>Dashboard</h1><span data-today></span></div>
+
+        <p class="dash-msg" id="msg" role="status">Loading live stats…</p>
+
         <div class="dash-cards">
-          <a class="dash-stat" href="./cashiers.html"><small>Pending invitations</small><strong id="stPending">–</strong><em>single-use links</em></a>
-          <a class="dash-stat" href="./cashiers.html"><small>Active cashiers</small><strong id="stActive">–</strong><em>can log in today</em></a>
-          <a class="dash-stat" href="../tables/tables.html"><small>Tables</small><strong id="stTables">–</strong><em>in service</em></a>
-          <div class="dash-stat"><small>Admins</small><strong id="stAdmins">–</strong><em>protected accounts</em></div>
+          <a class="dash-stat" href="../tables/tables.html">
+            <span class="stat-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.6" /></svg></span>
+            <small>Total tables</small><strong id="stTables">–</strong><em>in the hall</em>
+          </a>
+          <a class="dash-stat" href="../tables/tables.html">
+            <span class="stat-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 13l4 4L19 7" /></svg></span>
+            <small>Available</small><strong id="stAvail">–</strong><em>ready for play</em>
+          </a>
+          <a class="dash-stat" href="../tables/tables.html">
+            <span class="stat-ic ic-blue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5Z" /></svg></span>
+            <small>Occupied</small><strong id="stOcc">–</strong><em>tables in play</em>
+          </a>
+          <a class="dash-stat" href="../tables/tables.html">
+            <span class="stat-ic ic-purple" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4h12v17l-6-4-6 4V4Z" /></svg></span>
+            <small>Reserved</small><strong id="stRes">–</strong><em>held tables</em>
+          </a>
+          <a class="dash-stat" href="../tables/sessions.html">
+            <span class="stat-ic ic-gold" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg></span>
+            <small>Active sessions</small><strong id="stSessions">–</strong><em>live timers</em>
+          </a>
+          <a class="dash-stat" href="./transactions.html">
+            <span class="stat-ic ic-gold" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16v12H4z" /><path d="M4 11h16" /><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none" /></svg></span>
+            <small>Today's revenue</small><strong id="stRevenue">–</strong><em id="stRevenueSub">payments today</em>
+          </a>
         </div>
-        <div class="dash-panel">
-          <h2>Staff</h2>
-          <p>Invite cashiers and manage accounts on the <a href="./cashiers.html">Staff</a> page.</p>
+
+        <div class="dash-grid-2">
+          <section class="dash-panel" aria-labelledby="tblstatus-h">
+            <div class="panel-head">
+              <h2 id="tblstatus-h">Table status</h2>
+              <a class="view-all" href="../tables/tables.html">View all</a>
+            </div>
+            <div class="statuslist" id="tableStatus">
+              <p class="sl-empty">Loading table statuses…</p>
+            </div>
+          </section>
+
+          <section class="dash-panel" aria-labelledby="recent-h">
+            <div class="panel-head">
+              <h2 id="recent-h">Recent sessions</h2>
+              <a class="view-all" href="../tables/sessions.html">View all</a>
+            </div>
+            <div class="statuslist" id="recentSessions">
+              <p class="sl-empty">Loading recent sessions…</p>
+            </div>
+          </section>
         </div>
+
+        <section class="dash-panel" aria-labelledby="chart-h">
+          <div class="panel-head">
+            <h2 id="chart-h">Revenue — last 7 days</h2>
+            <a class="view-all" href="./transactions.html">View report</a>
+          </div>
+          <div class="chart" id="revChart" role="img" aria-label="Bar chart of revenue for the last 7 days"></div>
+        </section>
       </main>
     </div>
   </div>

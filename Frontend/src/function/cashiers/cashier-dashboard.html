@@ -1,25 +1,30 @@
 <!DOCTYPE html>
 <!--
   src/function/cashiers/cashier-dashboard.html - cashier Dashboard page.
-  Pair: cashier-dashboard.js (start form + overview counts) + cashier-common.js
-  (guard/timers) + js/dash.js (shell). Sidebar links to the three cashier
-  pages: Dashboard (here), Sessions, Tables. Sessions lifecycle lives on
-  cashier-sessions.html; read-only tables on cashier-tables.html.
+  Pair: cashier-dashboard.js (start form + overview counts + table-status
+  grid + active sessions list) + cashier-common.js (guard/timers) +
+  js/dash.js (shell). Sidebar links to the three cashier pages: Dashboard
+  (here), Sessions, Tables. Sessions lifecycle lives on cashier-sessions.html;
+  read-only tables on cashier-tables.html.
   Guard: logged-in cashiers stay (admins go to their dashboard, guests login).
+  Start session is a real <form> (Enter starts) with client-side validation.
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard — GameHub cashier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../../../css/dashboard.css" />
 </head>
-<body class="dash" data-theme="dark">
+<body class="dash" data-theme="light">
   <div class="dash-app">
     <aside class="dash-side" aria-label="Cashier navigation">
       <a class="dash-brand" href="./cashier-dashboard.html">
-        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#3fa46a" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" /></svg>
-        <span>GameHub</span>
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#F5F3ED" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#D4AF37" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F5F3ED" stroke-width="2" /></svg>
+        <span class="brand-text"><span class="brand-name">GameHub</span><span class="brand-tag">Billiard &amp; More</span></span>
       </a>
       <nav class="dash-nav">
         <a href="./cashier-dashboard.html" class="active" aria-current="page">
@@ -58,65 +63,98 @@
       <main class="dash-content">
         <div class="dash-pagehead"><h1>Dashboard</h1><span data-today></span></div>
 
-        <div class="dash-cards" style="margin-bottom:16px">
-          <a class="dash-stat" href="./cashier-sessions.html"><small>Active sessions</small><strong id="statActive">–</strong><em>live timers</em></a>
-          <a class="dash-stat" href="./cashier-tables.html"><small>Available tables</small><strong id="statAvail">–</strong><em>ready for play</em></a>
-          <a class="dash-stat" href="./cashier-sessions.html#to-bill"><small>To bill</small><strong id="statBill">–</strong><em>closed, unpaid</em></a>
+        <div class="dash-cards">
+          <a class="dash-stat" href="./cashier-sessions.html">
+            <span class="stat-ic ic-blue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg></span>
+            <small>Active sessions</small><strong id="statActive">–</strong><em>live timers</em>
+          </a>
+          <a class="dash-stat" href="./cashier-tables.html">
+            <span class="stat-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 13l4 4L19 7" /></svg></span>
+            <small>Available tables</small><strong id="statAvail">–</strong><em>ready for play</em>
+          </a>
+          <a class="dash-stat" href="./cashier-tables.html">
+            <span class="stat-ic ic-purple" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5Z" /></svg></span>
+            <small>Occupied tables</small><strong id="statOcc">–</strong><em>in play now</em>
+          </a>
+          <a class="dash-stat" href="./cashier-sessions.html#to-bill">
+            <span class="stat-ic ic-gold" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16v12H4z" /><path d="M4 11h16" /><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none" /></svg></span>
+            <small>To bill</small><strong id="statBill">–</strong><em>closed, unpaid</em>
+          </a>
         </div>
 
-        <div class="dash-panel start-panel" id="start-panel">
-          <div class="start-head">
-            <div>
-              <p class="start-eyebrow">New session</p>
-              <h2>Start session</h2>
+        <div class="dash-grid-2">
+          <section class="dash-panel start-panel" id="start-panel" aria-labelledby="start-h">
+            <div class="start-head">
+              <div>
+                <p class="start-eyebrow">New session</p>
+                <h2 id="start-h">Start session</h2>
+                <p class="start-sub">Pick an available table, the walk-in name, and the planned time.</p>
+              </div>
+              <span class="start-avail" id="availCount" title="Tables ready for play">… available</span>
             </div>
-            <span class="start-avail" id="availCount" title="Tables ready for play">… available</span>
-          </div>
-          <div class="dash-msg" id="startMsg" role="status"></div>
-          <div class="start-grid">
-            <div class="start-fields">
-              <label class="field" for="startTable">
-                <span class="field-label">Table</span>
-                <span class="select-wrap">
-                  <select id="startTable"></select>
-                </span>
-                <span class="field-hint">Available tables only</span>
-              </label>
-              <label class="field" for="startCustomer">
-                <span class="field-label">Customer</span>
-                <input id="startCustomer" type="text" placeholder="e.g. Juan Dela Cruz" maxlength="60" autocomplete="off" />
-                <span class="field-hint">Walk-in name for this session</span>
-              </label>
-            </div>
-            <div class="start-duration">
-              <span class="field-label" id="durLabel">Planned duration</span>
-              <div class="dur-row" role="group" aria-labelledby="durLabel">
-                <div class="stepper">
-                  <button type="button" class="step-btn" data-target="startHours" data-delta="-1" aria-label="Decrease hours">−</button>
-                  <label>Hrs<input id="startHours" type="number" min="0" max="24" step="1" value="2" inputmode="numeric" /></label>
-                  <button type="button" class="step-btn" data-target="startHours" data-delta="1" aria-label="Increase hours">+</button>
+            <div class="dash-msg" id="startMsg" role="status"></div>
+            <form id="startForm">
+              <div class="start-grid">
+                <div class="start-fields">
+                  <label class="field" for="startTable">
+                    <span class="field-label">Table</span>
+                    <span class="select-wrap">
+                      <select id="startTable"></select>
+                    </span>
+                    <span class="field-hint">Available tables only</span>
+                  </label>
+                  <label class="field" for="startCustomer">
+                    <span class="field-label">Customer</span>
+                    <input id="startCustomer" type="text" placeholder="e.g. Juan Dela Cruz" maxlength="60" autocomplete="off" />
+                    <span class="field-hint">Walk-in name for this session</span>
+                  </label>
                 </div>
-                <span class="dur-sep" aria-hidden="true">:</span>
-                <div class="stepper">
-                  <button type="button" class="step-btn" data-target="startMins" data-delta="-15" aria-label="Decrease minutes">−</button>
-                  <label>Min<input id="startMins" type="number" min="0" max="59" step="1" value="0" inputmode="numeric" /></label>
-                  <button type="button" class="step-btn" data-target="startMins" data-delta="15" aria-label="Increase minutes">+</button>
+                <div class="start-duration">
+                  <span class="field-label" id="durLabel">Planned duration</span>
+                  <div class="dur-row" role="group" aria-labelledby="durLabel">
+                    <div class="stepper">
+                      <button type="button" class="step-btn" data-target="startHours" data-delta="-1" aria-label="Decrease hours">−</button>
+                      <label>Hrs<input id="startHours" type="number" min="0" max="24" step="1" value="2" inputmode="numeric" /></label>
+                      <button type="button" class="step-btn" data-target="startHours" data-delta="1" aria-label="Increase hours">+</button>
+                    </div>
+                    <span class="dur-sep" aria-hidden="true">:</span>
+                    <div class="stepper">
+                      <button type="button" class="step-btn" data-target="startMins" data-delta="-15" aria-label="Decrease minutes">−</button>
+                      <label>Min<input id="startMins" type="number" min="0" max="59" step="1" value="0" inputmode="numeric" /></label>
+                      <button type="button" class="step-btn" data-target="startMins" data-delta="15" aria-label="Increase minutes">+</button>
+                    </div>
+                  </div>
+                  <p class="start-summary" id="startSummary">2h 0m · ends ~…</p>
+                  <button type="submit" class="start-btn" id="startBtn">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" /></svg>
+                    <span>Start session</span>
+                  </button>
+                  <p class="start-limit">1 hour – 24 h allowed, whole hours only</p>
                 </div>
               </div>
-              <div class="quick-row">
-                <button class="chip on" data-quick="60">1h</button>
-                <button class="chip" data-quick="120">2h</button>
-                <button class="chip" data-quick="180">3h</button>
-              </div>
-              <p class="start-summary" id="startSummary">2h 0m · ends ~…</p>
-              <button class="start-btn" id="startBtn">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5-11-6.5Z" /></svg>
-                <span>Start session</span>
-              </button>
-              <p class="start-limit">1 hour – 24 h allowed, whole hours only</p>
+            </form>
+          </section>
+
+          <section class="dash-panel" aria-labelledby="active-h">
+            <div class="panel-head">
+              <h2 id="active-h">Active sessions</h2>
+              <a class="view-all" href="./cashier-sessions.html">Manage</a>
             </div>
-          </div>
+            <div class="statuslist" id="activeList">
+              <p class="sl-empty">Loading live sessions…</p>
+            </div>
+          </section>
         </div>
+
+        <section class="dash-panel" aria-labelledby="tc-h">
+          <div class="panel-head">
+            <h2 id="tc-h">Table status</h2>
+            <a class="view-all" href="./cashier-tables.html">View all</a>
+          </div>
+          <div class="tcgrid" id="tableGrid">
+            <p class="tcgrid-empty">Loading tables…</p>
+          </div>
+        </section>
       </main>
     </div>
   </div>

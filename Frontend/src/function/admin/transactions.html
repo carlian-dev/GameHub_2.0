@@ -4,24 +4,29 @@
   Pair: transactions.js <-> Backend/src/function/cashiers/transactions.php
   (transactions_admin_list) + Backend/src/function/admin/reports.php
   (reports_daily/export). Admin-only page in the dashboard shell.
-  Header card shows today's income (getDailyReport); table lists
-  ref|paid|table|customer|total|method|change; Export CSV downloads via
-  anchor (credentials:include cookies, not api() JSON); receipt opens
-  shared/receipt.html?ref=... for print-to-PDF.
+  Stat cards show the selected day's income (getDailyReport) with icons;
+  table lists ref|paid|table|customer|total|method|change with method badges,
+  client-side pagination and an "Updated" stamp. Filters are a real <form>
+  (Enter applies). Export CSV downloads via anchor (credentials:include
+  cookies, not api() JSON); receipt opens shared/receipt.html?ref=...
+  for PDF download.
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Transactions — GameHub admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../../../css/dashboard.css" />
 </head>
-<body class="dash" data-theme="dark">
+<body class="dash" data-theme="light">
   <div class="dash-app">
     <aside class="dash-side" aria-label="Admin navigation">
       <a class="dash-brand" href="./admin-dashboard.html">
-        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#3fa46a" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" /></svg>
-        <span>GameHub</span>
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#F5F3ED" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#D4AF37" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F5F3ED" stroke-width="2" /></svg>
+        <span class="brand-text"><span class="brand-name">GameHub</span><span class="brand-tag">Billiard &amp; More</span></span>
       </a>
       <nav class="dash-nav">
         <a href="./admin-dashboard.html">
@@ -41,7 +46,7 @@
           <span>Rates</span>
         </a>
         <a href="../tables/sessions.html">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4a3 3 0 0 1 6 0" /><path d="M9 11h6M9 15h4" /></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg>
           <span>Sessions</span>
         </a>
         <a href="./transactions.html" class="active" aria-current="page">
@@ -70,43 +75,68 @@
       </header>
 
       <main class="dash-content">
-        <div class="dash-pagehead"><h1>Transactions</h1><span data-today></span></div>
-        <div class="dash-cards" id="incomeCards">
-          <div class="dash-stat"><small>Income (selected day)</small><strong id="incGross">–</strong><em id="incCount">–</em></div>
-          <div class="dash-stat"><small>Cash</small><strong id="incCash">–</strong><em id="incCashCount">–</em></div>
-          <div class="dash-stat"><small>GCash</small><strong id="incGcash">–</strong><em id="incGcashCount">–</em></div>
+        <div class="dash-pagehead">
+          <h1>Transactions</h1>
+          <span data-today></span>
         </div>
-        <div class="dash-panel" style="margin-bottom:16px">
-          <h2>Filter</h2>
-          <p>Date range + method. Daily card follows the From date (or today).</p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+
+        <div class="dash-cards" id="incomeCards">
+          <div class="dash-stat">
+            <span class="stat-ic ic-gold" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16v12H4z" /><path d="M4 11h16" /><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none" /></svg></span>
+            <small>Income (selected day)</small><strong id="incGross">–</strong><em id="incCount">–</em>
+          </div>
+          <div class="dash-stat">
+            <span class="stat-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2" /><circle cx="12" cy="12" r="2.4" /></svg></span>
+            <small>Cash</small><strong id="incCash">–</strong><em id="incCashCount">–</em>
+          </div>
+          <div class="dash-stat">
+            <span class="stat-ic ic-blue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="3" width="10" height="18" rx="2" /><path d="M11 18h2" /></svg></span>
+            <small>GCash</small><strong id="incGcash">–</strong><em id="incGcashCount">–</em>
+          </div>
+        </div>
+
+        <section class="dash-panel" aria-labelledby="filter-h">
+          <h2 id="filter-h">Filter</h2>
+          <p>Date range + method. Daily income follows the From date (or today).</p>
+          <form id="filterForm" class="filter-row">
             <label class="field" for="fFrom"><span class="field-label">From</span>
-              <input id="fFrom" type="date" style="background:#0a0d0e;border:1px solid var(--d-border);border-radius:6px;color:var(--d-text);padding:9px 12px" />
+              <input id="fFrom" name="from" type="date" />
             </label>
             <label class="field" for="fTo"><span class="field-label">To</span>
-              <input id="fTo" type="date" style="background:#0a0d0e;border:1px solid var(--d-border);border-radius:6px;color:var(--d-text);padding:9px 12px" />
+              <input id="fTo" name="to" type="date" />
             </label>
             <label class="field" for="fMethod"><span class="field-label">Method</span>
-              <span class="select-wrap"><select id="fMethod">
+              <span class="select-wrap"><select id="fMethod" name="method">
                 <option value="all">All</option>
                 <option value="cash">Cash</option>
                 <option value="gcash">GCash</option>
               </select></span>
             </label>
-            <button class="rowbtn go" id="apply">Apply</button>
-            <button class="rowbtn" id="export">Export CSV</button>
+            <span class="filter-actions">
+              <button type="submit" class="rowbtn go" id="apply">Apply</button>
+              <button type="button" class="rowbtn" id="export">Export CSV</button>
+            </span>
+          </form>
+        </section>
+
+        <section class="dash-panel" aria-labelledby="tx-h">
+          <div class="panel-head">
+            <h2 id="tx-h">Bills</h2>
+            <span class="dash-stamp" id="stamp"></span>
           </div>
-        </div>
-        <div class="dash-panel">
-          <div class="dash-msg" id="msg">Loading...</div>
+          <div class="dash-msg" id="msg" role="status">Loading…</div>
           <div class="dash-tablewrap">
             <table id="tbl">
               <thead><tr><th>Ref</th><th>Paid</th><th>Table</th><th>Customer</th><th>Total</th><th>Method</th><th>Change</th><th>Receipt</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
-          <p id="empty" hidden>No transactions in this view yet.</p>
-        </div>
+          <p class="dash-empty" id="empty" hidden>No transactions in this view yet.</p>
+          <div class="dash-pager" id="pager" hidden>
+            <span class="pager-info" id="pagerInfo"></span>
+            <span class="pager-btns" id="pagerBtns"></span>
+          </div>
+        </section>
       </main>
     </div>
   </div>

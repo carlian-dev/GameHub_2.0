@@ -51,7 +51,7 @@ function rates_shape($doc): array
 function rates_list(array $params = []): array
 {
     require_admin();
-    rates_seed();
+    // Seeding is one-time; see scripts/ (do not seed per request).
     $out = [];
     foreach (rates_col()->find([]) as $doc) {
         $out[] = rates_shape($doc);

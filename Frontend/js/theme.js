@@ -10,8 +10,8 @@
     if (!btn) return;
     if (btn.classList) btn.classList.toggle("is-light", t === "light");
   }
-  var theme = "dark";
-  try { theme = localStorage.getItem("gh-theme") || "dark"; } catch (e) { /* private mode */ }
+  var theme = "light";
+  try { theme = localStorage.getItem("gh-theme") || "light"; } catch (e) { /* private mode */ }
   apply(theme);
   if (btn) {
     btn.addEventListener("click", function () {

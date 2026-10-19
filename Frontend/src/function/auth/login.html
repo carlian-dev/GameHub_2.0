@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <!--
   src/function/auth/login.html - staff login (AD-001 + CA-001).
-  Pair: this page <-> Backend/src/function/auth/login.php.
-  Layout matches the approved screenshot: mini-nav (BACK TO SITE), gold
-  STAFF PORTAL eyebrow, serif heading, card WITHOUT role toggle (backend
-  returns the role, so login.js redirects by response), green SIGN IN,
-  href-only "Forgot password?" (backend later), restricted-area footer note.
+  Pair: login.js <-> Backend/src/function/auth/login.php + google.php.
+  Reference-matched: dark emerald photo backdrop, centered form card, gold
+  top border, password visibility toggle, emerald SIGN IN. Real <form> so
+  Enter submits. No role toggle (backend returns the role, login.js
+  redirects by response). No "Forgot password?" link (no reset flow exists).
   No registration door here: cashiers register only from an emailed admin
-  invitation link. Reachable via /login URL (see login/index.html) — never
+  invitation link. Reachable via /login URL (see login/index.html) - never
   linked on landing.
 -->
 <html lang="en">
@@ -15,46 +15,55 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Staff Login — GameHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="../../../css/styles.css" />
 </head>
 <body class="staff">
   <header class="nav nav-slim">
     <a class="brand" href="/index.html" aria-label="GameHub home">
       <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-        <circle cx="16" cy="16" r="13" fill="none" stroke="#3fa46a" stroke-width="2" />
-        <circle cx="16" cy="16" r="4" fill="#3fa46a" />
-        <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#3fa46a" stroke-width="2" />
+        <circle cx="16" cy="16" r="13" fill="none" stroke="#F5F3ED" stroke-width="2" />
+        <circle cx="16" cy="16" r="4" fill="#D4AF37" />
+        <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F5F3ED" stroke-width="2" />
       </svg>
-      <span class="brand-name">GameHub</span>
+      <span class="brand-text">
+        <span class="brand-name">GameHub</span>
+        <span class="brand-tag">Billiard &amp; More</span>
+      </span>
     </a>
     <nav class="nav-links" aria-label="Primary">
       <a href="/index.html">&larr; Back to site</a>
     </nav>
-    <button class="theme-icon" aria-label="Toggle theme">
-      <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2Z" /></svg>
-      <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></svg>
-    </button>
   </header>
 
   <main class="staff-main">
     <p class="eyebrow eyebrow-gold"><span></span>Staff Portal<span></span></p>
-    <h1 class="staff-title">Staff Login</h1>
+    <h1 class="staff-title">Welcome Back</h1>
     <p class="staff-sub">Sign in to access the management dashboard.</p>
 
     <section class="staff-card" id="step1">
-      <label class="field">
-        <span>username</span>
-        <input id="email" type="text" placeholder="Juan.Cashier" autocomplete="username" />
-      </label>
-      <label class="field">
-        <span>Password</span>
-        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" />
-      </label>
-      <button id="go" class="btn btn-solid btn-block">Sign In</button>
+      <form id="loginForm" novalidate>
+        <label class="field" for="email">
+          <span>Username or email</span>
+          <input id="email" name="email" type="text" placeholder="Juan.Cashier" autocomplete="username" required />
+        </label>
+        <label class="field" for="password">
+          <span>Password</span>
+          <span class="pw-wrap">
+            <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+            <button type="button" class="pw-eye" aria-label="Show password" aria-pressed="false">
+              <svg class="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s3.6-6.4 10-6.4S22 12 22 12s-3.6 6.4-10 6.4S2 12 2 12Z" /><circle cx="12" cy="12" r="2.8" /></svg>
+              <svg class="ic-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" hidden><path d="M4 4l16 16" /><path d="M9.9 5.7A9.9 9.9 0 0 1 12 5.5c6.4 0 10 6.4 10 6.4a17.6 17.6 0 0 1-3.4 4.1M6.2 7.9A17.4 17.4 0 0 0 2 12s3.6 6.4 10 6.4c1.3 0 2.4-.2 3.5-.6" /><path d="M9.9 10a2.8 2.8 0 0 0 4 4" /></svg>
+            </button>
+          </span>
+        </label>
+        <button id="go" type="submit" class="btn btn-solid btn-block">Sign In</button>
+      </form>
       <div id="msg" role="status"></div>
-      <p class="forgot"><a href="#">Forgot password?</a></p>
-      <p style="text-align:center;color:#8d877b;font-size:13px">— or —</p>
-      <div id="gbtn" style="display:flex;justify-content:center"></div>
+      <p class="auth-divider">— or —</p>
+      <div id="gbtn" class="gbtn-row"></div>
     </section>
 
     <p class="restricted">This area is restricted to authorized GameHub staff only.<br />Unauthorized access attempts are logged.</p>
@@ -63,7 +72,6 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="../../../js/config.js"></script>
   <script src="../../../js/api.js"></script>
-  <script src="../../../js/theme.js"></script>
   <script src="./login.js"></script>
 </body>
 </html>

@@ -46,14 +46,20 @@ function paintSessions(list) {
     tr.dataset.status = s.status || "";
     const badgeCls = s.status === "active" ? "occupied" : s.status === "closed" ? "available" : "archived";
     tr.innerHTML =
-      `<td></td><td></td><td></td><td></td><td></td>` +
-      `<td><span class="timer" data-end="${s.endTime || ""}">…</span></td>` +
-      `<td><span class="badge ${badgeCls}">${s.status || "—"}</span></td>`;
+      "<td></td><td></td><td></td><td></td><td></td>" +
+      '<td><span class="timer">…</span></td>' +
+      "<td></td>";
     tr.children[0].textContent = s.tableName || s.tableId || "—";
     tr.children[1].textContent = s.customerName || "—";
     tr.children[2].textContent = s.cashierName || "—";
     tr.children[3].textContent = fmtClock(s.startTime);
     tr.children[4].textContent = s.endTime ? fmtClock(s.endTime) : "—";
+    const timer = tr.children[5].querySelector(".timer");
+    timer.setAttribute("data-end", s.endTime || "");
+    const badge = document.createElement("span");
+    badge.className = `badge ${badgeCls}`;
+    badge.textContent = s.status || "—";
+    tr.children[6].appendChild(badge);
     tb.appendChild(tr);
   }
   tickTimers();
@@ -62,21 +68,27 @@ function paintSessions(list) {
 
 async function loadSessions() {
   const msg = document.getElementById("msg");
-  msg.textContent = "Loading...";
+  msg.textContent = "Loading…";
+  msg.className = "dash-msg loading";
+  dashSkeleton(document.querySelector("#tbl tbody"), 7, 5);
+  dashStamp(document.getElementById("stamp"));
   try {
     const { sessions } = await listSessions(sessTab);
     sessRows = sessions;
-    msg.textContent = `${paintSessions(sessions)} session(s) shown (${sessTab}). Auto-refresh 30s.`;
-    document.getElementById("empty").hidden = sessions.length > 0;
-  } catch (e) { msg.textContent = e.message; }
+    const n = paintSessions(sessions);
+    msg.textContent = `${n} session(s) shown (${sessTab}). Auto-refresh 30s.`;
+    msg.className = "dash-msg ok";
+    document.getElementById("empty").hidden = n > 0;
+  } catch (e) {
+    msg.textContent = e.message;
+    msg.className = "dash-msg err";
+    document.getElementById("empty").hidden = false;
+    document.getElementById("empty").textContent = "Couldn't load sessions — refresh to retry.";
+  }
 }
 
-document.querySelectorAll("[data-t]").forEach((b) =>
-  b.addEventListener("click", () => {
-    sessTab = b.dataset.t;
-    document.querySelectorAll("[data-t]").forEach((x) => x.classList.toggle("on", x === b));
-    loadSessions();
-  }));
+// Accessible tab strip: click + arrow keys, aria-selected, tabpanel labelledby.
+dashTabsInit((t) => { sessTab = t; loadSessions(); });
 
 (async () => {
   const msg = document.getElementById("msg");
@@ -99,5 +111,6 @@ document.querySelectorAll("[data-t]").forEach((b) =>
   }
 })();
 document.getElementById("out").addEventListener("click", async () => {
-  await logout(); location.href = "../auth/login.html";
+  try { await logout(); } catch { /* already out */ }
+  location.href = "../auth/login.html";
 });

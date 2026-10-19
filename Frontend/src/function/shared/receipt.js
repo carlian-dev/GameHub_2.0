@@ -128,7 +128,8 @@ function showPreview() {
     return;
   }
   try {
-    msg.textContent = "Loading...";
+    msg.textContent = "Loading…";
+    msg.className = "dash-msg loading";
     const { transaction: t } = await getTransaction(ref, asAdmin);
     document.getElementById("rRef").textContent = t.ref || ref;
     document.getElementById("rTable").textContent = t.tableName || "—";
@@ -153,19 +154,24 @@ function showPreview() {
 
     if (!window.jspdf || !window.jspdf.jsPDF) {
       msg.textContent = "PDF library failed to load (js/vendor/jspdf.umd.min.js). Details above still valid.";
+      msg.className = "dash-msg err";
       return;
     }
     lastDoc = buildPdf(t, ref);
     lastRef = safeRef(t.ref || ref);
     msg.textContent = "";
+    msg.className = "dash-msg";
     showPreview();
   } catch (e) {
     msg.textContent = e.message;
+    msg.className = "dash-msg err";
   }
 })();
 
 document.getElementById("download").addEventListener("click", () => {
   if (!lastDoc) return;
-  lastDoc.save(`Receipt-${lastRef || "receipt"}.pdf`);
+  const file = `Receipt-${lastRef || "receipt"}.pdf`;
+  lastDoc.save(file);
+  dashToast(`${file} saved to your downloads.`, "ok", { title: "Receipt downloaded" });
 });
 document.getElementById("back").addEventListener("click", () => history.back());

@@ -1,22 +1,31 @@
 // src/function/admin/cashiers.js - Staff table logic in the dashboard shell.
 // Pair: cashiers.html <-> Backend/src/function/admin/cashiers.php.
-// Tabs: active / archived (cashiers via listCashiers) + invites.
-// Invite IS the approval — new accounts arrive active, no Applicants tab.
-// Search box filters loaded rows locally.
-// Archive is one step (confirm dialog only). Unarchive restores login.
+// Tabs: active / archived (cashiers via listCashiers) + invites (ARIA tabs via
+// dashTabsInit). Invite IS the approval — new accounts arrive active.
+// Search box filters loaded rows locally. Archive is one step (confirm only).
 // Admin rows are protected (never archived).
-// Search box filters loaded rows locally.
-// Guard + identity first.
 //
-// Optimistic updates: every mutation below flips its row instantly from the
-// lastRows cache (patchRow) and reconciles when the server answers — success
-// converges with a quiet reload, failure restores the snapshot + shows the
-// error. Rows with in-flight requests render dimmed and ignore clicks.
+// Optimistic updates: mutations flip their row instantly from the lastRows
+// cache (patchRow) and reconcile when the server answers — success converges
+// with a quiet reload + toast, failure restores the snapshot + error toast.
+// Rows with in-flight requests render dimmed and ignore clicks.
+// All user/server strings are written with textContent (never interpolated
+// into innerHTML).
 let tab = "active";
 let lastRows = [];
 const pendingIds = new Set();
 
-function setMsg(t) { document.getElementById("msg").textContent = t; }
+function setMsg(t, kind = "") {
+  const el = document.getElementById("msg");
+  el.textContent = t;
+  el.className = `dash-msg${kind ? " " + kind : ""}`;
+}
+function setStamp() { dashStamp(document.getElementById("stamp")); }
+function setEmpty(show, text) {
+  const el = document.getElementById("empty");
+  if (text) el.textContent = text;
+  el.hidden = !show;
+}
 
 // Optimistically apply fields to one cached row (or drop it when it leaves
 // the current filter with remove=true). Returns undo() restoring the snapshot.
@@ -41,7 +50,9 @@ function patchRow(id, fields, remove = false) {
 }
 
 function repaint() {
-  setMsg(`${paint(lastRows)} shown (${tab}).`);
+  const n = paint(lastRows);
+  setMsg(`${n} shown (${tab}).`);
+  setEmpty(n === 0, "No staff match your search.");
 }
 
 function busy(id) { return pendingIds.has(id); }
@@ -58,15 +69,24 @@ async function guard() {
   } catch { location.href = "../auth/login.html"; return null; }
 }
 
+function cell(tr, i, text) {
+  tr.children[i].textContent = text == null ? "" : String(text);
+}
+
 function row(c) {
   const tr = document.createElement("tr");
   if (c.status === "archived" || busy(c.id)) tr.classList.add("dim");
   const badge = c.role === "admin" ? " (protected)" : "";
-  const id = `${c.email || c.username || "—"}`;
-  tr.innerHTML =
-    `<td>${id}</td><td><span class="badge ${c.status}">${c.status}</span></td>` +
-    `<td>${c.displayName || ""}${badge}</td><td>${c.schedule || ""}</td><td></td>`;
-  const act = tr.lastChild;
+  tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td>";
+  cell(tr, 0, c.email || c.username || "—");
+  const statusTd = tr.children[1];
+  const b = document.createElement("span");
+  b.className = `badge ${c.status}`;
+  b.textContent = c.status;
+  statusTd.appendChild(b);
+  cell(tr, 2, `${c.displayName || ""}${badge}`);
+  cell(tr, 3, c.schedule || "");
+  const act = tr.children[4];
 
   const e = document.createElement("button");
   e.textContent = "Edit";
@@ -81,8 +101,12 @@ function row(c) {
     });
     if (r === null) return;
     const undo = patchRow(c.id, { displayName: r.displayName, schedule: r.schedule });
-    try { await updateCashier(c.id, { displayName: r.displayName, schedule: r.schedule }); done(c.id); load(); }
-    catch (err) { undo(); setMsg(err.message); }
+    try {
+      await updateCashier(c.id, { displayName: r.displayName, schedule: r.schedule });
+      done(c.id);
+      load();
+      dashToast(`${c.username || c.email} updated.`, "ok", { title: "Saved" });
+    } catch (err) { undo(); setMsg(err.message, "err"); dashToast(err.message, "err", { title: "Update failed" }); }
   };
   act.appendChild(e);
   // AD-006.1: Archive hidden on admin rows — admins can never be archived.
@@ -94,13 +118,17 @@ function row(c) {
     a.onclick = async () => {
       if (busy(c.id)) return;
       const yes = await dashConfirm(
-        `Archive ${id}? They will no longer be able to log in.`,
+        `Archive ${c.email || c.username}? They will no longer be able to log in.`,
         "Archive cashier"
       );
       if (!yes) return;
       const undo = patchRow(c.id, {}, true);
-      try { await archiveCashier(c.id); done(c.id); load(); }
-      catch (err) { undo(); setMsg(err.message); }
+      try {
+        await archiveCashier(c.id);
+        done(c.id);
+        load();
+        dashToast(`${c.username || c.email} can no longer log in.`, "ok", { title: "Archived" });
+      } catch (err) { undo(); setMsg(err.message, "err"); dashToast(err.message, "err", { title: "Archive failed" }); }
     };
     act.appendChild(a);
   }
@@ -111,13 +139,17 @@ function row(c) {
     u.onclick = async () => {
       if (busy(c.id)) return;
       const yes = await dashConfirm(
-        `Unarchive ${id}? They will be able to log in again.`,
+        `Unarchive ${c.email || c.username}? They will be able to log in again.`,
         "Unarchive cashier"
       );
       if (!yes) return;
       const undo = patchRow(c.id, {}, true);
-      try { await unarchiveCashier(c.id); done(c.id); load(); }
-      catch (e) { undo(); setMsg(e.message); }
+      try {
+        await unarchiveCashier(c.id);
+        done(c.id);
+        load();
+        dashToast(`${c.username || c.email} can log in again.`, "ok", { title: "Unarchived" });
+      } catch (err) { undo(); setMsg(err.message, "err"); dashToast(err.message, "err", { title: "Unarchive failed" }); }
     };
     act.appendChild(u);
   }
@@ -136,38 +168,53 @@ function paint(list) {
 
 async function load() {
   const msg = document.getElementById("msg");
-  msg.textContent = "Loading...";
+  msg.textContent = "Loading…";
+  msg.className = "dash-msg loading";
+  setStamp();
   document.getElementById("tblHead").innerHTML = tab === "invites"
-    ? `<tr><th>Email</th><th>Status</th><th>Invited</th><th>Actions</th></tr>`
-    : `<tr><th>Email / Username</th><th>Status</th><th>Name</th><th>Schedule</th><th>Actions</th></tr>`;
+    ? "<tr><th>Email</th><th>Status</th><th>Invited</th><th>Actions</th></tr>"
+    : "<tr><th>Email / Username</th><th>Status</th><th>Name</th><th>Schedule</th><th>Actions</th></tr>";
+  if (tab !== "invites") dashSkeleton(document.querySelector("#tbl tbody"), 5, 4);
   try {
     if (tab === "invites") { await loadInvites(); return; }
     const list = (await listCashiers(tab === "archived" ? "archived" : "active", "cashier")).cashiers;
     lastRows = list;
     const n = paint(list);
-    msg.textContent = `${n} shown (${tab}).`;
-  } catch (e) { msg.textContent = e.message; }
+    setMsg(`${n} shown (${tab}).`);
+    setEmpty(n === 0, "No staff in this view yet.");
+  } catch (e) {
+    setMsg(e.message, "err");
+    setEmpty(true, "Couldn't load staff — refresh to retry.");
+  }
 }
 
 // --- Cashier invitations (admin invites by email; holder registers) ---
 function invRow(v) {
   const tr = document.createElement("tr");
   const when = v.createdAt ? new Date(v.createdAt).toLocaleString() : "";
-  tr.innerHTML =
-    `<td>${v.email}</td><td><span class="badge ${v.status}">${v.status}</span></td>` +
-    `<td>${when}</td><td></td>`;
-  const act = tr.lastChild;
+  tr.innerHTML = "<td></td><td></td><td></td><td></td>";
+  cell(tr, 0, v.email);
+  const statusTd = tr.children[1];
+  const b = document.createElement("span");
+  b.className = `badge ${v.status}`;
+  b.textContent = v.status;
+  statusTd.appendChild(b);
+  cell(tr, 2, when);
+  const act = tr.children[3];
   if (v.status === "pending") {
     const r = document.createElement("button");
     r.textContent = "Resend";
     r.className = "rowbtn";
     r.onclick = async () => {
+      r.disabled = true;
       try {
         const data = await createInvite(v.email);
         try { await navigator.clipboard.writeText(data.link); } catch { /* clipboard unavailable */ }
         setMsg(`New link mailed to ${v.email} (old one dead) — also copied to clipboard.`);
+        dashToast(`New invitation link copied for ${data.email}.`, "ok", { title: "Invitation resent" });
         load();
-      } catch (e) { setMsg(e.message); }
+      } catch (e) { setMsg(e.message, "err"); dashToast(e.message, "err", { title: "Resend failed" }); }
+      finally { r.disabled = false; }
     };
     act.appendChild(r);
     const x = document.createElement("button");
@@ -176,8 +223,11 @@ function invRow(v) {
     x.onclick = async () => {
       const yes = await dashConfirm(`Revoke the invitation for ${v.email}?`, "Revoke invitation");
       if (!yes) return;
-      try { await revokeInvite(v.id); load(); }
-      catch (e) { setMsg(e.message); }
+      try {
+        await revokeInvite(v.id);
+        load();
+        dashToast(`Invitation for ${v.email} revoked.`, "ok", { title: "Revoked" });
+      } catch (e) { setMsg(e.message, "err"); dashToast(e.message, "err", { title: "Revoke failed" }); }
     };
     act.appendChild(x);
   }
@@ -196,6 +246,7 @@ async function loadInvites() {
     n++;
   }
   setMsg(`${n} shown (invites).`);
+  setEmpty(n === 0, "No invitations match. Use “Invite cashier” to send one.");
 }
 
 document.getElementById("invite").addEventListener("click", async () => {
@@ -204,27 +255,31 @@ document.getElementById("invite").addEventListener("click", async () => {
     "Cashier email", "", "Invite Cashier"
   );
   if (email === null || email.trim() === "") return;
+  const value = email.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    dashToast(`“${value}” doesn't look like an email address.`, "err", { title: "Invalid email" });
+    return;
+  }
   try {
-    const data = await createInvite(email.trim());
+    const data = await createInvite(value);
     try { await navigator.clipboard.writeText(data.link); } catch { /* clipboard unavailable */ }
     setMsg(`Invitation mailed to ${data.email} — link also copied to clipboard.`);
+    dashToast(`Single-use link copied for ${data.email} (valid 24h).`, "ok", { title: "Invitation sent" });
     if (tab === "invites") load();
-  } catch (e) { setMsg(e.message); }
+  } catch (e) { setMsg(e.message, "err"); dashToast(e.message, "err", { title: "Invite failed" }); }
 });
 
-document.querySelectorAll("[data-t]").forEach((b) =>
-  b.addEventListener("click", () => {
-    tab = b.dataset.t;
-    document.querySelectorAll("[data-t]").forEach((x) => x.classList.toggle("on", x === b));
-    load();
-  }));
+// Accessible tab strip: click + arrow keys, aria-selected, tabpanel labelledby.
+dashTabsInit((t) => { tab = t; load(); });
 document.getElementById("q").addEventListener("input", () => {
   if (!lastRows.length) return;
   const n = paint(lastRows);
-  document.getElementById("msg").textContent = `${n} shown (${tab}).`;
+  setMsg(`${n} shown (${tab}).`);
+  setEmpty(n === 0, "No staff match your search.");
 });
 document.getElementById("out").addEventListener("click", async () => {
-  await logout(); location.href = "../auth/login.html";
+  try { await logout(); } catch { /* already out */ }
+  location.href = "../auth/login.html";
 });
 guard().then((me) => { if (me) load(); });
 // Quiet background refresh: converges with server truth every 60s while the

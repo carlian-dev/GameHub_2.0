@@ -1,7 +1,7 @@
 # Technical Requirements 01 — Admin Settings, Profile & API Integrations
 
 **Date:** 2026-10-20  
-**Status:** Approved for implementation — 2026-10-20  
+**Status:** Approved and implemented — 2026-10-20
 **Area:** Admin only  
 **Related files:** `Frontend/js/dash.js`, `Frontend/js/theme.js`, `Frontend/js/api.js`, `Backend/routes/api.php`, `Backend/src/function/auth/google.php`, `Backend/src/function/auth/login.php`
 

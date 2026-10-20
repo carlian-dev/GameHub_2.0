@@ -35,6 +35,10 @@
 | AD-031 | Administrator should be able to add food and beverage products. |
 | AD-032 | Administrator should be able to update food and beverage product information and prices. |
 | AD-033 | Administrator should be able to archive food and beverage products. |
+| AD-034 | Administrator should be able to manage API integrations. |
+| AD-035 | Administrator should be able to view their profile. |
+| AD-036 | Administrator should be able to switch between light and dark mode from the settings menu. |
+| AD-037 | Administrator should be able to log out from the settings menu. |
 
 
 -----------------------------------------------------------------------------------------------------

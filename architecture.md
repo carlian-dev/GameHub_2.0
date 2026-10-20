@@ -71,6 +71,22 @@ Errors are thrown (`api_abort(message, code)`) and converted centrally, so
 every failure has the shape `{ok:false, error:"..."}` with a correct status.
 Migrations and seed work are one-time scripts, never per-request queries.
 
+### 2.1 Admin settings and integration endpoints
+
+- `GET /api/config` is public and exposes feature state only:
+  `{"ok":true,"integrations":{"googleAuth":{"enabled":true,"clientId":"..."},"googleMaps":{"enabled":false,"apiKey":""}}}`.
+  Disabled integrations expose empty credential strings, never stored values.
+- `GET /api/admin/settings/integrations` requires an admin session and returns
+  the integration cards with `available`, `enabled`, `updatedAt`, `updatedBy`,
+  and credentials reduced to `{name,label,required,configured,masked}`.
+- `PUT /api/admin/settings/integrations/{key}` accepts
+  `{enabled?: bool, credentials?: {name: string}}`. An empty string clears a
+  credential; clearing a required credential auto-disables the integration.
+  Every update writes an `activityLogs` entry without credential values.
+- The `settings` collection is authoritative (`unique key`). Environment
+  `GOOGLE_CLIENT_ID` is only the default when no `googleAuth` document exists;
+  `php Backend/scripts/setup_settings.php` creates the index and seeds keys once.
+
 ## 3. Authentication and authorization model
 
 Account lifecycle (single administrator by design):
@@ -92,8 +108,9 @@ Account lifecycle (single administrator by design):
   and a password (bcrypt). Cashier accounts carry no email and no Google
   binding; their login is username + password with a direct session.
 * The single administrator signs in with email + password or Google
-  (verified server-side against `GOOGLE_CLIENT_ID`; unknown emails 404,
-  non-admin emails 403). No endpoint creates administrators.
+  (verified server-side against the `googleAuth` setting, falling back to
+  `GOOGLE_CLIENT_ID` only while no settings document exists; unknown emails
+  404, non-admin emails 403). No endpoint creates administrators.
 * One-time email codes exist in exactly two places: completing an admin
   application (email ownership) and confirming a cashier archive. Day-to-day
   login never issues codes.
@@ -110,6 +127,7 @@ Account lifecycle (single administrator by design):
 | `rates` | type (regular/special), pricePerHour, active | (tiny; type lookup) |
 | `sessions` | tableId, customerName, startTime, status | `{status, startTime}` (reserved for lifecycle sprint) |
 | `activityLogs` | actorId, action, target, timestamp | `{timestamp}` (actor filters as needed) |
+| `settings` | key (`googleAuth`, `googleMaps`, `recaptcha`, `otp`), enabled, credentials, updatedAt, updatedBy | unique `key` |
 | `healthcheck` | heartbeat document | — |
 
 Index strategy: uniqueness where identity demands it, and compound filters
@@ -131,9 +149,10 @@ Frontend/
   src/function/shared/     Landing status logic
   js/config.js             Single Backend base URL
   js/api.js                One fetch wrapper per endpoint (session cookie always sent)
-  js/dash.js               Shell behavior + shared confirm/prompt/select/schedule dialogs
+  js/dash.js               Shell behavior, admin settings gear menu, shared dialogs
   css/styles.css           Landing + auth theme
   css/dashboard.css        Staff shell theme (tokens, sidebar, cards, tables, badges, dialogs)
+  css/settings.css         Admin settings page, integration cards, gear menu (admin only)
 ```
 
 * Pages are paired 1:1 with backend areas (`auth/`, `admin/`, `tables/`…),

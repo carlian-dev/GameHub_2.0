@@ -20,7 +20,7 @@ Small static-frontend + PHP-API + MongoDB Atlas stack. No framework, no build, n
 
 - Backend entry: `Backend/public/index.php` (loads `.env`, starts session, sets CORS, dispatches). Route table: `Backend/routes/api.php` — `[METHOD, PATH, handlerFunction]` with `{id}` placeholders. Only file mapping URLs to code.
 - Handlers: plain global functions in `Backend/src/function/<area>/*.php` (`auth/`, `admin/`, `tables/`, `shared/`, `cashiers/` reserved). They return arrays; `index.php` serializes. Errors: `api_abort(msg, code)` → `{ok:false, error}` with status. Shared: `src/Helpers/response.php`, `request.php` (`json_body()`), `auth.php` (`current_user/require_login/require_admin`), `src/Config/DatabaseConnection.php` (one `MongoDB\Client` per process).
-- Frontend mirrors backend areas under `Frontend/src/function/<area>/` (paired 1:1). Shared client: `Frontend/js/api.js` — all calls must use `credentials: "include"` or auth silently breaks; `Frontend/js/dash.js` — `dashConfirm`/`dashPrompt`/`dashSelect`/`dashEditCashier` dialogs (no native popups). Styles: `css/styles.css` (landing/auth), `css/dashboard.css` (staff shell).
+- Frontend mirrors backend areas under `Frontend/src/function/<area>/` (paired 1:1). Shared client: `Frontend/js/api.js` — all calls must use `credentials: "include"` or auth silently breaks; `Frontend/js/dash.js` — `dashConfirm`/`dashPrompt`/`dashSelect`/`dashEditCashier` dialogs (no native popups) and the admin settings gear menu. Styles: `css/styles.css` (landing/auth), `css/dashboard.css` (staff shell), `css/settings.css` (admin settings/menu).
 - Entry pages: `/` (customer landing), `/login` (redirect shim in `login/index.html`), cashier registration at `/src/function/auth/register.html`.
 
 ## Auth / data rules (do not break)
@@ -28,8 +28,9 @@ Small static-frontend + PHP-API + MongoDB Atlas stack. No framework, no build, n
 - Account lifecycle: `pending → active → archived` (plus `decline → declined`, terminal). Only `active` logs in; `GET /api/me` re-reads Atlas every guarded page load.
 - Cashier registration is invitation-only: admin invites by email (`/api/admin/invitations`), register requires matching `token + email`. Admin signs in via email+password or Google (`GOOGLE_CLIENT_ID` verified server-side). Cashier login is username+password only (no email codes).
 - No OTP/email-code system: archive is one-step (confirm dialog → `POST /api/admin/cashiers/{id}/archive`). Login never issues codes.
-- Role comes from the server session only — never trust request data. Every listing/state-changing endpoint re-checks `require_login`/`require_admin`. List endpoints project out password hashes; plain secrets never touch DB/logs/responses.
-- Collections in `gamehub_2_0`: `users` (partial-unique `email`, sparse-unique `username`), `tables` (unique `name`), `rates`, `sessions`, `invitations`, `activityLogs`, `healthcheck`. Approve/decline/archive/unarchive all write `activityLogs`.
+- Role comes from the server session only — never trust request data. Every listing/state-changing endpoint re-checks `require_login`/`require_admin`. List endpoints project out password hashes; plain secrets never touch logs/responses, and private credential values are never returned (admin settings expose only `configured` + `masked`).
+- Collections in `gamehub_2_0`: `users` (partial-unique `email`, sparse-unique `username`), `tables` (unique `name`), `rates`, `sessions`, `invitations`, `activityLogs`, `settings` (unique `key`), `healthcheck`. Approve/decline/archive/unarchive and integration updates write `activityLogs`.
+- Integration state lives in `settings` (DB authoritative); env `GOOGLE_CLIENT_ID` is only the default when no `googleAuth` document exists. Create the index/seed keys once with `php Backend/scripts/setup_settings.php`; never per request.
 
 ## Verify (no automated suite)
 

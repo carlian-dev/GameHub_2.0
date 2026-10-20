@@ -277,10 +277,6 @@ document.getElementById("addForm").addEventListener("submit", async (e) => {
     btn.disabled = false;
   }
 });
-document.getElementById("out").addEventListener("click", async () => {
-  try { await logout(); } catch { /* already out */ }
-  location.href = "../auth/login.html";
-});
 guard().then((me) => { if (me) load(); });
 // Quiet background refresh: converges with server truth every 60s while the
 // page is visible and no dialog is open. Skips while a row is in flight.

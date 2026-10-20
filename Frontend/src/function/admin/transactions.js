@@ -177,7 +177,3 @@ document.getElementById("export").addEventListener("click", () => {
     }
   }
 })();
-document.getElementById("out").addEventListener("click", async () => {
-  try { await logout(); } catch { /* already out */ }
-  location.href = "../auth/login.html";
-});

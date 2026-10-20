@@ -4,6 +4,77 @@
    --d-* design tokens; cashier pages never load this file.
    ================================================ */
 
+/* ---- Admin settings gear menu ---- */
+[data-admin-settings] { display: flex; align-items: center; }
+.dash-settings-btn {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--d-border);
+  border-radius: 50%;
+  background: var(--d-surface);
+  color: var(--d-muted);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.2s ease, transform 0.15s ease, color 0.2s ease;
+}
+.dash-settings-btn:hover { border-color: var(--d-gold); color: var(--d-gold); }
+.dash-settings-btn:active { transform: scale(0.94); }
+.dash-settings-btn:focus-visible {
+  outline: none;
+  border-color: var(--d-gold);
+  box-shadow: 0 0 0 3px rgba(212, 173, 42, 0.2);
+}
+.dash-settings-btn svg { width: 19px; height: 19px; }
+
+.dash-settings-panel {
+  position: fixed;
+  z-index: 50;
+  width: 232px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  background: var(--d-surface);
+  border: 1px solid var(--d-border);
+  border-radius: 12px;
+  box-shadow: var(--d-shadow-lg);
+}
+.dash-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--d-text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.dash-settings-item:hover,
+.dash-settings-item:focus-visible {
+  background: var(--d-surface-2);
+  outline: none;
+}
+.dash-settings-item.danger { color: var(--d-red); }
+.dash-settings-item.danger:hover,
+.dash-settings-item.danger:focus-visible { background: rgba(220, 38, 38, 0.08); }
+.dash-settings-item .dash-switch { margin-left: auto; pointer-events: none; }
+.dash-settings-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--d-border-soft);
+}
+.dash[data-theme="dark"] .dash-settings-item.danger:hover,
+.dash[data-theme="dark"] .dash-settings-item.danger:focus-visible { background: rgba(248, 113, 113, 0.12); }
+
 /* ---- Profile tab ---- */
 .settings-profile { padding: 26px 28px; }
 .settings-ident {

@@ -248,8 +248,3 @@ async function load() {
     setTimeout(() => { location.href = "../auth/login.html"; }, 1400);
   }
 })();
-
-document.getElementById("out").addEventListener("click", async () => {
-  try { await logout(); } catch { /* already out */ }
-  location.href = "../auth/login.html";
-});

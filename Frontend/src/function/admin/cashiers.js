@@ -277,10 +277,6 @@ document.getElementById("q").addEventListener("input", () => {
   setMsg(`${n} shown (${tab}).`);
   setEmpty(n === 0, "No staff match your search.");
 });
-document.getElementById("out").addEventListener("click", async () => {
-  try { await logout(); } catch { /* already out */ }
-  location.href = "../auth/login.html";
-});
 guard().then((me) => { if (me) load(); });
 // Quiet background refresh: converges with server truth every 60s while the
 // page is visible and no dialog is open. Skips while a row is in flight.

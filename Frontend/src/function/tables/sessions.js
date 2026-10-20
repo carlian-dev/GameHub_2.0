@@ -110,7 +110,3 @@ dashTabsInit((t) => { sessTab = t; loadSessions(); });
     else msg.textContent = e.message;
   }
 })();
-document.getElementById("out").addEventListener("click", async () => {
-  try { await logout(); } catch { /* already out */ }
-  location.href = "../auth/login.html";
-});

@@ -34,7 +34,13 @@
   const themeBtn = document.querySelector(".dash-theme");
   const applyTheme = (t) => {
     root.setAttribute("data-theme", t);
-    if (themeBtn && themeBtn.classList) themeBtn.classList.toggle("is-light", t === "light");
+    const dark = t === "dark";
+    if (themeBtn && themeBtn.classList) themeBtn.classList.toggle("is-light", !dark);
+    document.querySelectorAll("[data-theme-switch]").forEach((el) => {
+      el.setAttribute("aria-checked", dark ? "true" : "false");
+      const sw = el.querySelector(".dash-switch");
+      if (sw) sw.setAttribute("aria-checked", dark ? "true" : "false");
+    });
   };
   let theme = "light";
   try { theme = localStorage.getItem("gh-theme") || "light"; } catch { /* private mode */ }
@@ -45,6 +51,160 @@
       try { localStorage.setItem("gh-theme", theme); } catch { /* private mode */ }
       applyTheme(theme);
     });
+  }
+
+  // ---- Admin settings gear menu (admin pages only) ----
+  // The panel is appended to body (fixed positioning) so the sticky header's
+  // overflow/backdrop-filter cannot clip it. Cashier pages have no
+  // [data-admin-settings] host and keep the inline theme/logout buttons.
+  const settingsHost = document.querySelector("[data-admin-settings]");
+  if (settingsHost) {
+    const gear = document.createElement("button");
+    gear.type = "button";
+    gear.className = "dash-settings-btn";
+    gear.setAttribute("aria-haspopup", "menu");
+    gear.setAttribute("aria-expanded", "false");
+    gear.setAttribute("aria-label", "Open settings");
+    gear.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">' +
+      '<circle cx="12" cy="12" r="3" />' +
+      '<path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />' +
+      "</svg>";
+    settingsHost.appendChild(gear);
+
+    const panel = document.createElement("div");
+    panel.className = "dash-settings-panel";
+    panel.setAttribute("role", "menu");
+    panel.setAttribute("aria-label", "Settings menu");
+    panel.hidden = true;
+
+    const settingsUrl = settingsHost.getAttribute("data-settings-url") || "./settings.html";
+    const menuLink = (label, hash) => {
+      const a = document.createElement("a");
+      a.className = "dash-settings-item";
+      a.setAttribute("role", "menuitem");
+      a.tabIndex = -1;
+      a.href = `${settingsUrl}#${hash}`;
+      a.textContent = label;
+      return a;
+    };
+    const profileItem = menuLink("Profile", "profile");
+    const apiItem = menuLink("API Integrations", "api");
+
+    const sep = () => {
+      const el = document.createElement("div");
+      el.className = "dash-settings-sep";
+      el.setAttribute("role", "separator");
+      return el;
+    };
+
+    const themeItem = document.createElement("button");
+    themeItem.type = "button";
+    themeItem.className = "dash-settings-item dash-settings-theme";
+    themeItem.setAttribute("role", "menuitemcheckbox");
+    themeItem.setAttribute("data-theme-switch", "");
+    themeItem.setAttribute("aria-checked", "false");
+    themeItem.tabIndex = -1;
+    const themeLabel = document.createElement("span");
+    themeLabel.textContent = "Dark mode";
+    const themeKnob = document.createElement("span");
+    themeKnob.className = "dash-switch";
+    themeKnob.setAttribute("aria-hidden", "true");
+    themeItem.append(themeLabel, themeKnob);
+
+    const logoutItem = document.createElement("button");
+    logoutItem.type = "button";
+    logoutItem.className = "dash-settings-item danger";
+    logoutItem.setAttribute("role", "menuitem");
+    logoutItem.setAttribute("data-logout", "");
+    logoutItem.tabIndex = -1;
+    logoutItem.textContent = "Log out";
+
+    panel.append(profileItem, apiItem, sep(), themeItem, sep(), logoutItem);
+    document.body.appendChild(panel);
+
+    const menuItems = () => Array.from(panel.querySelectorAll(".dash-settings-item"));
+    const placePanel = () => {
+      const r = gear.getBoundingClientRect();
+      panel.style.top = `${Math.round(r.bottom + 8)}px`;
+      panel.style.right = `${Math.max(8, Math.round(window.innerWidth - r.right))}px`;
+      panel.style.left = "auto";
+    };
+    const closeMenu = (restoreFocus = panel.contains(document.activeElement)) => {
+      if (panel.hidden) return;
+      panel.hidden = true;
+      gear.setAttribute("aria-expanded", "false");
+      if (restoreFocus) gear.focus();
+    };
+    const openMenu = (focusFirst = false) => {
+      if (!panel.hidden) return;
+      placePanel();
+      panel.hidden = false;
+      gear.setAttribute("aria-expanded", "true");
+      if (focusFirst) {
+        const first = menuItems()[0];
+        if (first) first.focus();
+      }
+    };
+
+    gear.addEventListener("click", () => {
+      if (panel.hidden) openMenu(true);
+      else closeMenu();
+    });
+
+    themeItem.addEventListener("click", () => {
+      theme = (root.getAttribute("data-theme") === "dark") ? "light" : "dark";
+      try { localStorage.setItem("gh-theme", theme); } catch { /* private mode */ }
+      applyTheme(theme);
+    });
+
+    logoutItem.addEventListener("click", async () => {
+      closeMenu(false);
+      try { await logout(); } catch { /* redirect anyway */ }
+      location.href = "../auth/login.html";
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!panel.hidden && !settingsHost.contains(e.target) && !panel.contains(e.target)) {
+        closeMenu(false);
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (panel.hidden) {
+        if (document.activeElement === gear && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+          e.preventDefault();
+          openMenu();
+          const list = menuItems();
+          const target = e.key === "ArrowDown" ? list[0] : list[list.length - 1];
+          if (target) target.focus();
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeMenu();
+        return;
+      }
+      const list = menuItems();
+      if (!list.length) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        const idx = list.indexOf(document.activeElement);
+        let next = 0;
+        if (e.key === "ArrowDown") next = idx < 0 ? 0 : (idx + 1) % list.length;
+        else if (e.key === "ArrowUp") next = idx < 0 ? list.length - 1 : (idx - 1 + list.length) % list.length;
+        else if (e.key === "End") next = list.length - 1;
+        list[next].focus();
+      } else if (e.key === " " && document.activeElement && document.activeElement.tagName === "A" && panel.contains(document.activeElement)) {
+        e.preventDefault();
+        document.activeElement.click();
+      }
+    });
+
+    window.addEventListener("scroll", () => { if (!panel.hidden) closeMenu(); }, { passive: true, capture: true });
+    window.addEventListener("resize", () => { if (!panel.hidden) closeMenu(); });
+    applyTheme(theme);
   }
   document.querySelectorAll("[data-today]").forEach((el) => {
     el.textContent = new Date().toLocaleDateString("en-US", {
@@ -60,6 +220,7 @@
   const nav = document.querySelector(".dash-nav");
   if (nav) {
     const links = Array.from(nav.querySelectorAll("a[href]"));
+    const noActive = nav.hasAttribute("data-no-active");
     let pill = nav.querySelector(".dash-nav-pill");
     if (!pill) {
       pill = document.createElement("span");
@@ -139,7 +300,14 @@
     window.addEventListener("hashchange", () => {
       const match = linkForHash(location.hash);
       if (match) setActive(match);
-      else if (!location.hash && links.length) setActive(links[0]);
+      else if (!location.hash && links.length && !noActive) setActive(links[0]);
+      else if (noActive) {
+        links.forEach((a) => {
+          a.classList.remove("active");
+          a.removeAttribute("aria-current");
+        });
+        movePill(null);
+      }
     });
 
     // Scrollspy: while scrolling, the section in view owns the highlight.
@@ -171,10 +339,10 @@
     }
 
     // Initial state: honor a deep link (#sessions-panel), else current .active.
-    const initial =
-      (location.hash && linkForHash(location.hash)) ||
-      nav.querySelector("a.active") ||
-      links[0];
+    // A nav marked data-no-active (settings) stays inactive instead of
+    // falling back to its first link.
+    const initial = nav.querySelector("a.active") ||
+      (noActive ? null : (location.hash && linkForHash(location.hash)) || links[0]);
     // Apply the class too (deep link may differ from the hardcoded .active).
     links.forEach((a) => {
       const on = a === initial;

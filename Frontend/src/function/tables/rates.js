@@ -105,9 +105,4 @@ document.getElementById("ratesForm").addEventListener("submit", async (e) => {
 
 ["rateRegular", "rateSpecial"].forEach((id) =>
   document.getElementById(id).addEventListener("input", updateSummary));
-
-document.getElementById("out").addEventListener("click", async () => {
-  try { await logout(); } catch { /* already out */ }
-  location.href = "../auth/login.html";
-});
 guard().then((me) => { if (me) loadRates(); });

@@ -104,12 +104,3 @@ function google_login(array $params = []): array
         'role' => $user['role'],
     ];
 }
-
-/** GET /api/config — public Frontend settings (client IDs are public by design). */
-function app_config(array $params = []): array
-{
-    return [
-        'ok' => true,
-        'googleClientId' => $_ENV['GOOGLE_CLIENT_ID'] ?? getenv('GOOGLE_CLIENT_ID') ?: '',
-    ];
-}

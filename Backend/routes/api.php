@@ -20,6 +20,7 @@ require_once __DIR__ . '/../src/function/shared/health.php';
 require_once __DIR__ . '/../src/function/auth/register.php';
 require_once __DIR__ . '/../src/function/auth/login.php';
 require_once __DIR__ . '/../src/function/admin/cashiers.php';
+require_once __DIR__ . '/../src/function/admin/settings.php';
 require_once __DIR__ . '/../src/function/auth/google.php';
 require_once __DIR__ . '/../src/function/auth/invite.php';
 require_once __DIR__ . '/../src/function/tables/tables.php';
@@ -50,6 +51,8 @@ return [
     ['POST', '/api/admin/invitations', 'invite_create'],
     ['GET', '/api/admin/invitations', 'invite_list'],
     ['POST', '/api/admin/invitations/{id}/revoke', 'invite_revoke'],
+    // Admin-only integration settings (masked credentials; DB is authoritative).
+    ['GET', '/api/admin/settings/integrations', 'settings_list'],
     // Sprint by Carl: cashier management (lists/updates/archives).
     ['GET', '/api/admin/cashiers', 'cashiers_list'],
     ['PUT', '/api/admin/cashiers/{id}', 'cashiers_update'],

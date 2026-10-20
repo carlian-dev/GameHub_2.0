@@ -13,11 +13,10 @@ declare(strict_types=1);
 use App\Config\DatabaseConnection;
 use MongoDB\BSON\UTCDateTime;
 
-function google_verify_token(string $idToken): array
+function google_verify_token(string $idToken, string $clientId): array
 {
-    $clientId = $_ENV['GOOGLE_CLIENT_ID'] ?? getenv('GOOGLE_CLIENT_ID') ?: '';
     if ($clientId === '') {
-        api_abort('Google sign-in is not configured', 500);
+        api_abort('Google sign-in is not configured', 503);
     }
     if ($idToken === '') {
         api_abort('Google token is required', 422);
@@ -64,8 +63,22 @@ function google_verify_token(string $idToken): array
 /** POST /api/auth/google {idToken} — admin-only Google door (no creation). */
 function google_login(array $params = []): array
 {
+    // The database setting is authoritative. A read failure fails closed.
+    try {
+        $auth = settings_google_auth();
+    } catch (Throwable $e) {
+        error_log('[gamehub] google auth settings read failed');
+        api_abort('Google sign-in is temporarily unavailable', 503);
+    }
+    if (!$auth['enabled']) {
+        api_abort('Google sign-in is disabled by the administrator', 403);
+    }
+    if ($auth['clientId'] === '') {
+        api_abort('Google sign-in is not configured', 503);
+    }
+
     $data = json_body();
-    $g = google_verify_token((string)($data['idToken'] ?? ''));
+    $g = google_verify_token((string)($data['idToken'] ?? ''), $auth['clientId']);
 
     $users = DatabaseConnection::db()->selectCollection('users');
     $user = $users->findOne(['email' => $g['email']]);

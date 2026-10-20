@@ -70,6 +70,16 @@ async function logout() {
 async function getMe() {
   return api("/api/me");
 }
+// --- Admin settings (masked credentials; server is authoritative) ---
+async function getAdminIntegrations() {
+  return api("/api/admin/settings/integrations");
+}
+async function updateAdminIntegration(key, fields) {
+  return api(`/api/admin/settings/integrations/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify(fields),
+  });
+}
 
 // --- Cashier management (lists/updates/archives; invite IS the approval) ---
 async function listCashiers(status = "all", role = "cashier") {

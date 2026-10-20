@@ -53,6 +53,7 @@ return [
     ['POST', '/api/admin/invitations/{id}/revoke', 'invite_revoke'],
     // Admin-only integration settings (masked credentials; DB is authoritative).
     ['GET', '/api/admin/settings/integrations', 'settings_list'],
+    ['PUT', '/api/admin/settings/integrations/{key}', 'settings_update'],
     // Sprint by Carl: cashier management (lists/updates/archives).
     ['GET', '/api/admin/cashiers', 'cashiers_list'],
     ['PUT', '/api/admin/cashiers/{id}', 'cashiers_update'],

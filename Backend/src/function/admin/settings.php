@@ -290,3 +290,135 @@ function settings_list(array $params = []): array
     }
     return ['ok' => true, 'integrations' => $out];
 }
+
+/** Validate one credential without ever echoing its value. */
+function settings_validate_credential(string $key, string $name, string $value): void
+{
+    if (strlen($value) > 2048) {
+        api_abort('credential is too long (maximum 2048 characters)', 422);
+    }
+    if ($key === 'googleAuth' && $name === 'clientId' && $value !== '') {
+        if (preg_match('/\s/', $value) || !str_ends_with($value, '.apps.googleusercontent.com')) {
+            api_abort('Google client ID must end with .apps.googleusercontent.com', 422);
+        }
+    }
+    if ($key === 'googleMaps' && $name === 'apiKey' && $value !== '' && preg_match('/\s/', $value)) {
+        api_abort('Maps API key must not contain whitespace', 422);
+    }
+}
+
+/** Append an audit entry. Metadata must never include credential values. */
+function settings_log(string $action, string $target, array $meta): void
+{
+    $actor = current_user();
+    DatabaseConnection::db()->selectCollection('activityLogs')->insertOne([
+        'actorId' => $actor['id'] ?? null,
+        'action' => $action,
+        'target' => $target,
+        'meta' => $meta,
+        'at' => new UTCDateTime(),
+    ]);
+}
+
+/**
+ * PUT /api/admin/settings/integrations/{key}
+ * Toggle an integration and/or replace/clear its credentials. Omitted fields
+ * stay unchanged; an empty string clears a credential. Clearing a required
+ * credential auto-disables the integration.
+ */
+function settings_update(array $params = []): array
+{
+    $admin = require_admin();
+    $key = (string)($params['key'] ?? '');
+    $registry = settings_registry();
+    if (!isset($registry[$key])) {
+        api_abort('unknown integration', 404);
+    }
+    if (empty($registry[$key]['available'])) {
+        api_abort('planned integrations cannot be changed', 422);
+    }
+
+    $data = json_body();
+    $effective = settings_effective($key);
+    $enabled = (bool)$effective['enabled'];
+    $changed = [];
+
+    if (array_key_exists('enabled', $data)) {
+        if (!is_bool($data['enabled'])) {
+            api_abort('enabled must be a boolean', 422);
+        }
+        $enabled = $data['enabled'];
+        $changed[] = 'enabled';
+    }
+
+    // Start from current values so omitted credentials stay unchanged.
+    $credentials = [];
+    foreach ($registry[$key]['credentials'] as $name => $def) {
+        $current = $effective['credentials'][$name] ?? [];
+        $currentUpdatedAt = $current['updatedAt'] ?? null;
+        $credentials[$name] = [
+            'value' => (string)($current['value'] ?? ''),
+            'last4' => (string)($current['last4'] ?? ''),
+            'updatedAt' => $currentUpdatedAt instanceof UTCDateTime ? $currentUpdatedAt : null,
+        ];
+    }
+
+    if (array_key_exists('credentials', $data)) {
+        if (!is_array($data['credentials'])) {
+            api_abort('credentials must be an object', 422);
+        }
+        foreach ($data['credentials'] as $name => $raw) {
+            if (!isset($registry[$key]['credentials'][$name])) {
+                api_abort('unknown credential for this integration', 422);
+            }
+            if (!is_string($raw)) {
+                api_abort('credential values must be strings', 422);
+            }
+            $value = trim($raw);
+            settings_validate_credential($key, (string)$name, $value);
+            $credentials[$name] = [
+                'value' => $value,
+                'last4' => $value !== '' ? substr($value, -4) : '',
+                'updatedAt' => new UTCDateTime(),
+            ];
+            $changed[] = 'credentials.' . $name;
+        }
+    }
+
+    if ($changed === []) {
+        api_abort('nothing to update (allowed: enabled, credentials)', 422);
+    }
+
+    foreach ($registry[$key]['credentials'] as $name => $def) {
+        if (empty($def['required']) || $credentials[$name]['value'] !== '') {
+            continue;
+        }
+        if ($enabled) {
+            if (in_array('enabled', $changed, true)) {
+                api_abort('cannot enable this integration without its required credential', 422);
+            }
+            // Clearing a required credential auto-disables the integration.
+            $enabled = false;
+        }
+    }
+
+    settings_collection()->updateOne(
+        ['key' => $key],
+        [
+            '$set' => [
+                'enabled' => $enabled,
+                'credentials' => $credentials,
+                'updatedAt' => new UTCDateTime(),
+                'updatedBy' => $admin['email'] ?? null,
+            ],
+            '$setOnInsert' => ['key' => $key],
+        ],
+        ['upsert' => true]
+    );
+    settings_log('integration_settings_update', $key, [
+        'enabled' => $enabled,
+        'changed' => $changed,
+    ]);
+
+    return ['ok' => true, 'integration' => settings_shape($key, settings_effective($key))];
+}

@@ -1,0 +1,111 @@
+/* ================================================
+   css/settings.css - admin settings page + settings menu.
+   Loaded after dashboard.css on admin pages only. Uses the existing
+   --d-* design tokens; cashier pages never load this file.
+   ================================================ */
+
+/* ---- Profile tab ---- */
+.settings-profile { padding: 26px 28px; }
+.settings-ident {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 20px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--d-border-soft);
+}
+.settings-avatar {
+  width: 64px;
+  height: 64px;
+  font-size: 26px;
+  flex-shrink: 0;
+}
+.settings-ident-text { min-width: 0; }
+.settings-ident-text h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--d-text);
+  overflow-wrap: anywhere;
+}
+.settings-ident-text p {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--d-muted);
+  overflow-wrap: anywhere;
+}
+
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 34px;
+  margin: 0;
+}
+.settings-field {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--d-border-soft);
+  min-width: 0;
+}
+.settings-field dt {
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--d-muted);
+}
+.settings-field dd {
+  margin: 0;
+  font-size: 14px;
+  color: var(--d-text);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.settings-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  background: #F3F4F6;
+  color: #6B7280;
+  text-transform: capitalize;
+}
+.settings-badge.is-active { background: #E7F6EE; color: #147A4F; }
+.settings-badge.is-pending { background: #FCF6DE; color: #A9800F; }
+.settings-badge.is-archived { background: #F3F4F6; color: #6B7280; }
+.settings-badge.is-declined { background: #FEE2E2; color: #DC2626; }
+
+.dash[data-theme="dark"] .settings-badge.is-active { background: rgba(63, 164, 106, 0.16); color: #7EE2A8; }
+.dash[data-theme="dark"] .settings-badge.is-pending { background: rgba(212, 173, 42, 0.16); color: #F0D27A; }
+.dash[data-theme="dark"] .settings-badge.is-archived { background: rgba(156, 163, 175, 0.16); color: #C3CAD2; }
+.dash[data-theme="dark"] .settings-badge.is-declined { background: rgba(248, 113, 113, 0.16); color: #FCA5A5; }
+
+.settings-note {
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--d-border-soft);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--d-muted);
+}
+
+@media (max-width: 980px) {
+  .settings-fields { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .settings-profile { padding: 20px 18px; }
+  .settings-ident { gap: 12px; }
+  .settings-avatar { width: 52px; height: 52px; font-size: 22px; }
+  .settings-field {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    align-items: start;
+  }
+}

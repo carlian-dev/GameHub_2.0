@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 use App\Config\DatabaseConnection;
 use MongoDB\BSON\ObjectId;
+use MongoDB\BSON\UTCDateTime;
 
 function auth_login(array $params = []): array
 {
@@ -82,11 +83,28 @@ function auth_me(array $params = []): array
     if ($doc === null) {
         api_abort('not logged in', 401);
     }
+    $googleSub = (string)($doc['googleSub'] ?? '');
+    $createdAt = $doc['createdAt'] ?? null;
+    if ($createdAt instanceof UTCDateTime) {
+        $createdAt = $createdAt->toDateTime()->format(DATE_ATOM);
+    } elseif ($createdAt instanceof \DateTimeInterface) {
+        $createdAt = $createdAt->format(DATE_ATOM);
+    } else {
+        $createdAt = null;
+    }
+    $provider = (string)($doc['authProvider'] ?? '');
+    if ($provider === '') {
+        $provider = $googleSub !== '' ? 'google' : 'local';
+    }
     return [
         'ok' => true,
         'username' => $doc['username'] ?? null,
         'email' => $doc['email'] ?? null,
         'role' => $doc['role'],
         'status' => $doc['status'],
+        'displayName' => (string)($doc['displayName'] ?? ''),
+        'authProvider' => $provider,
+        'createdAt' => $createdAt,
+        'googleLinked' => $googleSub !== '',
     ];
 }

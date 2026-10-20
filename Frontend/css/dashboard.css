@@ -9,6 +9,11 @@
 
 [hidden] { display: none !important; }
 
+/* Global box-sizing: keep padding/borders inside declared widths so flex/grid
+   children and width:100% panels never overflow their containers (fixes the
+   page-level horizontal scrollbar). Mirrors styles.css. */
+*, *::before, *::after { box-sizing: border-box; }
+
 /* ---- 1. Tokens ---- */
 .dash {
   --d-bg: #F5F3ED;
@@ -188,12 +193,13 @@
   flex-shrink: 0;
   box-shadow: 0 0 0 3px rgba(212, 173, 42, 0.2), 0 6px 16px rgba(0, 0, 0, 0.3);
 }
-.dash-user div { min-width: 0; }
+.dash-user { min-width: 0; overflow: hidden; }
+.dash-user div { min-width: 0; overflow: hidden; }
 .dash-user strong { display: block; font-size: 13.5px; color: #F5F3ED; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-user small { color: rgba(245, 243, 237, 0.55); font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; }
 
 /* ---- 3. Top header ---- */
-.dash-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dash-main { flex: 1; min-width: 0; display: block; }
 .dash-top {
   height: var(--d-top-h);
   display: flex;
@@ -203,6 +209,8 @@
   border-bottom: 1px solid var(--d-border);
   position: sticky;
   top: 0;
+  min-width: 0;
+  overflow: hidden;
   background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(14px) saturate(160%);
   -webkit-backdrop-filter: blur(14px) saturate(160%);
@@ -298,7 +306,7 @@
 .dash-logout:active { transform: scale(0.97); }
 
 /* ---- 4. Content + stat cards ---- */
-.dash-content { padding: 28px 30px 52px; max-width: 1360px; width: 100%; margin: 0 auto; }
+.dash-content { padding: 28px 30px 52px; max-width: 1360px; margin: 0 auto; min-width: 0; }
 .dash-pagehead { margin-bottom: 22px; }
 .dash-pagehead h1 {
   font-family: "Poppins", system-ui, sans-serif;
@@ -470,7 +478,14 @@ a.dash-stat:hover {
 }
 .dash[data-theme="dark"] .dash-tabs button.on { background: var(--d-green-2); border-color: var(--d-green-2); }
 
-.dash-tablewrap { overflow-x: auto; border-radius: var(--d-radius-sm); }
+.dash-tablewrap {
+  overflow-x: auto;
+  max-width: 100%;
+  border-radius: var(--d-radius-sm);
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
 .dash-tablewrap table {
   width: 100%;
   border-collapse: separate;
@@ -482,6 +497,8 @@ a.dash-stat:hover {
   padding: 12px 14px;
   border-bottom: 1px solid var(--d-border-soft);
   vertical-align: middle;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .dash-tablewrap th {
   color: var(--d-muted);
@@ -1168,10 +1185,17 @@ a.dash-stat:hover {
   .start-grid { grid-template-columns: 1fr; }
   .start-head { flex-direction: column; }
   .chart { height: 120px; }
+  .dash-top { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 10px; }
+  .dash-search { flex: 1 1 100%; max-width: none; min-width: 0; order: 3; }
+  .dash-iconbtn { display: inline-flex; }
 }
 @media (max-width: 430px) {
   .dash-cards { grid-template-columns: 1fr; }
   .dash-pagehead h1 { font-size: 23px; }
+}
+@media (max-width: 480px) {
+  .filter-row .field,
+  .filter-row .grow-field { min-width: 100%; }
 }
 
 /* ---- 14. Accessibility ---- */

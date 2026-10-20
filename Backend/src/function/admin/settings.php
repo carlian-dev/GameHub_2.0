@@ -274,8 +274,6 @@ function app_config(array $params = []): array
     }
     return [
         'ok' => true,
-        // Temporary compatibility key for the current login.js (removed in Task 4).
-        'googleClientId' => $integrations['googleAuth']['clientId'],
         'integrations' => $integrations,
     ];
 }

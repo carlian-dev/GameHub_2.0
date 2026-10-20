@@ -78,28 +78,54 @@ document.getElementById("go").addEventListener("click", (e) => {
   });
 })();
 
-// "Continue with Google": verified email either finds your ACTIVE account
-// (direct session) or creates a pending one needing admin approval.
+// "Continue with Google": the admin API decides whether the integration is
+// on. The GIS script is injected only after /api/config confirms Google Auth
+// is enabled AND a client ID exists; otherwise the divider/button stay hidden
+// and the password form works normally.
+let googleScriptPromise = null;
+function loadGoogleScript() {
+  if (window.google && window.google.accounts) return Promise.resolve();
+  if (googleScriptPromise) return googleScriptPromise;
+  googleScriptPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true;
+    s.defer = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("Google sign-in is unavailable"));
+    document.head.appendChild(s);
+  });
+  return googleScriptPromise;
+}
+
 async function initGoogleLogin() {
+  const divider = document.querySelector(".auth-divider");
+  const gbtn = document.getElementById("gbtn");
   try {
-    const { googleClientId } = await getAppConfig();
-    if (!googleClientId || !window.google) return;
+    const data = await getAppConfig();
+    const auth = data && data.integrations ? data.integrations.googleAuth : null;
+    if (!auth || !auth.enabled || !auth.clientId) return;
+    await loadGoogleScript();
+    if (!window.google || !window.google.accounts) return;
     google.accounts.id.initialize({
-      client_id: googleClientId,
+      client_id: auth.clientId,
       callback: async ({ credential }) => {
         const msg = document.getElementById("msg");
         try {
-          const data = await loginWithGoogle(credential);
-          if (data.step === "approval") {
+          const resp = await loginWithGoogle(credential);
+          if (resp.step === "approval") {
             msg.textContent = "Google account created! Status: pending — awaiting admin approval.";
             msg.className = "ok";
-          } else welcomeAndGo(data);
+          } else welcomeAndGo(resp);
         } catch (e) { msg.textContent = e.message; msg.className = "err"; }
       },
     });
-    google.accounts.id.renderButton(document.getElementById("gbtn"), {
+    google.accounts.id.renderButton(gbtn, {
       theme: "outline", size: "large", text: "signin_with", width: 280,
     });
-  } catch { /* Google unavailable offline — password form still works */ }
+    // Reveal only after the button rendered successfully.
+    if (divider) divider.hidden = false;
+    gbtn.hidden = false;
+  } catch { /* Google unavailable/disabled — password form still works */ }
 }
 initGoogleLogin();

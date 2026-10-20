@@ -62,14 +62,13 @@
         <button id="go" type="submit" class="btn btn-solid btn-block">Sign In</button>
       </form>
       <div id="msg" role="status"></div>
-      <p class="auth-divider">— or —</p>
-      <div id="gbtn" class="gbtn-row"></div>
+      <p class="auth-divider" hidden>— or —</p>
+      <div id="gbtn" class="gbtn-row" hidden></div>
     </section>
 
     <p class="restricted">This area is restricted to authorized GameHub staff only.<br />Unauthorized access attempts are logged.</p>
   </main>
 
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="../../../js/config.js"></script>
   <script src="../../../js/api.js"></script>
   <script src="./login.js"></script>

@@ -1,8 +1,8 @@
 # Technical Requirements 01 — Admin Settings, Profile & API Integrations
 
-**Date:** 2026-10-20  
+**Date:** 2026-10-20
 **Status:** Approved and implemented — 2026-10-20
-**Area:** Admin only  
+**Area:** Admin only
 **Related files:** `Frontend/js/dash.js`, `Frontend/js/theme.js`, `Frontend/js/api.js`, `Backend/routes/api.php`, `Backend/src/function/auth/google.php`, `Backend/src/function/auth/login.php`
 
 ---
@@ -279,6 +279,7 @@ Rules:
 - If Google Maps is disabled, `enabled` is `false` and `apiKey` is omitted or empty.
 - The Google client ID and the Maps browser key are public identifiers. They must be present for the browser to use the services, even though the admin UI masks them. Any truly secret value (future reCAPTCHA secret) is never returned here.
 - Add `Cache-Control: no-store` to this response so a toggle is reflected on the next page load.
+- Resolve both integration documents in one settings read so the response has a single consistent snapshot.
 - The client ID returned here and the client ID used by the backend for the Google `aud` check must be the same value. `google_verify_token()` must read the configured client ID, not the hard-coded environment value, whenever a settings document exists.
 
 Failure policy:
@@ -287,9 +288,9 @@ Failure policy:
 |---|---|---|
 | Settings document exists | Use DB value | Use DB value |
 | No document (fresh database, setup script not run) | Use `GOOGLE_CLIENT_ID` if present, otherwise disabled | Enabled (preserve current landing behavior) |
-| Settings read throws a database error | Use `GOOGLE_CLIENT_ID` if present, otherwise disabled | Disabled (fail closed) |
+| Settings read throws a database error | Disabled (fail closed) | Disabled (fail closed) |
 
-The maps fallback is the only case where an unseeded database shows the map. Run `setup_settings.php` as part of deployment so the database is authoritative.
+Environment defaults are used only when the document is positively absent. A read failure is never treated as an absent document, so neither integration falls back to environment values. The maps fallback is the only case where an unseeded database shows the map. Run `setup_settings.php` as part of deployment so the database is authoritative.
 
 This table describes the public config endpoint only. `POST /api/auth/google` always fails closed with `503` when the settings lookup throws; it never falls back to the environment while a database document may exist.
 
@@ -315,7 +316,7 @@ Response:
           "label": "OAuth Client ID",
           "required": true,
           "configured": true,
-          "masked": "••••••••1abc"
+          "masked": "••••••••ab12"
         }
       ],
       "updatedAt": "2026-10-20T10:00:00+08:00",
@@ -325,7 +326,7 @@ Response:
 }
 ```
 
-Masking rule: always use eight bullet characters plus the last four characters when the value is longer than eight characters (`••••••••1abc`). For values of eight characters or fewer, return bullets only. The full value is never part of this response. The same rule applies to every credential, including client IDs; the recognizable domain suffix is not kept.
+Masking rule: always use eight bullet characters plus a four-character display hint when the value is longer than eight characters. For Google client IDs the hint is the last four identifying characters before the fixed `.apps.googleusercontent.com` suffix, so `1234-ab12.apps.googleusercontent.com` displays as `••••••••ab12`; the constant domain suffix is never used as the hint. For every other credential the hint is the last four characters. For values of eight characters or fewer, return bullets only. The full value is never part of this response.
 
 ### 8.3 Update an integration
 
@@ -351,10 +352,11 @@ Rules:
 - Cannot enable an integration whose required credential is missing → `422`.
 - Clearing a required credential while enabled automatically sets `enabled` to `false` (or rejects; see open decision — recommended: auto-disable and report it).
 - Credential values are trimmed and length-checked (maximum 2048 characters).
-- Google client ID must end with `.apps.googleusercontent.com` when set.
+- Google client ID must match `^[A-Za-z0-9_-]{5,}\.apps\.googleusercontent\.com$` when set, so a bare domain suffix is rejected.
 - Maps key is optional; if set, it must be a non-empty token without whitespace.
 - No credential value is written to `activityLogs`.
-- Response returns the updated masked integration object.
+- Updates write only the fields that changed. The settings write and its activity log are committed in one MongoDB transaction, so a success response implies both were stored.
+- Response returns the updated masked integration object. The client applies it directly; a list reload is only a fallback for older or partial responses.
 
 Errors:
 
@@ -409,8 +411,8 @@ Add one collection: `settings` in `gamehub_2_0`.
   enabled: true,
   credentials: {
     clientId: {
-      value: "1234.apps.googleusercontent.com",
-      last4: "corn",                 // safe display hint
+      value: "1234-ab12.apps.googleusercontent.com",
+      last4: "ab12",                 // hint before the fixed domain suffix
       updatedAt: ISODate
     }
   },
@@ -428,8 +430,8 @@ Example documents:
   enabled: true,
   credentials: {
     clientId: {
-      value: "<oauth-client-id>",
-      last4: "1abc",
+      value: "1234-ab12.apps.googleusercontent.com",
+      last4: "ab12",
       updatedAt: ISODate("2026-10-20T10:00:00Z")
     }
   }
@@ -474,14 +476,14 @@ settings: { key: 1 } unique
   2. Environment value, only when no database document exists.
   3. Disabled / empty.
 - Never seed or create indexes per request (existing project rule).
-- Removing the `settings` documents returns the system to environment-based behavior.
+- Removing the `settings` documents returns the system to environment-based behavior only because the lookup then proves the document is absent. A settings read failure never falls back to the environment.
 - The setup script is a deployment step. The application must still behave safely if it is forgotten; see the failure policy in section 8.1.
 
 ### 9.2 Credential handling
 
 - Public identifiers (Google client ID, Maps browser key) are stored as strings but masked in admin API responses.
 - Future secret credentials (for example a reCAPTCHA secret key) must be encrypted at rest with `SETTINGS_ENCRYPTION_KEY` using AES-256-GCM before storage. Do not add a plaintext secret field.
-- `last4` is stored separately so the admin list can show a hint without decrypting or returning the value.
+- `last4` is stored separately so the admin list can show a hint without decrypting or returning the value. For Google client IDs the hint is taken from the identifying part before the fixed `.apps.googleusercontent.com` suffix, never from the constant suffix itself.
 - Credential values are never logged, never echoed in validation errors, and never placed in `activityLogs`.
 
 ---
@@ -705,7 +707,7 @@ Backend:
 1. **Settings surface:** A dedicated `settings.html` page with Profile/API tabs.
 2. **Profile scope:** Read-only profile for v1. Display-name editing and password change are out of scope.
 3. **Google Maps credential:** Keep the optional API key field; the current keyless embed remains the default.
-4. **Credential visibility:** Never show the full value; show the mask and last four characters only.
+4. **Credential visibility:** Never show the full value; show the mask and a four-character hint only (for Google client IDs, the hint comes from the identifying part before the fixed domain suffix).
 5. **Google Auth disable safety:** Confirmation dialog only; no password prompt.
 6. **Settings navigation:** Keep settings reachable from the gear menu only; no extra sidebar item.
 7. **Clearing a required credential:** Auto-disable the integration and report the new state.

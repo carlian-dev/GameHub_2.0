@@ -17,6 +17,8 @@ declare(strict_types=1);
 use App\Config\DatabaseConnection;
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\UTCDateTime;
+use MongoDB\Driver\Session;
+use MongoDB\Operation\FindOneAndUpdate;
 
 function settings_collection(): \MongoDB\Collection
 {
@@ -94,6 +96,25 @@ function settings_normalize(mixed $value): mixed
 }
 
 /**
+ * Safe display hint for a credential. Google client IDs have a fixed domain
+ * suffix, so the hint comes from the identifying part instead of ".com".
+ */
+function settings_credential_hint(string $key, string $name, string $value): string
+{
+    if ($value === '') {
+        return '';
+    }
+    if ($key === 'googleAuth' && $name === 'clientId') {
+        $suffix = '.apps.googleusercontent.com';
+        if (str_ends_with($value, $suffix)) {
+            $prefix = substr($value, 0, -strlen($suffix));
+            return $prefix !== '' ? substr($prefix, -4) : '';
+        }
+    }
+    return substr($value, -4);
+}
+
+/**
  * Default effective settings when no document exists. Google Auth falls back
  * to GOOGLE_CLIENT_ID; Maps preserves the legacy landing-page map.
  */
@@ -111,7 +132,7 @@ function settings_default(string $key): array
             $enabled = true;
             $credentials['clientId'] = [
                 'value' => $clientId,
-                'last4' => substr($clientId, -4),
+                'last4' => settings_credential_hint('googleAuth', 'clientId', $clientId),
                 'updatedAt' => null,
             ];
         }
@@ -139,14 +160,13 @@ function settings_document(string $key): ?array
     return is_array($normalized) ? $normalized : null;
 }
 
-/** Effective settings: database document when present, defaults otherwise. */
-function settings_effective(string $key): array
+/** Effective settings from an already-loaded document (or a default). */
+function settings_effective_from_doc(string $key, ?array $doc): array
 {
     $registry = settings_registry();
     if (!isset($registry[$key])) {
         api_abort('unknown integration', 404);
     }
-    $doc = settings_document($key);
     $basis = $doc ?? settings_default($key);
 
     $credentials = [];
@@ -154,14 +174,10 @@ function settings_effective(string $key): array
     foreach ($registry[$key]['credentials'] as $name => $def) {
         $raw = is_array($rawCredentials[$name] ?? null) ? $rawCredentials[$name] : [];
         $value = (string)($raw['value'] ?? '');
-        $last4 = (string)($raw['last4'] ?? '');
-        if ($last4 === '' && $value !== '') {
-            $last4 = substr($value, -4);
-        }
         $updatedAt = $raw['updatedAt'] ?? null;
         $credentials[$name] = [
             'value' => $value,
-            'last4' => $last4,
+            'last4' => settings_credential_hint($key, (string)$name, $value),
             'updatedAt' => $updatedAt instanceof UTCDateTime ? $updatedAt : null,
         ];
     }
@@ -184,14 +200,48 @@ function settings_effective(string $key): array
     ];
 }
 
-/** Eight bullets plus the last four characters; bullets only for short values. */
-function settings_mask_value(string $value): string
+/** Load several settings documents in one round trip. Throws on DB failure. */
+function settings_documents(array $keys): array
+{
+    $keys = array_values(array_unique($keys));
+    if ($keys === []) {
+        return [];
+    }
+    $out = [];
+    foreach (settings_collection()->find(['key' => ['$in' => $keys]]) as $doc) {
+        $normalized = settings_normalize($doc);
+        if (is_array($normalized) && isset($normalized['key'])) {
+            $out[(string)$normalized['key']] = $normalized;
+        }
+    }
+    return $out;
+}
+
+/** Effective settings for several keys from one database read. */
+function settings_effective_many(array $keys): array
+{
+    $docs = settings_documents($keys);
+    $out = [];
+    foreach ($keys as $key) {
+        $out[$key] = settings_effective_from_doc((string)$key, $docs[(string)$key] ?? null);
+    }
+    return $out;
+}
+
+/** Effective settings: database document when present, defaults otherwise. */
+function settings_effective(string $key): array
+{
+    return settings_effective_from_doc($key, settings_document($key));
+}
+
+/** Eight bullets plus a safe four-character hint; bullets only for short values. */
+function settings_mask_value(string $value, string $hint = ''): string
 {
     if ($value === '') {
         return '';
     }
     if (strlen($value) > 8) {
-        return str_repeat('•', 8) . substr($value, -4);
+        return str_repeat('•', 8) . ($hint !== '' ? $hint : substr($value, -4));
     }
     return str_repeat('•', 8);
 }
@@ -206,12 +256,13 @@ function settings_shape(string $key, array $doc): array
     $credentials = [];
     foreach ($registry[$key]['credentials'] as $name => $def) {
         $value = (string)($doc['credentials'][$name]['value'] ?? '');
+        $hint = (string)($doc['credentials'][$name]['last4'] ?? '');
         $credentials[] = [
             'name' => $name,
             'label' => $def['label'],
             'required' => (bool)$def['required'],
             'configured' => $value !== '',
-            'masked' => settings_mask_value($value),
+            'masked' => settings_mask_value($value, $hint),
         ];
     }
     $updatedAt = $doc['updatedAt'] ?? null;
@@ -228,11 +279,11 @@ function settings_shape(string $key, array $doc): array
     ];
 }
 
-/** Public integration state for GET /api/config (never includes secrets). */
-function settings_public_config(): array
+/** Public shape from already-resolved effective settings (never secrets). */
+function settings_public_config_from_effective(array $effective): array
 {
-    $auth = settings_effective('googleAuth');
-    $maps = settings_effective('googleMaps');
+    $auth = $effective['googleAuth'];
+    $maps = $effective['googleMaps'];
     return [
         'googleAuth' => [
             'enabled' => (bool)$auth['enabled'],
@@ -245,6 +296,14 @@ function settings_public_config(): array
     ];
 }
 
+/** Public integration state for GET /api/config (never includes secrets). */
+function settings_public_config(): array
+{
+    return settings_public_config_from_effective(
+        settings_effective_many(['googleAuth', 'googleMaps'])
+    );
+}
+
 /** Google Auth state for backend enforcement. Throws when the store fails. */
 function settings_google_auth(): array
 {
@@ -255,7 +314,11 @@ function settings_google_auth(): array
     ];
 }
 
-/** GET /api/config - public feature state. Fail closed on a store failure. */
+/**
+ * GET /api/config - public feature state. A store failure fails closed for both
+ * integrations; environment defaults are used only when the documents are
+ * positively absent (inside settings_default()).
+ */
 function app_config(array $params = []): array
 {
     header('Cache-Control: no-store');
@@ -263,12 +326,8 @@ function app_config(array $params = []): array
         $integrations = settings_public_config();
     } catch (Throwable $e) {
         error_log('[gamehub] settings config read failed');
-        $clientId = trim((string)($_ENV['GOOGLE_CLIENT_ID'] ?? getenv('GOOGLE_CLIENT_ID') ?: ''));
         $integrations = [
-            'googleAuth' => [
-                'enabled' => $clientId !== '',
-                'clientId' => $clientId,
-            ],
+            'googleAuth' => ['enabled' => false, 'clientId' => ''],
             'googleMaps' => ['enabled' => false, 'apiKey' => ''],
         ];
     }
@@ -282,9 +341,11 @@ function app_config(array $params = []): array
 function settings_list(array $params = []): array
 {
     require_admin();
+    $keys = array_keys(settings_registry());
+    $effective = settings_effective_many($keys);
     $out = [];
-    foreach (array_keys(settings_registry()) as $key) {
-        $out[] = settings_shape($key, settings_effective($key));
+    foreach ($keys as $key) {
+        $out[] = settings_shape($key, $effective[$key]);
     }
     return ['ok' => true, 'integrations' => $out];
 }
@@ -296,8 +357,11 @@ function settings_validate_credential(string $key, string $name, string $value):
         api_abort('credential is too long (maximum 2048 characters)', 422);
     }
     if ($key === 'googleAuth' && $name === 'clientId' && $value !== '') {
-        if (preg_match('/\s/', $value) || !str_ends_with($value, '.apps.googleusercontent.com')) {
-            api_abort('Google client ID must end with .apps.googleusercontent.com', 422);
+        if (
+            preg_match('/\s/', $value) ||
+            !preg_match('/^[A-Za-z0-9_-]{5,}\.apps\.googleusercontent\.com$/', $value)
+        ) {
+            api_abort('Google client ID must end with .apps.googleusercontent.com and include an identifier', 422);
         }
     }
     if ($key === 'googleMaps' && $name === 'apiKey' && $value !== '' && preg_match('/\s/', $value)) {
@@ -306,59 +370,42 @@ function settings_validate_credential(string $key, string $name, string $value):
 }
 
 /** Append an audit entry. Metadata must never include credential values. */
-function settings_log(string $action, string $target, array $meta): void
+function settings_log(string $action, string $target, array $meta, ?Session $session = null): void
 {
     $actor = current_user();
+    $options = $session !== null ? ['session' => $session] : [];
     DatabaseConnection::db()->selectCollection('activityLogs')->insertOne([
         'actorId' => $actor['id'] ?? null,
         'action' => $action,
         'target' => $target,
         'meta' => $meta,
         'at' => new UTCDateTime(),
-    ]);
+    ], $options);
 }
 
 /**
- * PUT /api/admin/settings/integrations/{key}
- * Toggle an integration and/or replace/clear its credentials. Omitted fields
- * stay unchanged; an empty string clears a credential. Clearing a required
- * credential auto-disables the integration.
+ * Build a field-level update plan. Validation and required-credential rules
+ * live here so they can be tested without a database.
  */
-function settings_update(array $params = []): array
+function settings_plan_update(string $key, array $effective, array $data): array
 {
-    $admin = require_admin();
-    $key = (string)($params['key'] ?? '');
     $registry = settings_registry();
     if (!isset($registry[$key])) {
         api_abort('unknown integration', 404);
     }
-    if (empty($registry[$key]['available'])) {
-        api_abort('planned integrations cannot be changed', 422);
-    }
 
-    $data = json_body();
-    $effective = settings_effective($key);
-    $enabled = (bool)$effective['enabled'];
+    $enabled = (bool)($effective['enabled'] ?? false);
+    $enabledChanged = false;
     $changed = [];
+    $credentialWrites = [];
 
     if (array_key_exists('enabled', $data)) {
         if (!is_bool($data['enabled'])) {
             api_abort('enabled must be a boolean', 422);
         }
         $enabled = $data['enabled'];
+        $enabledChanged = true;
         $changed[] = 'enabled';
-    }
-
-    // Start from current values so omitted credentials stay unchanged.
-    $credentials = [];
-    foreach ($registry[$key]['credentials'] as $name => $def) {
-        $current = $effective['credentials'][$name] ?? [];
-        $currentUpdatedAt = $current['updatedAt'] ?? null;
-        $credentials[$name] = [
-            'value' => (string)($current['value'] ?? ''),
-            'last4' => (string)($current['last4'] ?? ''),
-            'updatedAt' => $currentUpdatedAt instanceof UTCDateTime ? $currentUpdatedAt : null,
-        ];
     }
 
     if (array_key_exists('credentials', $data)) {
@@ -374,9 +421,9 @@ function settings_update(array $params = []): array
             }
             $value = trim($raw);
             settings_validate_credential($key, (string)$name, $value);
-            $credentials[$name] = [
+            $credentialWrites[$name] = $value === '' ? null : [
                 'value' => $value,
-                'last4' => $value !== '' ? substr($value, -4) : '',
+                'last4' => settings_credential_hint($key, (string)$name, $value),
                 'updatedAt' => new UTCDateTime(),
             ];
             $changed[] = 'credentials.' . $name;
@@ -388,35 +435,134 @@ function settings_update(array $params = []): array
     }
 
     foreach ($registry[$key]['credentials'] as $name => $def) {
-        if (empty($def['required']) || $credentials[$name]['value'] !== '') {
+        if (empty($def['required'])) {
+            continue;
+        }
+        $value = array_key_exists($name, $credentialWrites)
+            ? (string)($credentialWrites[$name]['value'] ?? '')
+            : (string)($effective['credentials'][$name]['value'] ?? '');
+        if ($value !== '') {
             continue;
         }
         if ($enabled) {
-            if (in_array('enabled', $changed, true)) {
+            if ($enabledChanged) {
                 api_abort('cannot enable this integration without its required credential', 422);
             }
             // Clearing a required credential auto-disables the integration.
             $enabled = false;
+            $enabledChanged = true;
+            if (!in_array('enabled', $changed, true)) {
+                $changed[] = 'enabled';
+            }
         }
     }
 
-    settings_collection()->updateOne(
-        ['key' => $key],
-        [
-            '$set' => [
-                'enabled' => $enabled,
-                'credentials' => $credentials,
-                'updatedAt' => new UTCDateTime(),
-                'updatedBy' => $admin['email'] ?? null,
-            ],
-            '$setOnInsert' => ['key' => $key],
-        ],
-        ['upsert' => true]
-    );
-    settings_log('integration_settings_update', $key, [
+    $set = [];
+    $unset = [];
+    $setOnInsert = ['key' => $key];
+
+    if ($enabledChanged) {
+        $set['enabled'] = $enabled;
+    } else {
+        $setOnInsert['enabled'] = $enabled;
+    }
+
+    foreach ($registry[$key]['credentials'] as $name => $def) {
+        if (array_key_exists($name, $credentialWrites)) {
+            if ($credentialWrites[$name] === null) {
+                $unset['credentials.' . $name] = true;
+            } else {
+                $set['credentials.' . $name] = $credentialWrites[$name];
+            }
+            continue;
+        }
+        // Preserve omitted credentials when the document is first inserted.
+        $current = is_array($effective['credentials'][$name] ?? null)
+            ? $effective['credentials'][$name] : [];
+        $updatedAt = $current['updatedAt'] ?? null;
+        $setOnInsert['credentials.' . $name] = [
+            'value' => (string)($current['value'] ?? ''),
+            'last4' => (string)($current['last4'] ?? ''),
+            'updatedAt' => $updatedAt instanceof UTCDateTime ? $updatedAt : null,
+        ];
+    }
+
+    return [
         'enabled' => $enabled,
         'changed' => $changed,
-    ]);
+        'set' => $set,
+        'unset' => $unset,
+        'set_on_insert' => $setOnInsert,
+    ];
+}
 
-    return ['ok' => true, 'integration' => settings_shape($key, settings_effective($key))];
+/**
+ * PUT /api/admin/settings/integrations/{key}
+ * Toggle an integration and/or replace/clear its credentials. Omitted fields
+ * stay unchanged; an empty string clears a credential. Clearing a required
+ * credential auto-disables the integration. The settings write and audit entry
+ * commit together so a reported success is always audited.
+ */
+function settings_update(array $params = []): array
+{
+    $admin = require_admin();
+    $key = (string)($params['key'] ?? '');
+    $registry = settings_registry();
+    if (!isset($registry[$key])) {
+        api_abort('unknown integration', 404);
+    }
+    if (empty($registry[$key]['available'])) {
+        api_abort('planned integrations cannot be changed', 422);
+    }
+
+    $data = json_body();
+    $effective = settings_effective($key);
+    $plan = settings_plan_update($key, $effective, $data);
+
+    $set = $plan['set'];
+    $set['updatedAt'] = new UTCDateTime();
+    $set['updatedBy'] = $admin['email'] ?? null;
+    $update = ['$set' => $set];
+    if ($plan['unset'] !== []) {
+        $update['$unset'] = $plan['unset'];
+    }
+    if ($plan['set_on_insert'] !== []) {
+        $update['$setOnInsert'] = $plan['set_on_insert'];
+    }
+
+    $session = DatabaseConnection::client()->startSession();
+    try {
+        $session->startTransaction();
+        $updated = settings_collection()->findOneAndUpdate(
+            ['key' => $key],
+            $update,
+            [
+                'upsert' => true,
+                'returnDocument' => FindOneAndUpdate::RETURN_DOCUMENT_AFTER,
+                'session' => $session,
+            ]
+        );
+        $normalized = settings_normalize($updated);
+        if (!is_array($normalized)) {
+            throw new RuntimeException('settings update returned no document');
+        }
+        $shape = settings_shape($key, settings_effective_from_doc($key, $normalized));
+        settings_log('integration_settings_update', $key, [
+            'enabled' => $plan['enabled'],
+            'changed' => $plan['changed'],
+        ], $session);
+        $session->commitTransaction();
+        return ['ok' => true, 'integration' => $shape];
+    } catch (Throwable $e) {
+        if ($session->isInTransaction()) {
+            try {
+                $session->abortTransaction();
+            } catch (Throwable $abortError) {
+                error_log('[gamehub] settings transaction abort failed');
+            }
+        }
+        throw $e;
+    } finally {
+        $session->endSession();
+    }
 }

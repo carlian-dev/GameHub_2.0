@@ -26,7 +26,7 @@ Small static-frontend + PHP-API + MongoDB Atlas stack. No framework, no build, n
 ## Auth / data rules (do not break)
 
 - Account lifecycle: `pending → active → archived` (plus `decline → declined`, terminal). Only `active` logs in; `GET /api/me` re-reads Atlas every guarded page load.
-- Cashier registration is invitation-only: admin invites by email (`/api/admin/invitations`), register requires matching `token + email`. Admin signs in via email+password or Google (`GOOGLE_CLIENT_ID` verified server-side). Cashier login is username+password only (no email codes).
+- Cashier registration is invitation-only: admin invites by email (`/api/admin/invitations`), register requires matching `token + email`. Admin signs in via email+password or Google (the `googleAuth` setting's client ID is verified server-side). Cashier login is username+password only (no email codes).
 - No OTP/email-code system: archive is one-step (confirm dialog → `POST /api/admin/cashiers/{id}/archive`). Login never issues codes.
 - Role comes from the server session only — never trust request data. Every listing/state-changing endpoint re-checks `require_login`/`require_admin`. List endpoints project out password hashes; plain secrets never touch logs/responses, and private credential values are never returned (admin settings expose only `configured` + `masked`).
 - Collections in `gamehub_2_0`: `users` (partial-unique `email`, sparse-unique `username`), `tables` (unique `name`), `rates`, `sessions`, `invitations`, `activityLogs`, `settings` (unique `key`), `healthcheck`. Approve/decline/archive/unarchive and integration updates write `activityLogs`.

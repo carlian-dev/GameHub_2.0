@@ -75,14 +75,20 @@ Migrations and seed work are one-time scripts, never per-request queries.
 
 - `GET /api/config` is public and exposes feature state only:
   `{"ok":true,"integrations":{"googleAuth":{"enabled":true,"clientId":"..."},"googleMaps":{"enabled":false,"apiKey":""}}}`.
-  Disabled integrations expose empty credential strings, never stored values.
+  Both settings documents are read in one query; disabled integrations expose
+  empty credential strings, never stored values. A settings read failure fails
+  closed for both integrations. Environment defaults apply only when the
+  relevant document is positively absent.
 - `GET /api/admin/settings/integrations` requires an admin session and returns
   the integration cards with `available`, `enabled`, `updatedAt`, `updatedBy`,
-  and credentials reduced to `{name,label,required,configured,masked}`.
+  and credentials reduced to `{name,label,required,configured,masked}`. Google
+  client-ID masks use the last four identifying characters before
+  `.apps.googleusercontent.com`, not the constant suffix.
 - `PUT /api/admin/settings/integrations/{key}` accepts
   `{enabled?: bool, credentials?: {name: string}}`. An empty string clears a
   credential; clearing a required credential auto-disables the integration.
-  Every update writes an `activityLogs` entry without credential values.
+  The handler writes only changed fields and commits the settings update plus
+  its `activityLogs` entry (no credential values) in one MongoDB transaction.
 - The `settings` collection is authoritative (`unique key`). Environment
   `GOOGLE_CLIENT_ID` is only the default when no `googleAuth` document exists;
   `php Backend/scripts/setup_settings.php` creates the index and seeds keys once.

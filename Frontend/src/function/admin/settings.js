@@ -94,15 +94,17 @@
     if (sw) sw.disabled = true;
     cardError(card, "");
     return updateAdminIntegration(integration.key, { enabled: next })
-      .then((res) => {
+      .then(async (res) => {
         const now = res && res.integration ? res.integration.enabled : next;
         dashToast(`${integration.name} is now ${now ? "on" : "off"}.`, "ok");
-        return loadIntegrations(true);
+        await applySaveResult(card, res);
       })
       .catch((e) => {
-        if (sw) sw.disabled = false;
         cardError(card, e.message);
         dashToast(e.message, "err");
+      })
+      .finally(() => {
+        if (sw) sw.disabled = false;
       });
   }
 
@@ -119,7 +121,8 @@
   function openEditor(row, integration, cred) {
     const editor = row.querySelector(".api-edit");
     const actions = row.querySelector(".api-actions");
-    if (!editor || !actions) return;
+    const card = row.closest(".api-card");
+    if (!editor || !actions || !card) return;
     actions.hidden = true;
     editor.hidden = false;
     editor.replaceChildren();
@@ -150,17 +153,20 @@
       cancel.disabled = true;
       err.hidden = true;
       try {
-        await updateAdminIntegration(integration.key, {
+        const res = await updateAdminIntegration(integration.key, {
           credentials: { [cred.name]: value },
         });
+        input.value = "";
         dashToast(`${cred.label} updated.`, "ok");
-        await loadIntegrations(true);
+        closeEditor(row);
+        await applySaveResult(card, res);
       } catch (e) {
         err.textContent = e.message;
         err.hidden = false;
+        dashToast(e.message, "err");
+      } finally {
         save.disabled = false;
         cancel.disabled = false;
-        dashToast(e.message, "err");
       }
     });
     const cancel = makeButton("Cancel", "btn btn-ghost api-btn", () => closeEditor(row));
@@ -185,7 +191,7 @@
       });
       const disabled = res && res.integration && res.integration.enabled === false;
       dashToast(disabled ? `Credential cleared. ${integration.name} is now off.` : "Credential cleared.", "ok");
-      await loadIntegrations(true);
+      await applySaveResult(card, res);
     } catch (e) {
       cardError(card, e.message);
       dashToast(e.message, "err");
@@ -289,9 +295,24 @@
     return card;
   }
 
+  async function applySaveResult(card, res) {
+    const integration = res && res.integration;
+    if (integration && Array.isArray(integration.credentials) && typeof integration.available === "boolean") {
+      card.replaceWith(integrationCard(integration));
+      return true;
+    }
+    // Older/partial responses fall back to a list reload, but a failure here
+    // must not leave the saved form or switch stuck.
+    const loaded = await loadIntegrations(true);
+    if (!loaded) {
+      setApiStatus("Saved, but the latest state could not be reloaded. Switch tabs to retry.", "err");
+    }
+    return loaded;
+  }
+
   async function loadIntegrations(force = false) {
-    if (!apiList || apiLoading) return;
-    if (apiLoaded && !force) return;
+    if (!apiList || apiLoading) return false;
+    if (apiLoaded && !force) return true;
     apiLoading = true;
     setApiStatus("Loading integrations…", "loading");
     try {
@@ -301,9 +322,12 @@
       integrations.forEach((integration) => apiList.appendChild(integrationCard(integration)));
       apiLoaded = true;
       setApiStatus(integrations.length ? "" : "No integrations are available.");
+      return true;
     } catch (e) {
+      apiLoaded = false;
       setApiStatus(e.message, "err");
       dashToast(e.message, "err");
+      return false;
     } finally {
       apiLoading = false;
     }

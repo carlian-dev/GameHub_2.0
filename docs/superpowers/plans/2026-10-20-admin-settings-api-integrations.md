@@ -14,9 +14,9 @@
 
 - All admin settings endpoints must call `require_admin()`; never trust a role from request data.
 - All frontend API calls go through `Frontend/js/api.js`, which must keep `credentials: "include"`.
-- Never return, log, or audit a full credential value. Admin list responses expose only `configured`, `masked`, and `last4`-derived hints.
-- Database settings are the source of truth once a document exists. Environment values are used only when no document exists or when `GET /api/config` catches a read failure for Google Auth.
-- `POST /api/auth/google` and `PUT` settings handlers fail closed with `503` on a settings-store read failure.
+- Never return, log, or audit a full credential value. Admin list responses expose only `configured`, `masked`, and safe display hints.
+- Database settings are the source of truth once a document exists. Environment values are used only when no document exists; a read failure never falls back to the environment.
+- Settings-store read failures fail closed: `POST /api/auth/google` returns `503`, `/api/config` disables both integrations, and `PUT` never falls back to environment values.
 - Use one-time scripts for indexes/seeding; never create indexes or seed settings per request.
 - Use `dashConfirm`, `dashAlert`, `dashToast`, and the existing dialog system; do not add native `alert`, `confirm`, or `prompt`.
 - Preserve the existing uncommitted changes in `Frontend/css/dashboard.css`. Do not stage that file. Put new styles in `Frontend/css/settings.css`.
@@ -50,7 +50,8 @@ These are the cases most likely to break a real admin:
 - `settings_default(string $key): array`
 - `settings_document(string $key): ?array`
 - `settings_effective(string $key): array`
-- `settings_mask_value(string $value): string`
+- `settings_credential_hint(string $key, string $name, string $value): string`
+- `settings_mask_value(string $value, string $hint = ''): string`
 - `settings_shape(string $key, array $doc): array`
 - `settings_public_config(): array`
 - `settings_google_auth(): array`
@@ -112,7 +113,7 @@ These are the cases most likely to break a real admin:
     'credentials' => [
         'clientId' => [
             'value' => '...',
-            'last4' => '1abc',
+            'last4' => 'ab12',
             'updatedAt' => MongoDB\BSON\UTCDateTime|null,
         ],
     ],
@@ -126,7 +127,7 @@ Rules for `settings_effective()`:
 - If a settings document exists, use it exclusively.
 - If no document exists, use `settings_default($key)`.
 - Normalize BSON documents to PHP arrays.
-- Derive `last4` from the value when a legacy document has no stored hint.
+- Derive the display hint from the value on every read. For Google client IDs it is the last four identifying characters before `.apps.googleusercontent.com`, never the constant suffix.
 - If a required credential is empty, force `enabled` to `false`.
 - Do not read a credential from the environment when a document exists.
 
@@ -139,10 +140,12 @@ Rules for `settings_effective()`:
 ]
 ```
 
-`app_config()` adds `ok`, wraps the integrations, adds a temporary top-level `googleClientId` for compatibility with the current `login.js`, and calls `header('Cache-Control: no-store')`. On a settings read exception, log a generic message and fall back to:
+`app_config()` adds `ok`, wraps the integrations, adds a temporary top-level `googleClientId` for compatibility with the current `login.js`, and calls `header('Cache-Control: no-store')`. It resolves both integration documents in one settings read. On a settings read exception, log a generic message and fail closed for both:
 
-- Google Auth: env `GOOGLE_CLIENT_ID` if present, otherwise disabled.
-- Google Maps: disabled.
+- Google Auth: disabled, empty client ID.
+- Google Maps: disabled, empty key.
+
+Environment defaults are used only when the relevant document is positively absent.
 
 `settings_shape()` returns:
 
@@ -159,7 +162,7 @@ Rules for `settings_effective()`:
             'label' => 'OAuth Client ID',
             'required' => true,
             'configured' => true,
-            'masked' => '••••••••1abc',
+            'masked' => '••••••••ab12',
         ],
     ],
     'updatedAt' => '2026-10-20T10:00:00+08:00' or null,
@@ -167,7 +170,7 @@ Rules for `settings_effective()`:
 ]
 ```
 
-Masking rule: `str_repeat('•', 8) . substr($value, -4)` when `strlen($value) > 8`; otherwise `str_repeat('•', 8)`. Empty value returns `''`.
+Masking rule: eight bullets plus a four-character hint when `strlen($value) > 8`; bullets only otherwise; empty value returns `''`. The hint is the last four characters for ordinary credentials. For a Google client ID it is the last four characters before the fixed `.apps.googleusercontent.com` suffix, so `1234-ab12.apps.googleusercontent.com` becomes `••••••••ab12`.
 
 - [ ] **Step 1: Confirm the route is missing**
 
@@ -245,7 +248,8 @@ git commit -m "feat: add admin settings registry and public integration config"
 **Interfaces:**
 - `settings_update(array $params = []): array` — returns `['ok' => true, 'integration' => settings_shape(...)]`.
 - `settings_validate_credential(string $key, string $name, string $value): void` — throws `api_abort(..., 422)` on failure.
-- `settings_log(string $action, string $target, array $meta): void` — writes `activityLogs` with `actorId`, `action`, `target`, `meta`, `at`.
+- `settings_plan_update(string $key, array $effective, array $data): array` — validates and builds the field-level update plan.
+- `settings_log(string $action, string $target, array $meta, ?MongoDB\Driver\Session $session = null): void` — writes `activityLogs` with `actorId`, `action`, `target`, `meta`, `at`; joins the caller's transaction when given a session.
 
 Update rules:
 
@@ -254,12 +258,14 @@ Update rules:
 - Unknown credential name → `422`.
 - `enabled` must be a JSON boolean if present.
 - Credential values are trimmed, max 2048 characters.
-- Google `clientId` must end with `.apps.googleusercontent.com`.
+- Google `clientId` must match `^[A-Za-z0-9_-]{5,}\.apps\.googleusercontent\.com$`; a bare domain suffix is rejected.
 - Maps key, when non-empty, must contain no whitespace.
 - Omitted credentials stay unchanged.
 - An explicit `""` clears the credential.
 - Enabling without a required credential → `422`.
 - Clearing a required credential while the integration is enabled auto-disables it and reports the new state.
+- Only changed fields are written (`$set`/`$unset`), with omitted fields preserved on insert via `$setOnInsert`.
+- The settings write and its audit entry commit in one MongoDB transaction. A success response means both were stored.
 - Audit `meta` contains only `{enabled, changed}`; `changed` is a list such as `["enabled","credentials.clientId"]`.
 
 `Backend/scripts/setup_settings.php` must:
@@ -629,11 +635,12 @@ Use DOM creation and `textContent`, never `innerHTML` with server values.
 - [ ] **Step 4: Implement toggle and credential actions**
 
 - Toggle off: call `dashConfirm` first. If cancelled, restore the switch.
-- Toggle on/off save: call `updateAdminIntegration(key, { enabled })`, show `dashToast`, then reload the list.
+- Toggle on/off save: call `updateAdminIntegration(key, { enabled })`, show `dashToast`, and apply the returned integration object directly to the card. Reload the list only as a fallback when the response lacks a complete card.
 - Replace: reveal a password-type input with Save/Cancel. Save trims, rejects empty with an inline error, calls `updateAdminIntegration(key, { credentials: { [name]: value } })`.
 - Add (no existing value): same replacement form.
 - Clear: `dashConfirm`, then call `updateAdminIntegration(key, { credentials: { [name]: "" } })`.
-- If a required credential is cleared and the backend auto-disables the integration, reload the list and show the new `Off` state.
+- If a required credential is cleared and the backend auto-disables the integration, apply the returned card and show the new `Off` state.
+- If the response is older or partial and a fallback reload also fails, keep the saved UI state, show an inline `Saved, but the latest state could not be reloaded` message, and re-enable the form controls.
 - On any API error: restore the previous UI state, show an inline `api-error`, and `dashToast(..., "err")`.
 - Planned cards cannot be toggled or edited.
 
@@ -646,7 +653,7 @@ Extend `Frontend/css/settings.css` with `.api-grid`, `.api-card`, `.api-card-hea
 - Google Auth and Maps show current state and masks.
 - reCAPTCHA and OTP show `Planned` and cannot be changed.
 - Disabling Google Auth asks for confirmation.
-- Replacing the client ID changes the masked suffix and persists after reload.
+- Replacing the client ID changes the masked hint and persists after reload.
 - Clearing the client ID auto-disables Google Auth.
 - Full credentials never appear in the response or page source.
 - Invalid client ID shows an inline error and no state change.

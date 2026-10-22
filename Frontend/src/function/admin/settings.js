@@ -75,6 +75,23 @@
     if (tab === "api") loadIntegrations();
   }
 
+  // Keep the visible tab in sync with the URL hash. The gear menu links to
+  // settings.html#profile / #api; when Settings is already open the browser
+  // only fires hashchange (no reload), so the page must switch tabs itself.
+  function selectTab(tab) {
+    const wanted = tab === "api" ? "api" : "profile";
+    const btn = document.querySelector(`.dash-tabs [data-t="${wanted}"]`);
+    if (btn && !btn.classList.contains("on")) {
+      btn.click();
+      return;
+    }
+    showTab(wanted);
+  }
+
+  function tabFromHash() {
+    return location.hash === "#api" ? "api" : "profile";
+  }
+
   // ---- API integration cards ----
   function statusPill(integration) {
     let label = "Off";
@@ -372,10 +389,8 @@
       }
 
       dashTabsInit(showTab);
-      const wanted = location.hash === "#api" ? "api" : "profile";
-      const btn = document.querySelector(`.dash-tabs [data-t="${wanted}"]`);
-      if (btn) btn.click();
-      else showTab(wanted);
+      selectTab(tabFromHash());
+      window.addEventListener("hashchange", () => selectTab(tabFromHash()));
     } catch (e) {
       if (!msg) return;
       setText("who", "Signed out");

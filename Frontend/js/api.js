@@ -6,15 +6,30 @@
 // Purpose: fetch wrapper. Frontend never talks to MongoDB directly, only to PHP Backend.
 // NOTE: credentials:"include" sends the PHP session cookie, without it login
 // would succeed but the next request would look like a stranger (401).
+// A hung backend/Atlas connection must not leave a page on "Loading…" forever.
+const API_TIMEOUT_MS = 15000;
+
 async function api(path, options = {}) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      ...options,
+      signal: options.signal || controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  } catch (e) {
+    if (e && e.name === "AbortError") {
+      throw new Error("The server took too long to respond. Please try again.");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function getHealth() {

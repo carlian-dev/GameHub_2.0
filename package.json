@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "concurrently --kill-others -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "php -S localhost:8000 -t Backend/public",
+    "predev:frontend": "node scripts/free-port.js 5500",
     "dev:frontend": "live-server Frontend --host=localhost --port=5500"
   },
   "devDependencies": {

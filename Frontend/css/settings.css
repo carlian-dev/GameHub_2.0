@@ -272,7 +272,7 @@
 }
 .api-credential {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 6px 14px;
   align-items: center;
   padding: 13px 0;
@@ -313,6 +313,8 @@
 }
 .api-actions {
   display: flex;
+  grid-column: 3;
+  grid-row: 1;
   gap: 8px;
   justify-content: flex-end;
 }
@@ -378,6 +380,14 @@
 @media (max-width: 980px) {
   .api-grid { grid-template-columns: 1fr; }
   .settings-fields { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .api-credential { grid-template-columns: minmax(0, 1fr) auto; }
+  .api-actions {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
 }
 @media (max-width: 560px) {
   .settings-profile { padding: 20px 18px; }

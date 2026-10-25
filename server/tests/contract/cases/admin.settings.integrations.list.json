@@ -1,0 +1,54 @@
+{
+  "id": "admin.settings.integrations.list",
+  "route": "GET /api/admin/settings/integrations (admin)",
+  "method": "GET",
+  "path": "/api/admin/settings/integrations",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "integrations": [
+        {
+          "key": "googleAuth",
+          "name": "Google Authentication",
+          "description": "Admin Google sign-in",
+          "available": true,
+          "enabled": false,
+          "credentials": [{ "name": "clientId", "label": "OAuth Client ID", "required": true, "configured": false, "masked": "" }],
+          "updatedAt": null,
+          "updatedBy": null
+        },
+        {
+          "key": "googleMaps",
+          "name": "Google Maps",
+          "description": "Location map on the public landing page",
+          "available": true,
+          "enabled": true,
+          "credentials": [{ "name": "apiKey", "label": "Maps API key (optional)", "required": false, "configured": false, "masked": "" }],
+          "updatedAt": null,
+          "updatedBy": null
+        },
+        {
+          "key": "recaptcha",
+          "name": "reCAPTCHA",
+          "description": "Bot protection (planned)",
+          "available": false,
+          "enabled": false,
+          "credentials": [],
+          "updatedAt": null,
+          "updatedBy": null
+        },
+        {
+          "key": "otp",
+          "name": "OTP / email codes",
+          "description": "Email verification codes (planned)",
+          "available": false,
+          "enabled": false,
+          "credentials": [],
+          "updatedAt": null,
+          "updatedBy": null
+        }
+      ]
+    }
+  }
+}

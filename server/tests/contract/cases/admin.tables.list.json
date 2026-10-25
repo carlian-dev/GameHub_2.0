@@ -1,0 +1,17 @@
+{
+  "id": "admin.tables.list",
+  "route": "GET /api/admin/tables (admin)",
+  "method": "GET",
+  "path": "/api/admin/tables",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "tables": [
+        { "id": "<dyn>", "name": "Table 1", "status": "available", "archived": false, "createdAt": "<dyn>" },
+        { "id": "<dyn>", "name": "Table 2", "status": "occupied", "archived": false, "createdAt": "<dyn>" },
+        { "id": "<dyn>", "name": "Table 3", "status": "available", "archived": true, "createdAt": "<dyn>" }
+      ]
+    }
+  }
+}

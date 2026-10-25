@@ -1,0 +1,16 @@
+{
+  "id": "auth.login.happy",
+  "route": "POST /api/login (admin, active)",
+  "method": "POST",
+  "path": "/api/login",
+  "body": { "email": "admin@gamehub.local", "password": "AdminPass123!" },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "username": null,
+      "email": "admin@gamehub.local",
+      "role": "admin"
+    }
+  }
+}

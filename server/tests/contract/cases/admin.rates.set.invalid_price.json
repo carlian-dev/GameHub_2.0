@@ -1,0 +1,11 @@
+{
+  "id": "admin.rates.set.invalid_price",
+  "route": "PUT /api/admin/rates (invalid price)",
+  "method": "PUT",
+  "path": "/api/admin/rates",
+  "body": { "type": "regular", "pricePerHour": -10 },
+  "expect": {
+    "status": 422,
+    "body": { "ok": false, "error": "pricePerHour must be a positive number" }
+  }
+}

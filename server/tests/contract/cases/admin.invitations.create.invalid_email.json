@@ -1,0 +1,11 @@
+{
+  "id": "admin.invitations.create.invalid_email",
+  "route": "POST /api/admin/invitations (invalid email)",
+  "method": "POST",
+  "path": "/api/admin/invitations",
+  "body": { "email": "not-an-email" },
+  "expect": {
+    "status": 422,
+    "body": { "ok": false, "error": "valid email is required" }
+  }
+}

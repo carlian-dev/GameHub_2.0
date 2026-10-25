@@ -1,0 +1,13 @@
+{
+  "id": "transactions.admin.list",
+  "route": "GET /api/admin/transactions (admin)",
+  "method": "GET",
+  "path": "/api/admin/transactions",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "transactions": []
+    }
+  }
+}

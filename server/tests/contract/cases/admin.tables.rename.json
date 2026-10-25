@@ -1,0 +1,20 @@
+{
+  "id": "admin.tables.rename",
+  "route": "PUT /api/admin/tables/{id} (admin)",
+  "method": "PUT",
+  "path": "/api/admin/tables/<dyn>",
+  "body": { "name": "VIP Table" },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "table": {
+        "id": "<dyn>",
+        "name": "VIP Table",
+        "status": "<dyn>",
+        "archived": false,
+        "createdAt": "<dyn>"
+      }
+    }
+  }
+}

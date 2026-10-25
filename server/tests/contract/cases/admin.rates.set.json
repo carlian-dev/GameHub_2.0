@@ -1,0 +1,14 @@
+{
+  "id": "admin.rates.set",
+  "route": "PUT /api/admin/rates (admin)",
+  "method": "PUT",
+  "path": "/api/admin/rates",
+  "body": { "type": "regular", "pricePerHour": 150 },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "rate": { "type": "regular", "pricePerHour": 150, "active": true }
+    }
+  }
+}

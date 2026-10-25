@@ -1,0 +1,19 @@
+{
+  "id": "reports.daily",
+  "route": "GET /api/admin/reports/daily (admin)",
+  "method": "GET",
+  "path": "/api/admin/reports/daily",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "date": "<dyn>",
+      "count": 0,
+      "gross": 0,
+      "byMethod": {
+        "cash": { "count": 0, "gross": 0 },
+        "gcash": { "count": 0, "gross": 0 }
+      }
+    }
+  }
+}

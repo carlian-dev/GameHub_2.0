@@ -1,0 +1,41 @@
+{
+  "name": "gamehub-2-0-server",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Express port of the GameHub_2.0 backend (PHP -> Node/Express migration).",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test",
+    "test:unit": "node --test tests/unit",
+    "test:integration": "node --test tests/integration",
+    "test:contract": "node tests/contract/run.node.mjs",
+    "test:contract:node": "node tests/contract/run.node.mjs",
+    "test:contract:php": "node tests/contract/run.php.mjs",
+    "test:contract:diff": "node tests/contract/run.diff.mjs",
+    "seed": "node scripts/resetDb.js",
+    "setup:settings": "node scripts/setupSettings.js",
+    "setup:indexes": "node scripts/setupIndexes.js",
+    "verify:indexes": "node scripts/verifyIndexes.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "connect-mongo": "^5.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.0.1",
+    "express-session": "^1.18.1",
+    "mongodb": "^6.10.0",
+    "nodemailer": "^6.9.16"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^10.1.2",
+    "supertest": "^7.0.0"
+  },
+  "allowScripts": {}
+}

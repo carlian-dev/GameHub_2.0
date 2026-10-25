@@ -1,0 +1,11 @@
+{
+  "id": "admin.cashiers.update.invalid_schedule",
+  "route": "PUT /api/admin/cashiers/{id} (invalid schedule)",
+  "method": "PUT",
+  "path": "/api/admin/cashiers/<dyn>",
+  "body": { "schedule": "bad-schedule" },
+  "expect": {
+    "status": 422,
+    "body": { "ok": false, "error": "schedule must be HH:MM - HH:MM (or empty to clear)" }
+  }
+}

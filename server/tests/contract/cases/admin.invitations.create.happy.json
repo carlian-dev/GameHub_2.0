@@ -1,0 +1,18 @@
+{
+  "id": "admin.invitations.create.happy",
+  "route": "POST /api/admin/invitations (admin)",
+  "method": "POST",
+  "path": "/api/admin/invitations",
+  "headers": { "Content-Type": "application/json" },
+  "body": { "email": "newcashier@gamehub.local" },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "id": "<dyn>",
+      "email": "newcashier@gamehub.local",
+      "link": "<dyn>",
+      "message": "invitation sent (valid 24 hours, single use)"
+    }
+  }
+}

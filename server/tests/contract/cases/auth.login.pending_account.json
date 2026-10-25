@@ -1,0 +1,11 @@
+{
+  "id": "auth.login.pending_account",
+  "route": "POST /api/login (pending account)",
+  "method": "POST",
+  "path": "/api/login",
+  "body": { "username": "pending1", "password": "x" },
+  "expect": {
+    "status": 403,
+    "body": { "ok": false, "error": "awaiting admin approval" }
+  }
+}

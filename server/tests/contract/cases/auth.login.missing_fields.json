@@ -1,0 +1,11 @@
+{
+  "id": "auth.login.missing_fields",
+  "route": "POST /api/login (missing email/password)",
+  "method": "POST",
+  "path": "/api/login",
+  "body": {},
+  "expect": {
+    "status": 422,
+    "body": { "ok": false, "error": "login and password are required" }
+  }
+}

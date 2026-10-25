@@ -1,0 +1,13 @@
+{
+  "id": "admin.sessions.list",
+  "route": "GET /api/admin/sessions (admin)",
+  "method": "GET",
+  "path": "/api/admin/sessions",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "sessions": []
+    }
+  }
+}

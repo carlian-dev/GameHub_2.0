@@ -1,0 +1,32 @@
+{
+  "id": "transactions.admin.get",
+  "route": "GET /api/admin/transactions/{ref} (admin)",
+  "method": "GET",
+  "path": "/api/admin/transactions/<dyn>",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "transaction": {
+        "id": "<dyn>",
+        "ref": "<dyn>",
+        "sessionId": "<dyn>",
+        "tableId": "<dyn>",
+        "tableName": "<dyn>",
+        "customerName": "<dyn>",
+        "cashierId": "<dyn>",
+        "cashierName": "<dyn>",
+        "minutes": 0,
+        "billedHours": 0,
+        "pricePerHour": 0,
+        "rateType": null,
+        "total": 0,
+        "method": "",
+        "received": 0,
+        "change": 0,
+        "paidAt": "<dyn>",
+        "createdAt": "<dyn>"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "admin.rates.list",
+  "route": "GET /api/admin/rates (admin)",
+  "method": "GET",
+  "path": "/api/admin/rates",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "rates": [
+        { "type": "regular", "pricePerHour": 140, "active": true },
+        { "type": "special", "pricePerHour": 180, "active": true }
+      ]
+    }
+  }
+}

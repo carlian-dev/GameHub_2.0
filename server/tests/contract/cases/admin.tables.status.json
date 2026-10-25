@@ -1,0 +1,20 @@
+{
+  "id": "admin.tables.status",
+  "route": "PUT /api/admin/tables/{id}/status (admin)",
+  "method": "PUT",
+  "path": "/api/admin/tables/<dyn>/status",
+  "body": { "status": "maintenance" },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "table": {
+        "id": "<dyn>",
+        "name": "<dyn>",
+        "status": "maintenance",
+        "archived": false,
+        "createdAt": "<dyn>"
+      }
+    }
+  }
+}

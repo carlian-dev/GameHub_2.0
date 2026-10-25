@@ -1,0 +1,11 @@
+{
+  "id": "transactions.create.short_payment",
+  "route": "POST /api/cashier/transactions (short payment)",
+  "method": "POST",
+  "path": "/api/cashier/transactions",
+  "body": { "sessionId": "<dyn>", "method": "cash", "received": 50 },
+  "expect": {
+    "status": 422,
+    "body": { "ok": false, "error": "short payment: received 50 < total 140" }
+  }
+}

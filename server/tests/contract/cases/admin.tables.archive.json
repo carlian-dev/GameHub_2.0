@@ -1,0 +1,10 @@
+{
+  "id": "admin.tables.archive",
+  "route": "POST /api/admin/tables/{id}/archive (admin)",
+  "method": "POST",
+  "path": "/api/admin/tables/<dyn>/archive",
+  "expect": {
+    "status": 200,
+    "body": { "ok": true, "id": "<dyn>", "archived": true }
+  }
+}

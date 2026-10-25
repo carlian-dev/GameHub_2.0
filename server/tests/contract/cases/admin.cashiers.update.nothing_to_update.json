@@ -1,0 +1,11 @@
+{
+  "id": "admin.cashiers.update.nothing_to_update",
+  "route": "PUT /api/admin/cashiers/{id} (nothing to update)",
+  "method": "PUT",
+  "path": "/api/admin/cashiers/<dyn>",
+  "body": {},
+  "expect": {
+    "status": 422,
+    "body": { "ok": false, "error": "nothing to update (allowed: displayName, schedule)" }
+  }
+}

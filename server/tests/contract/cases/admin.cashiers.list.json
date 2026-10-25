@@ -1,0 +1,13 @@
+{
+  "id": "admin.cashiers.list",
+  "route": "GET /api/admin/cashiers (admin)",
+  "method": "GET",
+  "path": "/api/admin/cashiers",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "cashiers": []
+    }
+  }
+}

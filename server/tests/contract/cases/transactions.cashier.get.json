@@ -1,0 +1,32 @@
+{
+  "id": "transactions.cashier.get",
+  "route": "GET /api/cashier/transactions/{ref} (auth)",
+  "method": "GET",
+  "path": "/api/cashier/transactions/<dyn>",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "transaction": {
+        "id": "<dyn>",
+        "ref": "<dyn>",
+        "sessionId": "<dyn>",
+        "tableId": "<dyn>",
+        "tableName": "<dyn>",
+        "customerName": "<dyn>",
+        "cashierId": "<dyn>",
+        "cashierName": "<dyn>",
+        "minutes": 0,
+        "billedHours": 0,
+        "pricePerHour": 0,
+        "rateType": null,
+        "total": 0,
+        "method": "",
+        "received": 0,
+        "change": 0,
+        "paidAt": "<dyn>",
+        "createdAt": "<dyn>"
+      }
+    }
+  }
+}

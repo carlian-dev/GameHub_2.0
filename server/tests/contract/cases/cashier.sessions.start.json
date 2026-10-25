@@ -1,0 +1,28 @@
+{
+  "id": "cashier.sessions.start",
+  "route": "POST /api/cashier/sessions (auth)",
+  "method": "POST",
+  "path": "/api/cashier/sessions",
+  "body": { "tableId": "<dyn>", "customerName": "Walk-in Customer", "durationMinutes": 60 },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "session": {
+        "id": "<dyn>",
+        "tableId": "<dyn>",
+        "tableName": "<dyn>",
+        "customerName": "Walk-in Customer",
+        "cashierId": "<dyn>",
+        "cashierName": "<dyn>",
+        "startTime": "<dyn>",
+        "endTime": "<dyn>",
+        "plannedMinutes": 60,
+        "status": "active",
+        "pricePerHour": 140,
+        "rateType": "regular",
+        "closedAt": null
+      }
+    }
+  }
+}

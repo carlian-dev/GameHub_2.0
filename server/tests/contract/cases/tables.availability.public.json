@@ -1,0 +1,15 @@
+{
+  "id": "tables.availability.public",
+  "route": "GET /api/tables/availability (public)",
+  "method": "GET",
+  "path": "/api/tables/availability",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "tables": [
+        { "id": "<dyn>", "name": "Table 1", "status": "available" }
+      ]
+    }
+  }
+}

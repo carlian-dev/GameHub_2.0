@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { invitationModel } from "../models/invitation.model.js";
 
-export function authService({ userModel, db }) {
+export function authService({ userModel, settingsModel, db }) {
   const usersColl = db.collection("users");
   const activityLogsColl = db.collection("activityLogs");
 
@@ -283,7 +283,7 @@ export function authService({ userModel, db }) {
       }
 
       const tokenEmail = String(tokeninfo.email || "").toLowerCase();
-      if (tokenEmail !== email.toLowerCase()) {
+      if (email && tokenEmail !== String(email).toLowerCase()) {
         const err = new Error("invalid Google sign-in");
         err.status = 401;
         throw err;

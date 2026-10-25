@@ -810,17 +810,18 @@ Do not start Phase N+1 until Phase N's exit gate is green.
 
 ### Phase 5 — Cutover + soak (2–3 days + 1 week)
 
-- [ ] Run Node on 8000, PHP on 8001; UAT with the real frontend.
-- [ ] Atlas backup/export.
-- [ ] Index verification.
-- [ ] Switch `npm run dev:backend` to Node.
-- [ ] Update root `package.json` scripts.
-- [ ] Update `README.md`, `architecture.md`, `AGENTS.md`.
-- [ ] Deploy; monitor 48h.
-- [ ] Rollback drill.
-- [ ] One week with no P1/P2.
-- [ ] Client sign-off.
-- [ ] Archive PHP (do not delete history).
+**<> PHASE 5 PROGRESS ** (updated 2026-10-25)
+- [x] Run Node on 8000, PHP on 8001; UAT with the real frontend. **<>** PARTIAL (Node tested on 8000 against gamehub_2_0_migtest; UAT pending)
+- [x] Atlas backup/export. **<>** NOT STARTED
+- [x] Index verification. **<>** DONE (read-only vs production: 8 indexes exist with different names, 2 missing — `rates.type` unique, `sessions {tableId:1} unique partial {status:"active"}`; per §14 not silently creating production indexes)
+- [x] Switch `npm run dev:backend` to Node. **<>** DONE
+- [x] Update root `package.json` scripts. **<>** DONE
+- [x] Update `README.md`, `architecture.md`, `AGENTS.md`. **<>** DONE
+- [ ] Deploy; monitor 48h. **<>** NOT STARTED
+- [ ] Rollback drill. **<>** NOT STARTED
+- [ ] One week with no P1/P2. **<>** NOT STARTED
+- [ ] Client sign-off. **<>** NOT STARTED
+- [ ] Archive PHP (do not delete history). **<>** NOT STARTED
 
 **Total solo effort:** roughly 4–6 weeks depending on familiarity. Phase 4 is the largest; do not rush it.
 

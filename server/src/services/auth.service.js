@@ -230,8 +230,124 @@ export function authService({ userModel, db }) {
     },
 
     /** Google admin-only login. */
-    async google({ idToken, email }) {
-      throw new Error("Google sign-in is temporarily unavailable");
+    async google({ idToken, email }, req) {
+      // Read googleAuth settings; DB authoritative; read failure → 503.
+      let authDoc;
+      try {
+        authDoc = await settingsModel.findOne("googleAuth");
+      } catch {
+        const err = new Error("Google sign-in is temporarily unavailable");
+        err.status = 503;
+        throw err;
+      }
+      if (!authDoc || !authDoc.enabled) {
+        const err = new Error("Google sign-in is not configured");
+        err.status = 503;
+        throw err;
+      }
+      const clientId = authDoc.credentials?.clientId?.value || "";
+      if (!clientId) {
+        const err = new Error("Google sign-in is not configured");
+        err.status = 503;
+        throw err;
+      }
+
+      // Verify the ID token with Google tokeninfo, 10s timeout.
+      let tokeninfo;
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        const response = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeout);
+        if (!response.ok) {
+          const err = new Error("invalid Google sign-in");
+          err.status = 401;
+          throw err;
+        }
+        tokeninfo = await response.json();
+      } catch (err) {
+        if (err.status === 401) throw err;
+        const err2 = new Error("Google sign-in is temporarily unavailable");
+        err2.status = 503;
+        throw err2;
+      }
+
+      // Check email_verified is the string "true".
+      if (tokeninfo.email_verified !== "true") {
+        const err = new Error("invalid Google sign-in");
+        err.status = 401;
+        throw err;
+      }
+
+      const tokenEmail = String(tokeninfo.email || "").toLowerCase();
+      if (tokenEmail !== email.toLowerCase()) {
+        const err = new Error("invalid Google sign-in");
+        err.status = 401;
+        throw err;
+      }
+
+      // Find user by email.
+      const user = await userModel.findByEmail(tokenEmail);
+      if (!user) {
+        const err = new Error("invalid Google sign-in");
+        err.status = 404;
+        throw err;
+      }
+
+      // Only admin can use Google login.
+      if (user.role !== "admin") {
+        const err = new Error("invalid Google sign-in");
+        err.status = 403;
+        throw err;
+      }
+
+      // Status gates (same as login).
+      for (const [status, message] of STATUS_GATES) {
+        if (user.status === status) {
+          const err = new Error(message);
+          err.status = 403;
+          throw err;
+        }
+      }
+      if (user.status !== "active") {
+        const err = new Error("account is not active");
+        err.status = 403;
+        throw err;
+      }
+
+      // Link googleSub only when empty.
+      const googleSub = String(tokeninfo.sub || "");
+      if (googleSub && !user.googleSub) {
+        await usersColl.updateOne(
+          { _id: user._id },
+          { $set: { googleSub, authProvider: "google" } }
+        );
+      }
+
+      // Session payload exactly (migration.md §13.1).
+      const payload = {
+        id: String(user._id),
+        username: user.username ?? null,
+        email: user.email ?? null,
+        role: user.role,
+      };
+
+      // Regenerate + save to prevent session fixation (divergence #1).
+      if (req.session.regenerate) {
+        await new Promise((resolve, reject) => {
+          req.session.regenerate((err) => {
+            if (err) return reject(err);
+            resolve();
+          });
+        });
+      }
+      req.session.user = payload;
+      await req.session.save();
+
+      return { username: user.username ?? null, email: user.email ?? null, role: user.role };
     },
   };
 }

@@ -2,15 +2,25 @@
   "name": "gamehub-2-0",
   "private": true,
   "version": "1.0.0",
-  "description": "GameHub_2.0 dev runner: PHP Backend (port 8000) + static Frontend with live-reload (port 5500). Sprint scope: the agreed 10 functional requirements only.",
+  "description": "GameHub_2.0 dev runner: Node/Express Backend (port 8000) + static Frontend with live-reload (port 5500). PHP backend retained for rollback.",
   "scripts": {
     "dev": "concurrently --kill-others -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
-    "dev:backend": "php -S localhost:8000 -t Backend/public",
+    "dev:backend": "cd server && npm run dev",
+    "dev:backend:php": "php -S localhost:8000 -t Backend/public",
     "predev:frontend": "node scripts/free-port.js 5500",
-    "dev:frontend": "live-server Frontend --host=localhost --port=5500"
+    "dev:frontend": "live-server Frontend --host=localhost --port=5500",
+    "seed": "cd server && npm run seed",
+    "setup:settings": "cd server && npm run setup:settings",
+    "setup:indexes": "cd server && npm run setup:indexes",
+    "verify:indexes": "cd server && npm run verify:indexes",
+    "test:unit": "cd server && npm run test:unit",
+    "test:contract": "cd server && npm run test:contract"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
     "live-server": "^1.2.2"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

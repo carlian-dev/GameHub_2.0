@@ -327,7 +327,7 @@ export function authController({ authService }) {
 
     google: asyncHandler(async (req, res) => {
       const { idToken, email } = req.body || {};
-      const result = await authService.google({ idToken, email });
+      const result = await authService.google({ idToken, email }, req);
       res.status(200).json(loginView(result));
     }),
 

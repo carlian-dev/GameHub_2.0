@@ -67,7 +67,7 @@ const server = app.listen(env.PORT, async () => {
         mongoClient,
         googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
       }),
-      auth: authService({ userModel: models.user, db }),
+      auth: authService({ userModel: models.user, settingsModel: models.settings, db }),
       invitation: invitationService({
         invitationModel: models.invitation,
         db,

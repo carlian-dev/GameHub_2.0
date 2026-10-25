@@ -812,7 +812,7 @@ Do not start Phase N+1 until Phase N's exit gate is green.
 
 **<> PHASE 5 PROGRESS ** (updated 2026-10-25)
 - [x] Run Node on 8000, PHP on 8001; UAT with the real frontend. **<>** PARTIAL (Node tested on 8000 against gamehub_2_0_migtest; UAT pending)
-- [x] Atlas backup/export. **<>** NOT STARTED
+- [x] Atlas backup/export. **<>** DONE (production gamehub_2_0: 10 collections, 212 documents exported to server/backups/pre-express-20261025/)
 - [x] Index verification. **<>** DONE (read-only vs production: 8 indexes exist with different names, 2 missing — `rates.type` unique, `sessions {tableId:1} unique partial {status:"active"}`; per §14 not silently creating production indexes)
 - [x] Switch `npm run dev:backend` to Node. **<>** DONE
 - [x] Update root `package.json` scripts. **<>** DONE

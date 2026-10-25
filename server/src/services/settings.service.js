@@ -132,7 +132,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
     async adminIntegrations() {
       const keys = REGISTRY.map((r) => r.key);
       const docs = await settingsModel.findMany(keys);
-      return REGISTRY.map((reg) => {
+      const integrations = REGISTRY.map((reg) => {
         const doc = docs[reg.key] || null;
         const effective = effectiveDoc(reg.key, doc);
         const credentials = reg.credentials.map((c) => {
@@ -150,6 +150,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
           updatedBy: effective.updatedBy,
         };
       });
+      return { integrations };
     },
     /**
      * settings_plan_update port: build field-level update plan.

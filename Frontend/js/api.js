@@ -1,10 +1,10 @@
 // GameHub_2.0 API wrapper - how Frontend talks to Backend.
 // Purpose in plain words: Frontend is FORBIDDEN from talking to MongoDB directly
-// (password would leak). It may only ask the PHP Backend. This file holds those
+// (password would leak). It may only ask the Express Backend. This file holds those
 // fetch() calls in one place. Example: getHealth() asks "GET http://localhost:8000/api/health"
 // and returns {ok:true, db:"gamehub_2_0", ...}. To add login later, add getUsers(), login(), etc. here.
-// Purpose: fetch wrapper. Frontend never talks to MongoDB directly, only to PHP Backend.
-// NOTE: credentials:"include" sends the PHP session cookie, without it login
+// Purpose: fetch wrapper. Frontend never talks to MongoDB directly, only to the Express Backend.
+// NOTE: credentials:"include" sends the session cookie, without it login
 // would succeed but the next request would look like a stranger (401).
 // A hung backend/Atlas connection must not leave a page on "Loading…" forever.
 const API_TIMEOUT_MS = 15000;
@@ -25,6 +25,15 @@ async function api(path, options = {}) {
   } catch (e) {
     if (e && e.name === "AbortError") {
       throw new Error("The server took too long to respond. Please try again.");
+    }
+    // fetch() rejects with TypeError ("Failed to fetch") when the backend is
+    // down, still starting, or blocked — say that in plain words instead of
+    // showing the browser's message on login/register pages.
+    if (e instanceof TypeError) {
+      throw new Error(
+        "Cannot reach the server. Make sure the backend is running on " +
+        `${API_BASE_URL}, then try again.`
+      );
     }
     throw e;
   } finally {
@@ -150,7 +159,7 @@ async function setRate(type, pricePerHour) {
     body: JSON.stringify({ type, pricePerHour }),
   });
 }
-// C owns: listSessions()/listCashierSessions()/start/extend/end/cancelSession() — re-added with sessions.php
+// Session lifecycle (CA-004..CA-014): cashier operates, admin watches (server/src/routes/session.routes.js).
 async function listSessions(status = "active") {
   return api(`/api/admin/sessions?status=${encodeURIComponent(status)}`);
 }
@@ -176,7 +185,7 @@ async function endSession(id) {
 async function cancelSession(id) {
   return api(`/api/cashier/sessions/${id}/cancel`, { method: "POST" });
 }
-// D owns: listCashierTables()/listPublicTables() — re-added with cashiers/tables.php
+// Table reads for cashier + public pages (server/src/routes/tables.routes.js).
 async function listCashierTables(status = "all") {
   return api(`/api/cashier/tables?status=${encodeURIComponent(status)}`);
 }

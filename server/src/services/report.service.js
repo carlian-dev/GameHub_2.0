@@ -42,7 +42,7 @@ export function reportService({ transactionModel }) {
     /** GET /api/admin/reports/export — returns CSV string + filename + headers. */
     async export({ from, to, method } = {}) {
       if (method && !["cash", "gcash"].includes(method)) {
-        // fall back to 'all' for invalid method (PHP ignores invalid)
+        // fall back to 'all' for an unknown method filter
       }
       const filter = {};
       const range = {};

@@ -1,5 +1,5 @@
 // src/function/tables/tables.js - tables page logic. Pair: tables.html <->
-// Backend/src/function/tables/tables.php (+ admin sessions list so each row
+// server/src/routes/tables.routes.js (+ admin sessions list so each row
 // shows its Current session and a live Time left countdown).
 // Tabs filter by status (AD-013, incl. maintenance); rows: Rename (AD-010),
 // Status (AD-012), Archive (AD-011) / Unarchive (AD-008); Add form (AD-009,

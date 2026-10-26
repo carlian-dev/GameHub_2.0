@@ -8,18 +8,15 @@ export function toStringId(id) {
 }
 
 export function isObjectId(value) {
+  if (value instanceof ObjectId) return value.toHexString().length === 24;
   return typeof value === "string" && /^[0-9a-fA-F]{24}$/.test(value);
 }
 
 export function toObjectId(value) {
   // Callers pass either a stored ObjectId (e.g. right after insertOne) or a
   // 24-hex string from a request path/body.
-  if (value instanceof ObjectId) {
-    return value;
-  }
-  if (!isObjectId(value)) {
-    return null;
-  }
+  if (value instanceof ObjectId) return value;
+  if (!isObjectId(value)) return null;
   return new ObjectId(value);
 }
 

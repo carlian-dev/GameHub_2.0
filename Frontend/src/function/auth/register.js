@@ -1,5 +1,5 @@
 // src/function/auth/register.js - invitation-gated signup logic.
-// Pair: register.html <-> Backend/src/function/auth/register.php (token,
+// Pair: register.html <-> server/src/routes/auth.routes.js (token,
 // expiry, single-use, and email match are ALL re-enforced server-side;
 // page checks below are convenience only).
 // Flow: ?token=... -> checkInvite -> valid: lock invited email into the form;

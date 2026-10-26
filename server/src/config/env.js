@@ -2,11 +2,16 @@
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { configureDns } from "./dns.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(__dirname, "..", "..");
 
 dotenv.config({ path: path.join(serverRoot, ".env") });
+
+// Applied here so every entry point (server, scripts, tests) resolves Atlas SRV
+// records the same way before a MongoClient is created.
+configureDns(process.env.MONGODB_DNS_SERVERS);
 
 const REQUIRED = ["MONGODB_URI", "MONGODB_DB", "FRONTEND_URL", "SESSION_SECRET", "NODE_ENV"];
 
@@ -15,6 +20,8 @@ export const env = {
   PORT: Number(process.env.PORT || 8000),
   MONGODB_URI: process.env.MONGODB_URI || "",
   MONGODB_DB: process.env.MONGODB_DB || "",
+  // Optional: resolver(s) Node uses for Atlas SRV lookups, e.g. "8.8.8.8,1.1.1.1".
+  MONGODB_DNS_SERVERS: process.env.MONGODB_DNS_SERVERS || "",
   FRONTEND_URL: process.env.FRONTEND_URL || "",
   SESSION_SECRET: process.env.SESSION_SECRET || "",
   SESSION_TTL_SECONDS: Number(process.env.SESSION_TTL_SECONDS || 43200),

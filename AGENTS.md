@@ -4,15 +4,15 @@ Small static-frontend + Node/Express-API + MongoDB Atlas stack. No framework, no
 
 ## Setup
 
-- Prereqs: PHP >= 8.1 with `mongodb` extension (for rollback only), Composer 2.x (for rollback only), Node 18+, network access to Atlas.
-- Install: `npm install`, then from `Backend/`: `composer install` (rollback only), then from `server/`: `npm install`.
-- Secrets: `copy Backend\.env.example Backend\.env` (Windows) for PHP rollback; `copy server\.env.example server\.env` for Node and fill `MONGODB_URI`, `MONGODB_DB`, `FRONTEND_URL`, `GOOGLE_CLIENT_ID`, `MAIL_USER`/`MAIL_PASS`/`MAIL_FROM`, `SESSION_SECRET`. Never commit `Backend/.env` or `server/.env`; `Backend/vendor/` and `node_modules/` are also ignored.
+- Prereqs: Node 18+ and network access to Atlas. Every runtime piece is Node/Express; PHP >= 8.1 + Composer 2.x are only needed to read the archived PHP tree in `archive/Backend/`.
+- Install: `npm install`, then from `server/`: `npm install`. (No Composer step for normal use.)
+- Secrets: `copy server\.env.example server\.env` (Windows) and fill `MONGODB_URI`, `MONGODB_DB`, `FRONTEND_URL`, `GOOGLE_CLIENT_ID`, `MAIL_USER`/`MAIL_PASS`/`MAIL_FROM`, `SESSION_SECRET`. Never commit `server/.env`; `node_modules/` and the archived `archive/Backend/.env` are also ignored. `MONGODB_DNS_SERVERS` is only needed when startup reports `querySrv ECONNREFUSED`.
 - First admin has no endpoint — insert directly into `users` (`{ email, passwordHash (bcrypt), role: "admin", status: "active" }`). Single-admin by design.
 
 ## Run
 
 - `npm run dev` — backend `:8000` (Node/Express) + frontend `:5500` with live reload. Or `npm run dev:backend` / `npm run dev:frontend` alone.
-- `npm run dev:backend:php` — run PHP backend on `:8000` for rollback testing.
+- `npm run dev:backend:php` — starts the archived PHP tree from `archive/Backend/`; reference only, never the real backend.
 - Backend: `cd server && npm run dev` (Node, `node --watch src/server.js`). Frontend: `live-server Frontend --host=localhost --port=5500`.
 - Always open the frontend via `http://localhost:5500` (not `127.0.0.1`): session cookie is `Lax` on `localhost` and CORS allows exactly one `FRONTEND_URL` origin with credentials.
 - Backend base URL lives only in `Frontend/js/config.js` (`API_BASE_URL`); change it there once if the port moves.
@@ -30,12 +30,12 @@ Small static-frontend + Node/Express-API + MongoDB Atlas stack. No framework, no
 - Cashier registration is invitation-only: admin invites by email (`/api/admin/invitations`), register requires matching `token + email`. Admin signs in via email+password or Google (the `googleAuth` setting's client ID is verified server-side). Cashier login is username+password only (no email codes).
 - No OTP/email-code system: archive is one-step (confirm dialog → `POST /api/admin/cashiers/{id}/archive`). Login never issues codes.
 - Role comes from the server session only — never trust request data. Every listing/state-changing endpoint re-checks `require_login`/`require_admin`. List endpoints project out password hashes; plain secrets never touch logs/responses, and private credential values are never returned (admin settings expose only `configured` + `masked`).
-- Collections in `gamehub_2_0`: `users` (partial-unique `email`, sparse-unique `username`), `tables` (unique `name`), `rates`, `sessions`, `invitations`, `activityLogs`, `settings` (unique `key`), `healthcheck`, `authSessions` (Node session store, ignored by PHP). Approve/decline/archive/unarchive and integration updates write `activityLogs`.
+- Collections in `gamehub_2_0`: `users` (partial-unique `email`, sparse-unique `username`), `tables` (unique `name`), `rates`, `sessions`, `invitations`, `activityLogs`, `settings` (unique `key`), `healthcheck`, `authSessions` (Express session store). Approve/decline/archive/unarchive and integration updates write `activityLogs`.
 - Integration state lives in `settings` (DB authoritative); env `GOOGLE_CLIENT_ID` is only the default when no `googleAuth` document exists. Create the index/seed keys once with `npm run setup:settings`; never per request.
 
 ## Verify (no automated suite)
 
-- Health: `GET http://localhost:8000/api/health` → `{ok:true}`.
+- Startup: `cd server && npm start` must print `node backend listening` and `API routes wired`. If it exits with `querySrv ECONNREFUSED`, Node's resolver cannot read Atlas SRV records — set `MONGODB_DNS_SERVERS=8.8.8.8,1.1.1.1` in `server/.env` (the OS resolver may still work fine; c-ares does not use it).
 - Staff flow is manual: register (with invite token) → approve as admin → login → archive/unarchive; confirm in Atlas (`users`, `activityLogs`). Acceptance tables: `docs/Sprint_001-(E01).md`, `docs/Sprint02-report.md`.
 - `node --watch` is single-threaded; 185–1200ms reads are normal (TLS/connection setup, not queries). Don't micro-optimize queries. Per-request index creation/rate seeding was already removed — keep seeding/index setup as one-time scripts, never per-request.
 

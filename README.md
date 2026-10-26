@@ -8,7 +8,8 @@ logging across three roles: Administrator, Cashier, and walk-in Customer.
 
 The system is intentionally built with a small, explainable stack: a
 Node/Express JSON API backed by MongoDB Atlas, and a dependency-free
-HTML/CSS/JS frontend. The PHP backend is retained for rollback only.
+HTML/CSS/JS frontend. Express is the one and only backend; the former PHP
+backend was archived under `archive/Backend/` and is not used at runtime.
 
 ## Features (by delivery)
 
@@ -26,10 +27,10 @@ HTML/CSS/JS frontend. The PHP backend is retained for rollback only.
 
 ## Prerequisites
 
-* PHP >= 8.1 with the `mongodb` extension (for PHP rollback only).
-* Composer 2.x (for PHP rollback only).
-* Node.js 18+ and npm.
+* Node.js 18+ and npm (runs the Express backend and the dev frontend).
 * Network access to the MongoDB Atlas cluster (connection string is private).
+* Optional, archive reference only: PHP >= 8.1 with the `mongodb` extension
+  and Composer 2.x, if you ever need to inspect `archive/Backend/`.
 
 ## Quickstart (5 minutes)
 
@@ -39,17 +40,17 @@ HTML/CSS/JS frontend. The PHP backend is retained for rollback only.
    cd server
    npm install
    ```
-   (Backend/vendor/ is only needed for PHP rollback: `cd Backend && composer install`.)
+   (No Composer install is needed for normal use; `archive/Backend/vendor/`
+   already exists if you only want to read the archived PHP code.)
 
 2. Configure secrets (never commit these files):
    ```
-   copy Backend\.env.example Backend\.env     # PHP rollback only
-   copy server\.env.example server\.env       # Node backend
+   copy server\.env.example server\.env       # Node/Express backend
    ```
    Fill in `MONGODB_URI`, `MONGODB_DB`, `FRONTEND_URL`,
    `GOOGLE_CLIENT_ID`, `SESSION_SECRET`, `SESSION_TTL_SECONDS`,
    `AUTH_COOKIE_NAME`, `MAIL_USER`/`MAIL_PASS`/`MAIL_FROM` (for invite mail),
-   and `TRUST_PROXY` if behind a proxy.
+   and `TRUST_PROXY` if behind a proxy. Only used by the Express backend.
 
 3. Create the first administrator directly in the `users` collection
    (MongoDB Compass): `{ email, passwordHash (bcrypt), role: "admin",
@@ -64,10 +65,8 @@ HTML/CSS/JS frontend. The PHP backend is retained for rollback only.
    `http://localhost:5500` with live reload. Open the Frontend address
    (localhost, not 127.0.0.1 — login sessions depend on it).
 
-   To run the PHP backend on 8000 for rollback testing:
-   ```
-   npm run dev:backend:php
-   ```
+   The archived PHP server is not part of the app anymore; it lives in
+   `archive/Backend/` for historical reference only.
 
 5. Staff entry points: customer landing at `/`, staff login at `/login`,
    cashier registration at `/src/function/auth/register.html`.
@@ -94,17 +93,17 @@ GameHub_2.0/
     scripts/              one-time setup (resetDb, setupSettings, setupIndexes, verifyIndexes)
     .env / .env.example   Secrets (ignored) / safe template (committed)
     package.json          ESM, Express 5, native mongodb driver
-  Backend/                PHP backend (retained for rollback only)
-    public/index.php      Single entry point (routing, CORS, sessions)
-    routes/api.php        Route table: METHOD + PATH -> handler function
-    src/Config/           Database connection singleton
-    src/Helpers/          JSON responses, request parsing, auth guards
-    src/function/auth/    Login, registration, Google, one-time codes
-    src/function/admin/   Staff (applicant/cashier) administration
-    src/function/cashiers/ Reserved for cashier-role endpoints
-    src/function/tables/  Tables, rates, sessions reads
-    src/function/shared/  Health check
-    .env / .env.example   Secrets (ignored) / safe template (committed)
+  archive/Backend/        Former PHP backend (archived, not used at runtime)
+    public/index.php      Old single entry point (historical reference)
+    routes/api.php        Old route table: METHOD + PATH -> handler function
+    src/Config/           Old database connection singleton
+    src/Helpers/          Old JSON responses, request parsing, auth guards
+    src/function/auth/    Old login, registration, Google, one-time codes
+    src/function/admin/   Old staff (applicant/cashier) administration
+    src/function/cashiers/ Old cashier-role endpoints
+    src/function/tables/  Old tables, rates, sessions reads
+    src/function/shared/  Old health check
+    .env / .env.example   Archived secrets (ignored) / old template
   Frontend/
     index.html              Customer landing (hero, location map)
     login/index.html        Redirect so bare /login resolves
@@ -140,6 +139,7 @@ GameHub_2.0/
 |---|---|
 | `MONGODB_URI` | Atlas connection string (secret) |
 | `MONGODB_DB` | Database name (`gamehub_2_0` production, `gamehub_2_0_migtest` for tests) |
+| `MONGODB_DNS_SERVERS` | Optional resolver(s) for Atlas SRV lookups, e.g. `8.8.8.8,1.1.1.1` (only if startup says `querySrv ECONNREFUSED`) |
 | `FRONTEND_URL` | Allowed CORS origin for the Frontend |
 | `PORT` | Backend listen port (`8000`) |
 | `GOOGLE_CLIENT_ID` | Google OAuth web client (public identifier) |
@@ -156,8 +156,7 @@ GameHub_2.0/
 | Command | Purpose |
 |---|---|
 | `npm run dev` | Backend (Node, 8000) + Frontend (5500) with live reload |
-| `npm run dev:backend` | Node backend alone |
-| `npm run dev:backend:php` | PHP backend alone (rollback testing) |
+| `npm run dev:backend` | Node/Express backend alone |
 | `npm run dev:frontend` | Frontend alone |
 | `npm run seed` | Seed `gamehub_2_0_migtest` (test DB only) |
 | `npm run setup:settings` | Idempotent settings document seed (test DB only) |
@@ -166,8 +165,9 @@ GameHub_2.0/
 | `npm run test:unit` | Unit tests |
 | `npm run test:contract` | Contract tests against Node backend |
 
-Backend has no build step; npm manages Node.js dependencies.
-Composer manages PHP dependencies (rollback only).
+Backend has no build step; npm manages all runtime dependencies.
+The archived PHP tree under `archive/Backend/` is read-only history and is
+never started by any npm script.
 
 ## Testing basics
 

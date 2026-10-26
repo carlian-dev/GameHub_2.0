@@ -1,5 +1,5 @@
 // src/function/tables/sessions.js - admin sessions watch logic. Pair: sessions.html
-// <-> Backend/src/function/tables/sessions.php (enriched list, AD-014/AD-027).
+// <-> server/src/routes/session.routes.js (enriched list, AD-014/AD-027).
 // Shows which cashier operates each session plus a per-second live timer
 // (remaining = endTime - now; overtime in red). Tabs: active/closed/all.
 // Guard: admin-only. Data refetches every 30s; timers tick locally each second.

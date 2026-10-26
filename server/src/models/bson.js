@@ -8,13 +8,13 @@ export function toStringId(id) {
 }
 
 export function isObjectId(value) {
+  if (value instanceof ObjectId) return value.toHexString().length === 24;
   return typeof value === "string" && /^[0-9a-fA-F]{24}$/.test(value);
 }
 
 export function toObjectId(value) {
-  if (!isObjectId(value)) {
-    return null;
-  }
+  if (value instanceof ObjectId) return value;
+  if (!isObjectId(value)) return null;
   return new ObjectId(value);
 }
 

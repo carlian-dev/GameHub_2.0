@@ -1,5 +1,5 @@
 // src/function/tables/rates.js - hourly rates page logic. Pair: rates.html <->
-// Backend/src/function/tables/rates.php (AD-016 regular, AD-017 special).
+// server/src/routes/tables.routes.js (AD-016 regular, AD-017 special).
 // Split from tables.js so Rates is its own sidebar page. Guard: admin-only.
 // Real <form>: Enter saves. Both fields validate (> 0), summary updates live,
 // and outcomes raise toasts (backend stays the source of truth).

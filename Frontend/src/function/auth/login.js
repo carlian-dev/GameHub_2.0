@@ -1,5 +1,6 @@
 // src/function/auth/login.js - single-step login logic.
-// Pair: src/function/auth/login.html <-> Backend/src/function/auth/login.php + google.php.
+// Pair: src/function/auth/login.html <-> server/src/routes/auth.routes.js
+// (POST /api/login, POST /api/auth/google).
 // Valid ACTIVE accounts log straight in (email/username + password, or Google)
 // and redirect by role: admin -> ../admin/admin-dashboard.html,
 // cashier -> ../cashiers/cashier-dashboard.html. Pending/archived/declined show

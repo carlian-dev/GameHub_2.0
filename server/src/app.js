@@ -27,9 +27,9 @@ app.use(
   })
 );
 
-// JSON only. PHP ignores form-encoded bodies.
+// JSON only: the frontend always sends application/json.
 app.use(express.json());
-// Normalize missing bodies to {} like PHP's json_body().
+// Normalize missing bodies to {} so handlers can destructure safely.
 app.use((req, res, next) => {
   if (req.body == null) req.body = {};
   next();

@@ -2,11 +2,11 @@
   "name": "gamehub-2-0",
   "private": true,
   "version": "1.0.0",
-  "description": "GameHub_2.0 dev runner: Node/Express Backend (port 8000) + static Frontend with live-reload (port 5500). PHP backend retained for rollback.",
+  "description": "GameHub_2.0 dev runner: Node/Express Backend (port 8000) + static Frontend with live-reload (port 5500). The old PHP backend is archived under archive/Backend and is not used at runtime.",
   "scripts": {
     "dev": "concurrently --kill-others -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "cd server && npm run dev",
-    "dev:backend:php": "php -S localhost:8000 -t Backend/public",
+    "dev:backend:php": "php -S localhost:8000 -t archive/Backend/public",
     "predev:frontend": "node scripts/free-port.js 5500",
     "dev:frontend": "live-server Frontend --host=localhost --port=5500",
     "seed": "cd server && npm run seed",

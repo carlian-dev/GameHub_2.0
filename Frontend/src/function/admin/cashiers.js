@@ -1,5 +1,5 @@
 // src/function/admin/cashiers.js - Staff table logic in the dashboard shell.
-// Pair: cashiers.html <-> Backend/src/function/admin/cashiers.php.
+// Pair: cashiers.html <-> server/src/routes/admin.routes.js.
 // Tabs: active / archived (cashiers via listCashiers) + invites (ARIA tabs via
 // dashTabsInit). Invite IS the approval — new accounts arrive active.
 // Search box filters loaded rows locally. Archive is one step (confirm only).

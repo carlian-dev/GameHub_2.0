@@ -1,0 +1,18 @@
+{
+  "id": "cashier.sessions.extend",
+  "route": "POST /api/cashier/sessions/{id}/extend (auth)",
+  "method": "POST",
+  "path": "/api/cashier/sessions/<dyn>/extend",
+  "body": { "extraMinutes": 60 },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "session": {
+        "id": "<dyn>",
+        "status": "active",
+        "plannedMinutes": 120
+      }
+    }
+  }
+}

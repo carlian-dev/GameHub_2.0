@@ -1,0 +1,16 @@
+{
+  "id": "cashier.tables.list",
+  "route": "GET /api/cashier/tables (auth)",
+  "method": "GET",
+  "path": "/api/cashier/tables",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "tables": [
+        { "id": "<dyn>", "name": "Table 1", "status": "available" },
+        { "id": "<dyn>", "name": "Table 2", "status": "occupied" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "transactions.create",
+  "route": "POST /api/cashier/transactions (auth)",
+  "method": "POST",
+  "path": "/api/cashier/transactions",
+  "body": { "sessionId": "<dyn>", "method": "cash", "received": 200 },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "transaction": {
+        "id": "<dyn>",
+        "ref": "<dyn>",
+        "sessionId": "<dyn>",
+        "tableId": "<dyn>",
+        "tableName": "<dyn>",
+        "customerName": "<dyn>",
+        "cashierId": "<dyn>",
+        "cashierName": "<dyn>",
+        "minutes": 60,
+        "billedHours": 1,
+        "pricePerHour": 140,
+        "rateType": "regular",
+        "total": 140,
+        "method": "cash",
+        "received": 200,
+        "change": 60,
+        "paidAt": "<dyn>",
+        "createdAt": "<dyn>"
+      }
+    }
+  }
+}

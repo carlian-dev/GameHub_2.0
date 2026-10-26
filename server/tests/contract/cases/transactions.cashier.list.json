@@ -1,0 +1,13 @@
+{
+  "id": "transactions.cashier.list",
+  "route": "GET /api/cashier/transactions (auth)",
+  "method": "GET",
+  "path": "/api/cashier/transactions",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "transactions": []
+    }
+  }
+}

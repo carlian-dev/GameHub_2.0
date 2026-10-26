@@ -1,0 +1,11 @@
+{
+  "id": "admin.rates.set.invalid_type",
+  "route": "PUT /api/admin/rates (invalid type)",
+  "method": "PUT",
+  "path": "/api/admin/rates",
+  "body": { "type": "premium", "pricePerHour": 200 },
+  "expect": {
+    "status": 422,
+    "body": { "ok": false, "error": "type must be regular or special" }
+  }
+}

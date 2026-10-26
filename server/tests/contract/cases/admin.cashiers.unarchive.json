@@ -1,0 +1,10 @@
+{
+  "id": "admin.cashiers.unarchive",
+  "route": "POST /api/admin/cashiers/{id}/unarchive (admin)",
+  "method": "POST",
+  "path": "/api/admin/cashiers/<dyn>/unarchive",
+  "expect": {
+    "status": 200,
+    "body": { "ok": true, "id": "<dyn>", "status": "active" }
+  }
+}

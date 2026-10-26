@@ -1,0 +1,13 @@
+{
+  "id": "admin.invitations.list",
+  "route": "GET /api/admin/invitations (admin)",
+  "method": "GET",
+  "path": "/api/admin/invitations",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "invitations": []
+    }
+  }
+}

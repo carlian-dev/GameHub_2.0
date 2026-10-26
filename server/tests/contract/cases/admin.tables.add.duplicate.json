@@ -1,0 +1,11 @@
+{
+  "id": "admin.tables.add.duplicate",
+  "route": "POST /api/admin/tables (duplicate name)",
+  "method": "POST",
+  "path": "/api/admin/tables",
+  "body": { "name": "Table 1" },
+  "expect": {
+    "status": 409,
+    "body": { "ok": false, "error": "table name already used" }
+  }
+}

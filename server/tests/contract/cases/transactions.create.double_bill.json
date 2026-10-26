@@ -1,0 +1,11 @@
+{
+  "id": "transactions.create.double_bill",
+  "route": "POST /api/cashier/transactions (double bill)",
+  "method": "POST",
+  "path": "/api/cashier/transactions",
+  "body": { "sessionId": "<dyn>", "method": "cash", "received": 200 },
+  "expect": {
+    "status": 409,
+    "body": { "ok": false, "error": "session already billed" }
+  }
+}

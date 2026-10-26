@@ -1,0 +1,10 @@
+{
+  "id": "admin.cashiers.archive.admin_cannot_be_archived",
+  "route": "POST /api/admin/cashiers/{id}/archive (admin target)",
+  "method": "POST",
+  "path": "/api/admin/cashiers/<dyn>/archive",
+  "expect": {
+    "status": 403,
+    "body": { "ok": false, "error": "admin accounts cannot be archived" }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "admin.invitations.revoke",
+  "route": "POST /api/admin/invitations/{id}/revoke (admin)",
+  "method": "POST",
+  "path": "/api/admin/invitations/<dyn>/revoke",
+  "expect": {
+    "status": 200,
+    "body": { "ok": true, "id": "<dyn>", "status": "revoked" }
+  }
+}

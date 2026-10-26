@@ -1,0 +1,16 @@
+{
+  "id": "config.get",
+  "route": "GET /api/config",
+  "method": "GET",
+  "path": "/api/config",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "integrations": {
+        "googleAuth": { "enabled": false, "clientId": "" },
+        "googleMaps": { "enabled": true, "apiKey": "" }
+      }
+    }
+  }
+}

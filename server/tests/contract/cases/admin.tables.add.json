@@ -1,0 +1,20 @@
+{
+  "id": "admin.tables.add",
+  "route": "POST /api/admin/tables (admin)",
+  "method": "POST",
+  "path": "/api/admin/tables",
+  "body": { "name": "Table 9" },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "table": {
+        "id": "<dyn>",
+        "name": "Table 9",
+        "status": "available",
+        "archived": false,
+        "createdAt": "<dyn>"
+      }
+    }
+  }
+}

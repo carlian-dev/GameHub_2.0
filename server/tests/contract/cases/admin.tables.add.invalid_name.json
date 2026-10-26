@@ -1,0 +1,11 @@
+{
+  "id": "admin.tables.add.invalid_name",
+  "route": "POST /api/admin/tables (invalid name)",
+  "method": "POST",
+  "path": "/api/admin/tables",
+  "body": { "name": "" },
+  "expect": {
+    "status": 422,
+    "body": { "ok": false, "error": "table name is required (max 60 chars)" }
+  }
+}

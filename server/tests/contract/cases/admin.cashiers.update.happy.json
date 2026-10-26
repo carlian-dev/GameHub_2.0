@@ -1,0 +1,27 @@
+{
+  "id": "admin.cashiers.update.happy",
+  "route": "PUT /api/admin/cashiers/{id} (admin)",
+  "method": "PUT",
+  "path": "/api/admin/cashiers/<dyn>",
+  "body": { "displayName": "Updated Name", "schedule": "09:00 - 17:00" },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "cashier": {
+        "id": "<dyn>",
+        "email": "<dyn>",
+        "username": "<dyn>",
+        "role": "cashier",
+        "authProvider": "<dyn>",
+        "status": "<dyn>",
+        "firstName": "<dyn>",
+        "lastName": "<dyn>",
+        "displayName": "Updated Name",
+        "emailVerified": true,
+        "schedule": "09:00 - 17:00",
+        "createdAt": "<dyn>"
+      }
+    }
+  }
+}

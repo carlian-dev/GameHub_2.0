@@ -1,0 +1,16 @@
+{
+  "id": "auth.login.username_cashier",
+  "route": "POST /api/login (cashier by username)",
+  "method": "POST",
+  "path": "/api/login",
+  "body": { "username": "cashier1", "password": "CashierPass123!" },
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "username": "cashier1",
+      "email": "cashier@gamehub.local",
+      "role": "cashier"
+    }
+  }
+}

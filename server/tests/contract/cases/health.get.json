@@ -1,0 +1,15 @@
+{
+  "id": "health.get",
+  "route": "GET /api/health",
+  "method": "GET",
+  "path": "/api/health",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "db": "<dyn>",
+      "ping": "ok",
+      "healthcheck_count": 1
+    }
+  }
+}

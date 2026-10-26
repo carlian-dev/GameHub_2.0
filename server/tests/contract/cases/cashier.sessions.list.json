@@ -1,0 +1,13 @@
+{
+  "id": "cashier.sessions.list",
+  "route": "GET /api/cashier/sessions (auth)",
+  "method": "GET",
+  "path": "/api/cashier/sessions",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "sessions": []
+    }
+  }
+}

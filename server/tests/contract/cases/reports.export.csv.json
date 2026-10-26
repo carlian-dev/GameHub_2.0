@@ -1,0 +1,10 @@
+{
+  "id": "reports.export.csv",
+  "route": "GET /api/admin/reports/export?format=csv (admin)",
+  "method": "GET",
+  "path": "/api/admin/reports/export?format=csv",
+  "expect": {
+    "status": 200,
+    "body": "ref,paidAt,table,customer,cashier,minutes,billedHours,rate,rateType,total,method,received,change\n"
+  }
+}

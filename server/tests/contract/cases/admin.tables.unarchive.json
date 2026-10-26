@@ -1,0 +1,19 @@
+{
+  "id": "admin.tables.unarchive",
+  "route": "POST /api/admin/tables/{id}/unarchive (admin)",
+  "method": "POST",
+  "path": "/api/admin/tables/<dyn>/unarchive",
+  "expect": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "table": {
+        "id": "<dyn>",
+        "name": "<dyn>",
+        "status": "available",
+        "archived": false,
+        "createdAt": "<dyn>"
+      }
+    }
+  }
+}

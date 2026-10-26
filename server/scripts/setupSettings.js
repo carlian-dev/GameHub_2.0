@@ -19,28 +19,34 @@ const SETTINGS = [
   {
     key: "googleAuth",
     enabled: false,
-    credentials: [{ name: "clientId", value: "", last4: "", updatedAt: null }],
+    // Object keyed by credential name — the shape settings.service.js and the
+    // PHP backend both read (`credentials.clientId.value`). An array here makes
+    // `credentials.<name>` updates fail with "Cannot create field".
+    credentials: { clientId: { value: "", last4: "", updatedAt: null } },
     updatedAt: null,
     updatedBy: null,
   },
   {
     key: "googleMaps",
     enabled: true,
-    credentials: [{ name: "apiKey", value: "", last4: "", updatedAt: null }],
+    credentials: { apiKey: { value: "", last4: "", updatedAt: null } },
     updatedAt: null,
     updatedBy: null,
   },
   {
     key: "recaptcha",
     enabled: false,
-    credentials: [],
+    credentials: {
+      siteKey: { value: "", last4: "", updatedAt: null },
+      secretKey: { value: "", last4: "", updatedAt: null },
+    },
     updatedAt: null,
     updatedBy: null,
   },
   {
     key: "otp",
     enabled: false,
-    credentials: [],
+    credentials: {},
     updatedAt: null,
     updatedBy: null,
   },

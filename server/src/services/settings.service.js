@@ -53,13 +53,29 @@ function credentialShape(name, def, raw) {
   };
 }
 
+// Read `credentials` as an object keyed by credential name. Older seed scripts
+// wrote an array of {name, value, ...}; normalize it so those documents still
+// read (and never break) instead of silently dropping every credential value.
+function credentialsMap(basis) {
+  const raw = basis && basis.credentials;
+  if (Array.isArray(raw)) {
+    const out = {};
+    for (const c of raw) {
+      if (c && c.name) out[c.name] = c;
+    }
+    return out;
+  }
+  return raw && typeof raw === "object" ? raw : {};
+}
+
 function effectiveDoc(key, doc) {
   const reg = REGISTRY.find((r) => r.key === key);
   if (!reg) return null;
   const basis = doc || defaultDoc(key);
+  const stored = credentialsMap(basis);
   const credentials = {};
   for (const cred of reg.credentials) {
-    const raw = basis.credentials && basis.credentials[cred.name] ? basis.credentials[cred.name] : {};
+    const raw = stored[cred.name] || {};
     credentials[cred.name] = { value: String(raw.value || ""), last4: String(raw.last4 || "") };
   }
   let enabled = !!basis.enabled;
@@ -99,6 +115,19 @@ function credentialHint(key, name, value) {
     }
   }
   return value.slice(-4);
+}
+
+// Transactions need a replica-set member (Atlas, or a local replSet). A
+// standalone mongod rejects them with "Transaction numbers are only allowed on
+// a replica set member or mongos", so probe once per write.
+async function hasTransactionSupport(client) {
+  if (!client) return false;
+  try {
+    const hello = await client.db().admin().command({ hello: 1 });
+    return Boolean(hello.setName);
+  } catch {
+    return false;
+  }
 }
 
 export function settingsService({ settingsModel, db, mongoClient, googleClientIdFromEnv }) {
@@ -296,46 +325,83 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
         throw err;
       }
 
+      const settingsColl = db.collection("settings");
+      const activityLogs = db.collection("activityLogs");
+
       const existingDoc = await settingsColl.findOne({ key });
       const effective = effectiveDoc(key, existingDoc || null);
       const plan = this.planUpdate(key, effective, data);
 
       const set = { ...plan.set, updatedAt: new Date(), updatedBy: adminEmail };
-      const update = { $set: set };
-      if (Object.keys(plan.unset).length > 0) update.$unset = plan.unset;
-      if (Object.keys(plan.set_on_insert).length > 0) update.$setOnInsert = plan.set_on_insert;
+      const unset = { ...plan.unset };
+      const setOnInsert = { ...plan.set_on_insert };
 
-      const settingsColl = db.collection("settings");
-      const activityLogs = db.collection("activityLogs");
-
-      const session = mongoClient.startSession();
-      try {
-        await session.withTransaction(async () => {
-          const updated = await settingsColl.findOneAndUpdate(
-            { key },
-            update,
-            { upsert: true, returnDocument: "after", session }
-          );
-          if (!updated) {
-            throw new Error("settings update returned no document");
+      // Legacy docs seeded as an ARRAY of {name, value, ...}: replace the whole
+      // `credentials` object instead of writing dotted paths — Mongo cannot
+      // create `credentials.<name>` inside an array element.
+      if (existingDoc && Array.isArray(existingDoc.credentials)) {
+        const prefix = "credentials.";
+        const merged = credentialsMap(existingDoc);
+        for (const [k, v] of Object.entries(set)) {
+          if (k.startsWith(prefix)) {
+            merged[k.slice(prefix.length)] = v;
+            delete set[k];
           }
-          const normalized = updated; // driver returns plain object already
-          const shaped = this.shape(key, effectiveDoc(key, normalized));
-          await activityLogs.insertOne(
-            {
-              actorId: null,
-              action: "integration_settings_update",
-              target: key,
-              meta: { enabled: plan.enabled, changed: plan.changed },
-              at: new Date(),
-            },
-            { session }
-          );
-          return shaped;
-        });
-      } finally {
-        await session.endSession();
+        }
+        for (const k of Object.keys(unset)) {
+          if (k.startsWith(prefix)) {
+            delete merged[k.slice(prefix.length)];
+            delete unset[k];
+          }
+        }
+        for (const [k, v] of Object.entries(setOnInsert)) {
+          if (k.startsWith(prefix)) {
+            const name = k.slice(prefix.length);
+            if (!merged[name]) merged[name] = v;
+            delete setOnInsert[k];
+          }
+        }
+        set.credentials = merged;
       }
+
+      const update = { $set: set };
+      if (Object.keys(unset).length > 0) update.$unset = unset;
+      if (Object.keys(setOnInsert).length > 0) update.$setOnInsert = setOnInsert;
+
+      const apply = async (session) => {
+        const updated = await settingsColl.findOneAndUpdate(
+          { key },
+          update,
+          { upsert: true, returnDocument: "after", session }
+        );
+        if (!updated) {
+          throw new Error("settings update returned no document");
+        }
+        const shaped = this.shape(key, effectiveDoc(key, updated));
+        await activityLogs.insertOne(
+          {
+            actorId: null,
+            action: "integration_settings_update",
+            target: key,
+            meta: { enabled: plan.enabled, changed: plan.changed },
+            at: new Date(),
+          },
+          { session }
+        );
+        return shaped;
+      };
+
+      // Transactions require a replica set (Atlas / local replSet). A standalone
+      // mongod rejects them outright, so fall back to the two plain writes.
+      if (await hasTransactionSupport(mongoClient)) {
+        const session = mongoClient.startSession();
+        try {
+          return await session.withTransaction(() => apply(session));
+        } finally {
+          await session.endSession();
+        }
+      }
+      return await apply(null);
     },
 
     shape(key, effective) {

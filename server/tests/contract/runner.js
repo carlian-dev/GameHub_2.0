@@ -4,8 +4,23 @@
 // unless MONGODB_DB ends with _migtest (migration.md §16).
 import fs from "node:fs";
 import path from "node:path";
+import request from "supertest";
 import { validateEnv, env, assertTestDb } from "../../src/config/env.js";
-import { normalizeResponse } from "./normalize.js";
+import { getDb } from "../../src/config/db.js";
+import { normalizeResponse, DYN } from "./normalize.js";
+import { loginAs } from "./cookieJar.js";
+
+// Seed credentials written by scripts/resetDb.js (same defaults, overridable).
+const SEED_ADMIN = {
+  role: "admin",
+  email: process.env.SEED_ADMIN_EMAIL || "admin@gamehub.local",
+  password: process.env.SEED_ADMIN_PASSWORD || "AdminPass123!",
+};
+const SEED_CASHIER = {
+  role: "cashier",
+  username: process.env.SEED_CASHIER_USERNAME || "cashier1",
+  password: process.env.SEED_CASHIER_PASSWORD || "CashierPass123!",
+};
 
 // Approved divergences from migration.md §14 (the ONLY allowed diffs).
 export const DIVERGENCE_ALLOWLIST = [
@@ -28,6 +43,11 @@ function loadCases(dir) {
 }
 
 function diff(a, b, pathPrefix = "") {
+  // "<dyn>" in a case file is a wildcard: any actual value is accepted
+  // (ids, timestamps, emails seeded per run, ...).
+  if (b === DYN) {
+    return [];
+  }
   const diffs = [];
   if (typeof a !== typeof b) {
     diffs.push(`${pathPrefix || "root"}: type mismatch ${typeof a} vs ${typeof b}`);
@@ -56,34 +76,123 @@ function diff(a, b, pathPrefix = "") {
   return diffs;
 }
 
-function requestFor(app, method, path) {
+// Build a supertest request for the case's method. `target` is either the
+// Express app (public cases) or a logged-in cookie-jar agent (role cases).
+// `app.get(path)` with a single argument is Express's settings getter, so every
+// call goes through supertest instead.
+function requestFor(target, method, path) {
+  const r = typeof target === "function" ? request(target) : target;
   const m = String(method).toUpperCase();
-  if (m === "GET") return app.get(path);
-  if (m === "POST") return app.post(path);
-  if (m === "PUT") return app.put(path);
-  if (m === "DELETE") return app.delete(path);
-  if (m === "OPTIONS") return app.options(path);
+  if (m === "GET") return r.get(path);
+  if (m === "POST") return r.post(path);
+  if (m === "PUT") return r.put(path);
+  if (m === "PATCH") return r.patch(path);
+  if (m === "DELETE") return r.delete(path);
+  if (m === "OPTIONS") return r.options(path);
   throw new Error(`unsupported method ${method}`);
+}
+
+// Cases carry no explicit auth: infer the session from the route prefix.
+function roleFor(casePath) {
+  if (casePath.startsWith("/api/admin/")) return "admin";
+  if (casePath.startsWith("/api/cashier/")) return "cashier";
+  return null;
+}
+
+// Resolve the literal "<dyn>" placeholder in a path/body against live fixture
+// data (seeded by scripts/resetDb.js). Returns null when no fixture exists,
+// which leaves the placeholder in place and fails the case visibly.
+async function resolveDyn(db, c) {
+  const casePath = c.path;
+  const body = c.body;
+  const id = c.id || "";
+  const wantOccupied = id.includes("not_available") || casePath.includes("not_available");
+
+  const find = (collection, query) => db.collection(collection).findOne(query);
+
+  let dyn = null;
+  const wantsArchived = id.includes("unarchive") || /unarchive$/.test(casePath);
+  if (/\/invitations\/<dyn>/.test(casePath)) {
+    dyn = (await find("invitations", {}))?._id;
+  } else if (/\/cashiers\/<dyn>/.test(casePath)) {
+    // "admin target" cases target the admin account (archiving it is refused).
+    const isAdminTarget = id.includes("admin_cannot") || c.route.includes("admin target");
+    const filter = isAdminTarget
+      ? { role: "admin" }
+      : wantsArchived
+        ? { role: "cashier", status: "archived" }
+        : { role: "cashier" };
+    dyn = (await find("users", filter))?._id;
+  } else if (/\/tables\/<dyn>/.test(casePath)) {
+    const filter = wantsArchived
+      ? { archived: true }
+      : wantOccupied
+        ? { status: "occupied" }
+        : { archived: false };
+    dyn = (await find("tables", filter))?._id;
+  } else if (/\/sessions\/<dyn>/.test(casePath)) {
+    dyn = (await find("sessions", { status: "active" }))?._id;
+  } else if (/\/transactions\/<dyn>/.test(casePath)) {
+    dyn = (await find("transactions", {}))?.ref;
+  }
+
+  const outPath = dyn ? casePath.replace("<dyn>", String(dyn)) : casePath;
+  const outBody = body && typeof body === "object" ? { ...body } : body;
+
+  if (outBody && typeof outBody === "object") {
+    if (outBody.tableId === "<dyn>") {
+      const table = await find(
+        "tables",
+        wantOccupied ? { status: "occupied" } : { status: "available", archived: false }
+      );
+      outBody.tableId = table ? String(table._id) : outBody.tableId;
+    }
+    if (outBody.sessionId === "<dyn>") {
+      const session = await find("sessions", { status: "active" });
+      outBody.sessionId = session ? String(session._id) : outBody.sessionId;
+    }
+  }
+
+  return { path: outPath, body: outBody };
 }
 
 export async function runCases({ app, casesDir }) {
   assertTestDb(env.MONGODB_DB);
   const cases = loadCases(casesDir);
   const results = { passed: 0, failed: 0, cases: [] };
+  const db = await getDb();
+
+  // One logged-in agent per role, reused across cases (cookie-jar helper).
+  const agents = {};
 
   for (const c of cases) {
     const entry = { id: c.id, route: c.route, ok: false, diffs: [], error: null };
     try {
-      let req = requestFor(app, c.method, c.path);
+      const target = await resolveDyn(db, c);
+      const role = roleFor(target.path);
+
+      let req;
+      if (role) {
+        if (!agents[role]) {
+          agents[role] = role === "admin" ? await loginAs(app, SEED_ADMIN) : await loginAs(app, SEED_CASHIER);
+        }
+        req = requestFor(agents[role], c.method, target.path);
+      } else {
+        req = requestFor(app, c.method, target.path);
+      }
       if (c.query) req = req.query(c.query);
-      if (c.body !== undefined) req = req.send(c.body);
+      if (target.body !== undefined) req = req.send(target.body);
       if (c.headers) req = req.set(c.headers);
       const res = await req;
 
       if (res.status !== c.expect.status) {
         entry.diffs.push(`status ${res.status} vs expected ${c.expect.status}`);
       }
-      const normActual = normalizeResponse(res);
+      // CSV/text cases (e.g. reports.export.csv) compare the raw body; JSON
+      // cases compare the parsed body.
+      const actualBody =
+        typeof c.expect.body === "string" && typeof res.text === "string" ? res.text : res.body;
+      const normActual = normalizeResponse({ status: res.status, headers: res.headers, body: actualBody });
       const normExpected = normalizeResponse({
         status: c.expect.status,
         headers: c.expect.headers || {},

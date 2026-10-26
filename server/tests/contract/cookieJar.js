@@ -2,13 +2,15 @@
 // Logs in as admin or cashier and returns a supertest agent that reuses the
 // session cookie across requests. Mirrors migration.md §16 "Cookie-jar helper".
 // No secrets are logged.
-import { Agent } from "supertest";
+// supertest is CommonJS: the default export is the request function and
+// `request.agent(app)` is the cookie-reusing agent (no named `Agent` export).
+import request from "supertest";
 
 const COOKIE_NAME = "gh_session";
 
 /** Build a logged-in supertest agent against the Express app. */
 export async function loginAs(app, { role, email, username, password }) {
-  const agent = new Agent(app);
+  const agent = request.agent(app);
   const body = {};
   if (email !== undefined) body.email = email;
   if (username !== undefined) body.username = username;
@@ -36,7 +38,7 @@ export function sessionCookie(res) {
 
 /** Attach an existing session cookie to a supertest agent. */
 export function withCookie(app, cookie) {
-  const agent = new Agent(app);
+  const agent = request.agent(app);
   agent.jar.setCookie(cookie, "http://localhost");
   return agent;
 }

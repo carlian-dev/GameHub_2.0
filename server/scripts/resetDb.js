@@ -88,33 +88,38 @@ async function main() {
       { type: "special", pricePerHour: 180, active: true, updatedAt: now },
     ]);
 
-    // Settings documents (DB authoritative). Credentials are empty/masked.
+    // Settings documents (DB authoritative). Credentials are empty/masked and
+    // keyed by credential name (credentials.clientId.value), matching what
+    // settings.service.js reads and `credentials.<name>` updates write.
     await db.collection("settings").insertMany([
       {
         key: "googleAuth",
         enabled: false,
-        credentials: [{ name: "clientId", value: "", last4: "", updatedAt: null }],
+        credentials: { clientId: { value: "", last4: "", updatedAt: null } },
         updatedAt: null,
         updatedBy: null,
       },
       {
         key: "googleMaps",
         enabled: true,
-        credentials: [{ name: "apiKey", value: "", last4: "", updatedAt: null }],
+        credentials: { apiKey: { value: "", last4: "", updatedAt: null } },
         updatedAt: null,
         updatedBy: null,
       },
       {
         key: "recaptcha",
         enabled: false,
-        credentials: [],
+        credentials: {
+          siteKey: { value: "", last4: "", updatedAt: null },
+          secretKey: { value: "", last4: "", updatedAt: null },
+        },
         updatedAt: null,
         updatedBy: null,
       },
       {
         key: "otp",
         enabled: false,
-        credentials: [],
+        credentials: {},
         updatedAt: null,
         updatedBy: null,
       },

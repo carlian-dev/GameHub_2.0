@@ -8,9 +8,9 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test",
-    "test:unit": "node --test tests/unit",
-    "test:integration": "node --test tests/integration",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "test:unit": "node --test \"tests/unit/**/*.test.mjs\"",
+    "test:integration": "node --test \"tests/integration/**/*.test.mjs\"",
     "test:contract": "node tests/contract/run.node.mjs",
     "test:contract:node": "node tests/contract/run.node.mjs",
     "test:contract:php": "node tests/contract/run.php.mjs",

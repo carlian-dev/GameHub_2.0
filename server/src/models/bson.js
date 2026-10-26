@@ -12,6 +12,11 @@ export function isObjectId(value) {
 }
 
 export function toObjectId(value) {
+  // Callers pass either a stored ObjectId (e.g. right after insertOne) or a
+  // 24-hex string from a request path/body.
+  if (value instanceof ObjectId) {
+    return value;
+  }
   if (!isObjectId(value)) {
     return null;
   }

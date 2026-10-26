@@ -39,16 +39,17 @@ HTML/CSS/JS frontend. The PHP backend is retained for rollback only.
    cd server
    npm install
    ```
-   (Backend/vendor/ is only needed for PHP rollback: `cd Backend && composer install`.)
+   (archive/Backend/vendor/ is only needed for PHP rollback: `cd archive/Backend && composer install`.)
 
 2. Configure secrets (never commit these files):
    ```
-   copy Backend\.env.example Backend\.env     # PHP rollback only
-   copy server\.env.example server\.env       # Node backend
+   copy archive\Backend\.env.example archive\Backend\.env   # PHP rollback only
+   copy server\.env.example server\.env                     # Node backend
    ```
-   Fill in `MONGODB_URI`, `MONGODB_DB`, `FRONTEND_URL`,
-   `GOOGLE_CLIENT_ID`, `SESSION_SECRET`, `SESSION_TTL_SECONDS`,
-   `AUTH_COOKIE_NAME`, `MAIL_USER`/`MAIL_PASS`/`MAIL_FROM` (for invite mail),
+   Fill in `MONGODB_URI`, `MONGODB_DB`, `FRONTEND_URL`, `NODE_ENV`
+   (required — the backend refuses to start without it), `GOOGLE_CLIENT_ID`,
+   `SESSION_SECRET`, `SESSION_TTL_SECONDS`, `AUTH_COOKIE_NAME`,
+   `MAIL_USER`/`MAIL_PASS`/`MAIL_FROM` (for invite mail),
    and `TRUST_PROXY` if behind a proxy.
 
 3. Create the first administrator directly in the `users` collection
@@ -94,7 +95,7 @@ GameHub_2.0/
     scripts/              one-time setup (resetDb, setupSettings, setupIndexes, verifyIndexes)
     .env / .env.example   Secrets (ignored) / safe template (committed)
     package.json          ESM, Express 5, native mongodb driver
-  Backend/                PHP backend (retained for rollback only)
+  archive/Backend/        PHP backend (retained for rollback only)
     public/index.php      Single entry point (routing, CORS, sessions)
     routes/api.php        Route table: METHOD + PATH -> handler function
     src/Config/           Database connection singleton

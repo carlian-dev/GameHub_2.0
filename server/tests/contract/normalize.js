@@ -19,7 +19,7 @@ export const DYNAMIC_FIELDS = [
 
 // Placeholder used to replace dynamic values so structure (presence/type) is
 // preserved but exact values are ignored during diff.
-const DYN = "<dyn>";
+export const DYN = "<dyn>";
 
 /** Recursively replace dynamic fields in an object/array with a placeholder. */
 export function normalize(value) {

@@ -138,12 +138,45 @@ function renderActiveList(sessions) {
   tickTimers();
 }
 
+/** Reservations list: reference · table · customer · status · time range. */
+function renderReservations(reservations) {
+  const container = document.getElementById("reservationList");
+  if (!container) return;
+  container.innerHTML = "";
+  const rows = reservations || [];
+  if (!rows.length) {
+    const p = document.createElement("p");
+    p.className = "sl-empty";
+    p.textContent = "No reservations yet.";
+    container.appendChild(p);
+    return;
+  }
+  for (const r of rows) {
+    const row = document.createElement("div");
+    row.className = "sl-row";
+    const left = document.createElement("span");
+    left.className = "sl-name";
+    left.textContent = `${r.tableName} · ${r.customerName}`;
+    const ref = document.createElement("span");
+    ref.className = "sl-ref";
+    ref.textContent = r.ref;
+    const time = document.createElement("span");
+    time.className = "sl-time";
+    const start = r.startTime ? new Date(r.startTime).toLocaleString() : "—";
+    const end = r.endTime ? new Date(r.endTime).toLocaleString() : "—";
+    time.textContent = `${start} – ${end}`;
+    row.append(left, ref, time);
+    container.appendChild(row);
+  }
+}
+
 async function loadDashboard(quiet = false) {
   if (!quiet) setStartMsg("Loading tables…", "loading");
   try {
-    const [{ tables }, { sessions: active }] = await Promise.all([
+    const [{ tables }, { sessions: active }, { reservations }] = await Promise.all([
       listCashierTables("all"),
       listCashierSessions("active"),
+      listCashierReservations(),
     ]);
     const all = tables || [];
     const available = all.filter((t) => t.status === "available");
@@ -156,6 +189,7 @@ async function loadDashboard(quiet = false) {
     if (statOcc) statOcc.textContent = String(all.filter((t) => t.status === "occupied").length);
     renderTableGrid(all);
     renderActiveList(active);
+    renderReservations(reservations);
     // To-bill count needs closed-unbilled; failures there must not break start.
     try {
       const [{ sessions: closed }, { transactions }] = await Promise.all([

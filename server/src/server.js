@@ -1,4 +1,6 @@
 import { env } from "./config/env.js";
+import { configureDns } from "./config/dns.js";
+configureDns(process.env.MONGODB_DNS_SERVERS);
 import { getDb, getMongoClient, closeDb } from "./config/db.js";
 import app, { setupRoutes } from "./app.js";
 
@@ -10,6 +12,7 @@ import { invitationModel } from "./models/invitation.model.js";
 import { cashierModel } from "./models/cashier.model.js";
 import { tableModel } from "./models/table.model.js";
 import { rateModel } from "./models/rate.model.js";
+import { reservationModel } from "./models/reservation.model.js";
 import { sessionModel } from "./models/session.model.js";
 import { transactionModel } from "./models/transaction.model.js";
 
@@ -22,6 +25,7 @@ import { cashierService } from "./services/cashier.service.js";
 import { tableService } from "./services/table.service.js";
 import { rateService } from "./services/rate.service.js";
 import { sessionService } from "./services/session.service.js";
+import { reservationService } from "./services/reservation.service.js";
 import { transactionService } from "./services/transaction.service.js";
 import { reportService } from "./services/report.service.js";
 
@@ -34,6 +38,7 @@ import {
   cashierController,
   tableController,
   rateController,
+  reservationController,
   sessionController,
   transactionController,
   reportController,
@@ -60,6 +65,7 @@ async function start() {
       cashier: cashierModel({ db }),
       table: tableModel({ db }),
       rate: rateModel({ db }),
+      reservation: reservationModel({ db }),
       session: sessionModel({ db }),
       transaction: transactionModel({ db }),
     };
@@ -80,6 +86,7 @@ async function start() {
       cashier: cashierService({ cashierModel: models.cashier, db }),
       table: tableService({ tableModel: models.table, db }),
       rate: rateService({ rateModel: models.rate }),
+      reservation: reservationService({ reservationModel: models.reservation, tableModel: models.table, db }),
       session: sessionService({
         sessionModel: models.session,
         tableModel: models.table,
@@ -103,6 +110,7 @@ async function start() {
       cashier: cashierController({ cashierService: services.cashier }),
       table: tableController({ tableService: services.table }),
       rate: rateController({ rateService: services.rate }),
+      reservation: reservationController({ reservationService: services.reservation }),
       session: sessionController({ sessionService: services.session }),
       transaction: transactionController({ transactionService: services.transaction }),
       report: reportController({ reportService: services.report }),

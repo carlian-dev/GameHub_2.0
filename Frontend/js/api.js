@@ -226,3 +226,34 @@ function exportReportUrl({ from = "", to = "", method = "all" } = {}) {
   if (method && method !== "all") q.set("method", method);
   return `${API_BASE_URL}/api/admin/reports/export?${q.toString()}`;
 }
+
+// --- Customer reservations (CU-004..CU-014, guest, no login) ---
+async function listPublicRates() {
+  return api("/api/rates");
+}
+async function createReservation(fields) {
+  return api("/api/reservations", {
+    method: "POST",
+    body: JSON.stringify(fields),
+  });
+}
+async function getReservation(ref, contact) {
+  const q = new URLSearchParams({ contact });
+  return api(`/api/reservations/${encodeURIComponent(ref)}?${q.toString()}`);
+}
+async function cancelReservation(ref, contact) {
+  return api(`/api/reservations/${encodeURIComponent(ref)}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ contactNumber: contact }),
+  });
+}
+async function listCashierReservations() {
+  return api("/api/reservations");
+}
+// Cashier decisions on a pending reservation request (session required).
+async function acceptReservation(ref) {
+  return api(`/api/cashier/reservations/${encodeURIComponent(ref)}/accept`, { method: "POST" });
+}
+async function rejectReservation(ref) {
+  return api(`/api/cashier/reservations/${encodeURIComponent(ref)}/reject`, { method: "POST" });
+}

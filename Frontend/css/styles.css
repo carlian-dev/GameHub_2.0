@@ -432,6 +432,26 @@ button:active { transform: scale(0.97); }
 .tables-empty span { color: var(--muted); font-size: 14px; }
 .tables-meta { color: var(--muted); font-size: 12px; margin: 18px 0 0; font-variant-numeric: tabular-nums; }
 .tables-error { color: var(--red); font-size: 13px; margin: 12px 0 0; }
+
+/* Guest reservations (CU-004..CU-014) */
+.reserve-card { scroll-margin-top: 24px; }
+.reserve-form, .lookup-form { display: grid; gap: 12px; }
+.reserve-form label, .lookup-form label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.reserve-form input, .reserve-form select, .lookup-form input {
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+  font-size: 14px; color: var(--charcoal); background: var(--white);
+}
+.reserve-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.reserve-review, .reserve-result {
+  background: var(--green-bg); border: 1px solid rgba(20,90,66,.22);
+  border-radius: 14px; padding: 14px 16px; font-size: 14px;
+}
+.reserve-review p, .reserve-result p { margin: 4px 0; }
+.reserve-review strong, .reserve-result strong { color: var(--green); }
+.reserve-divider { border: none; border-top: 1px solid var(--line); margin: 20px 0; }
+.reserve-sub { font-size: 18px; color: var(--charcoal); margin: 0 0 10px; }
+.lookup-form { grid-template-columns: 1fr 1fr auto; align-items: end; }
+@media (max-width: 720px) { .lookup-form { grid-template-columns: 1fr; } }
 .tables-retry {
   margin: 0 0 0 8px;
   padding: 9px 18px;

@@ -115,6 +115,11 @@ export function rateController({ rateService }) {
       const result = await rateService.set(req.body || {});
       res.status(200).json(result);
     }),
+
+    publicList: asyncHandler(async (req, res) => {
+      const result = await rateService.list();
+      res.status(200).json(result);
+    }),
   };
 }
 
@@ -442,6 +447,66 @@ export function cashierController({ cashierService }) {
         throw new HttpError(401, "not logged in");
       }
       const result = await cashierService.unarchive(id, user.id);
+      res.status(200).json(result);
+    }),
+  };
+}
+
+// -------- Reservations (public, guest) --------
+export function reservationController({ reservationService }) {
+  return {
+    create: asyncHandler(async (req, res) => {
+      const result = await reservationService.createReservation(req.body || {});
+      res.status(200).json(result);
+    }),
+
+    get: asyncHandler(async (req, res) => {
+      const { ref } = req.params || {};
+      const contact = req.query?.contact || req.body?.contactNumber;
+      const result = await reservationService.getByRef(ref, contact);
+      res.status(200).json(result);
+    }),
+
+    list: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user) {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await reservationService.listAll();
+      res.status(200).json(result);
+    }),
+
+    cancel: asyncHandler(async (req, res) => {
+      const { ref } = req.params || {};
+      const contact = req.query?.contact || req.body?.contactNumber;
+      const result = await reservationService.cancel(ref, contact);
+      res.status(200).json(result);
+    }),
+
+    accept: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user) {
+        throw new HttpError(401, "not logged in");
+      }
+      const { ref } = req.params || {};
+      const result = await reservationService.accept(ref, user.id);
+      res.status(200).json(result);
+    }),
+
+    reject: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user) {
+        throw new HttpError(401, "not logged in");
+      }
+      const { ref } = req.params || {};
+      const result = await reservationService.reject(ref, user.id);
+      res.status(200).json(result);
+    }),
+
+    getByRef: asyncHandler(async (req, res) => {
+      const { ref } = req.params || {};
+      const contact = req.query?.contact || req.body?.contactNumber;
+      const result = await reservationService.getByRef(ref, contact);
       res.status(200).json(result);
     }),
   };

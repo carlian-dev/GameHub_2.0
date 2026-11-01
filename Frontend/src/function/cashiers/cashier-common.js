@@ -1,8 +1,9 @@
 // src/function/cashiers/cashier-common.js - shared cashier shell helpers.
 // Pages: cashier-dashboard.html (start), cashier-sessions.html (lifecycle +
-// billing), cashier-tables.html (read-only). Pair: js/dash.js (shell) +
-// js/api.js (endpoints). Guard + identity + timers live here so the three
-// pages stay 1:1 with their HTML without duplicating auth logic.
+// billing), cashier-reservations.html (accept/reject requests),
+// cashier-tables.html (read-only). Pair: js/dash.js (shell) + js/api.js
+// (endpoints). Guard + identity + timers live here so the pages stay 1:1 with
+// their HTML without duplicating auth logic.
 
 /** Cashier-only guard. Sets #who/#avatar, binds #out. Returns `me` or redirects. */
 async function cashierGuard() {

@@ -95,6 +95,51 @@
     </div>
   </section>
 
+  <!-- CU-004..CU-014: guest reservation flow (below available tables + map). -->
+  <section class="band reserve-band">
+    <div class="band-inner">
+      <section id="reserve" class="panel-card reserve-card" aria-live="polite">
+        <div class="panel-head">
+          <h2>Reserve a table</h2>
+          <p class="tables-pill" aria-hidden="true"><span class="live-dot"></span><span>Book ahead</span></p>
+        </div>
+        <p class="panel-lede">Pick a table, date and time. No account needed.</p>
+
+        <div class="reserve-grid">
+          <form id="reserveForm" class="reserve-form" autocomplete="off">
+            <label>Table
+              <select id="reserveTable" required></select>
+            </label>
+            <label>Date
+              <input id="reserveDate" type="date" required />
+            </label>
+            <label>Time
+              <input id="reserveTime" type="time" required />
+            </label>
+            <label>Duration
+              <select id="reserveDuration">
+                <option value="60">1 hour</option>
+                <option value="120">2 hours</option>
+                <option value="180">3 hours</option>
+              </select>
+            </label>
+            <label>Name
+              <input id="reserveName" type="text" required maxlength="60" placeholder="Your name" />
+            </label>
+            <label>Contact number
+              <input id="reserveContact" type="tel" required placeholder="09xxxxxxxxx" />
+            </label>
+            <div class="reserve-actions">
+              <button type="button" id="reserveReviewBtn" class="btn btn-solid">Review</button>
+            </div>
+          </form>
+
+          <div id="reserveReview" class="reserve-review" hidden></div>
+          <div id="reserveResult" class="reserve-result" hidden></div>
+        </div></section>
+    </div>
+  </section>
+
   <section class="features" aria-label="Why GameHub">
     <div class="features-inner">
       <span class="feature">
@@ -123,6 +168,7 @@
   <script src="js/api.js"></script>
   <script src="js/location-map.js"></script>
   <script src="js/tables-public.js"></script>
+  <script src="js/reservations.js"></script>
   <script src="js/theme.js"></script>
   <script src="js/nav.js"></script>
 </body>

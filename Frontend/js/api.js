@@ -203,6 +203,7 @@ async function listTransactions(params = {}, admin = true) {
   const q = new URLSearchParams();
   if (params.from) q.set("from", params.from);
   if (params.to) q.set("to", params.to);
+  if (params.month) q.set("month", params.month);
   if (params.method) q.set("method", params.method);
   const qs = q.toString() ? `?${q.toString()}` : "";
   const base = admin ? "/api/admin/transactions" : "/api/cashier/transactions";
@@ -216,13 +217,26 @@ async function getDailyReport(date) {
   const qs = date ? `?date=${encodeURIComponent(date)}` : "";
   return api(`/api/admin/reports/daily${qs}`);
 }
+async function getMonthlyReport(month) {
+  const qs = month ? `?month=${encodeURIComponent(month)}` : "";
+  return api(`/api/admin/reports/monthly${qs}`);
+}
+// Income totals for any inclusive from/to range (YYYY-MM-DD).
+async function getIncomeReport(from, to) {
+  const q = new URLSearchParams();
+  if (from) q.set("from", from);
+  if (to) q.set("to", to);
+  const qs = q.toString() ? `?${q.toString()}` : "";
+  return api(`/api/admin/reports/income${qs}`);
+}
 // Export stays URL-based (CSV download, not JSON): build
 // `${API_BASE_URL}/api/admin/reports/export?format=csv&from&to&method`
 // and navigate via anchor with credentials:include (see transactions.js).
-function exportReportUrl({ from = "", to = "", method = "all" } = {}) {
+function exportReportUrl({ from = "", to = "", month = "", method = "all" } = {}) {
   const q = new URLSearchParams({ format: "csv" });
   if (from) q.set("from", from);
   if (to) q.set("to", to);
+  if (month) q.set("month", month);
   if (method && method !== "all") q.set("method", method);
   return `${API_BASE_URL}/api/admin/reports/export?${q.toString()}`;
 }

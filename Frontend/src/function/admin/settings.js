@@ -277,6 +277,8 @@
             message += " Admin Google sign-in will stop working. Password sign-in must remain available for the admin account.";
           } else if (integration.key === "googleMaps") {
             message += " The landing page will stop showing the map.";
+          } else if (integration.key === "googleCalendar") {
+            message += " Accepted reservations will no longer create calendar events.";
           }
           const ok = await dashConfirm(message, `Turn off ${integration.name}?`);
           if (!ok) return;

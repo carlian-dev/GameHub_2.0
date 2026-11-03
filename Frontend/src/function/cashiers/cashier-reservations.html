@@ -4,8 +4,8 @@
   Pair: cashier-reservations.js (list + accept/reject) + cashier-common.js
   (guard/logout) + js/dash.js (shell/dialogs/toasts).
   Sidebar: Dashboard, Sessions, Reservations (active), Tables. Guard: cashiers stay.
-  Pending guest requests can be accepted (slot stays booked) or rejected
-  (slot is released).
+  Pending guest requests can be accepted (slot stays booked and the customer
+  gets an ACCEPTED email) or rejected (slot is released).
 -->
 <html lang="en">
 <head>
@@ -63,21 +63,39 @@
       </header>
 
       <main class="dash-content">
-        <div class="dash-pagehead"><h1>Reservations</h1><span data-today></span></div>
+        <div class="dash-pagehead res-pagehead">
+          <div>
+            <h1>Reservations</h1>
+            <span data-today></span>
+          </div>
+          <p class="res-sync"><span class="live-dot" aria-hidden="true"></span>Refreshes every 30s</p>
+        </div>
 
-        <section class="dash-panel" id="reservations-panel" aria-labelledby="res-h">
-          <div class="panel-head">
-            <h2 id="res-h">Customer reservation requests</h2>
+        <section class="dash-panel res-panel" aria-labelledby="res-h">
+          <h2 id="res-h" class="sr-only">Customer reservation requests</h2>
+          <div class="res-toolbar">
+            <div class="res-segment" role="group" aria-label="Filter reservations">
+              <button type="button" class="on" data-filter="pending" aria-pressed="true">
+                Pending <span id="resPendingCount">0</span>
+              </button>
+              <button type="button" data-filter="all" aria-pressed="false">
+                All <span id="resAllCount">0</span>
+              </button>
+              <button type="button" data-filter="accepted" aria-pressed="false">
+                Accepted <span id="resAcceptedCount">0</span>
+              </button>
+              <button type="button" data-filter="rejected" aria-pressed="false">
+                Rejected <span id="resRejectedCount">0</span>
+              </button>
+            </div>
             <span class="dash-stamp" id="resStamp"></span>
           </div>
-          <p>Accept a request to keep the table slot booked, or reject it to release the slot. Refreshes every 30 seconds.</p>
+          <p class="res-lede">
+            Accept a request to keep the table slot booked — the customer gets an
+            <strong>ACCEPTED</strong> email automatically. Rejecting releases the slot.
+          </p>
           <div class="dash-msg" id="resMsg" role="status">Loading…</div>
-          <div class="dash-tablewrap">
-            <table id="resTbl">
-              <thead><tr><th>Ref</th><th>Table</th><th>Customer</th><th>Contact</th><th>Start</th><th>End</th><th>Status</th><th>Actions</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
+          <div class="res-queue" id="resList"></div>
           <p class="dash-empty" id="resEmpty" hidden>No reservations yet. Guest bookings from the landing page show up here.</p>
         </section>
       </main>

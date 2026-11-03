@@ -162,9 +162,14 @@ function renderReservations(reservations) {
     ref.textContent = r.ref;
     const time = document.createElement("span");
     time.className = "sl-time";
-    const start = r.startTime ? new Date(r.startTime).toLocaleString() : "—";
-    const end = r.endTime ? new Date(r.endTime).toLocaleString() : "—";
-    time.textContent = `${start} – ${end}`;
+    const start = r.startTime ? new Date(r.startTime) : null;
+    const end = r.endTime ? new Date(r.endTime) : null;
+    const day = start
+      ? start.toLocaleDateString([], { month: "short", day: "numeric" })
+      : "—";
+    const clock = (d) =>
+      d ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—";
+    time.textContent = `${day} · ${clock(start)} – ${clock(end)}`;
     row.append(left, ref, time);
     container.appendChild(row);
   }

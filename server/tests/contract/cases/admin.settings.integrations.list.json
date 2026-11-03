@@ -29,6 +29,20 @@
           "updatedBy": null
         },
         {
+          "key": "googleCalendar",
+          "name": "Google Calendar",
+          "description": "Accepted reservations become calendar events",
+          "available": true,
+          "enabled": false,
+          "credentials": [
+            { "name": "calendarId", "label": "Calendar ID", "required": true, "configured": false, "masked": "" },
+            { "name": "clientEmail", "label": "Service account email", "required": true, "configured": false, "masked": "" },
+            { "name": "privateKey", "label": "Service account private key", "required": true, "configured": false, "masked": "" }
+          ],
+          "updatedAt": null,
+          "updatedBy": null
+        },
+        {
           "key": "recaptcha",
           "name": "reCAPTCHA",
           "description": "Bot protection (planned)",

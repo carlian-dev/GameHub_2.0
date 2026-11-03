@@ -222,6 +222,7 @@ export function transactionController({ transactionService }) {
       const result = await transactionService.list({
         from: req.query.from,
         to: req.query.to,
+        month: req.query.month,
         method: req.query.method,
       });
       res.status(200).json(result);
@@ -252,6 +253,27 @@ export function reportController({ reportService }) {
       res.status(200).json(result);
     }),
 
+    monthly: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user || user.role !== "admin") {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await reportService.monthly({ month: req.query.month });
+      res.status(200).json(result);
+    }),
+
+    income: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user || user.role !== "admin") {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await reportService.income({
+        from: req.query.from,
+        to: req.query.to,
+      });
+      res.status(200).json(result);
+    }),
+
     export: asyncHandler(async (req, res) => {
       const user = req.session && req.session.user;
       if (!user || user.role !== "admin") {
@@ -260,6 +282,7 @@ export function reportController({ reportService }) {
       const result = await reportService.export({
         from: req.query.from,
         to: req.query.to,
+        month: req.query.month,
         method: req.query.method,
       });
       res.set(result.headers);

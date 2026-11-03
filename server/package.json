@@ -18,7 +18,8 @@
     "seed": "node scripts/resetDb.js",
     "setup:settings": "node scripts/setupSettings.js",
     "setup:indexes": "node scripts/setupIndexes.js",
-    "verify:indexes": "node scripts/verifyIndexes.js"
+    "verify:indexes": "node scripts/verifyIndexes.js",
+    "check:calendar": "node scripts/checkCalendar.js"
   },
   "engines": {
     "node": ">=20"

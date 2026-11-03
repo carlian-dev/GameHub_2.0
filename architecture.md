@@ -18,7 +18,7 @@ Onboarding document for the team. For setup and daily commands, see
    |  HTML +  |  cookie    |  index.php |                  |              |
    |  JS, no  |            +------------+                  +--------------+
    |  build)  |
-   +----------+  SMTP (invite mail only)
+   +----------+  SMTP (invitations + reservation updates)
         |        +----------+     +------------------+
         +------> | Gmail    | <-> | nodemailer       |
                  | SMTP     |     | tokeninfo verify |
@@ -33,8 +33,9 @@ Onboarding document for the team. For setup and daily commands, see
   then to controllers, services, and models.
 * The database is MongoDB Atlas (`gamehub_2_0`), reached through one shared
   `MongoClient` per Node process (`server/src/config/db.js`).
-* Two external services participate narrowly: Google verifies sign-in tokens,
-  and Gmail delivers invitation mail. Neither stores application state.
+* Two external services participate narrowly: Google verifies sign-in tokens
+  and syncs reservations, and Gmail delivers staff and customer mail. Neither
+  stores application state.
 
 ## 2. Backend layers
 

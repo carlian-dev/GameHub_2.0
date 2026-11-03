@@ -7,6 +7,7 @@ import { toObjectId } from "../models/bson.js";
 
 const NAME_RE = /^.{2,60}$/;
 const CONTACT_RE = /^[0-9+\-\s()]{7,25}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DURATIONS = [60, 120, 180, 240, 300, 360, 480, 720, 1440];
 
 function throwErr(status, msg) {
@@ -20,6 +21,7 @@ function shape(doc) {
     tableId: String(doc.tableId),
     tableName: doc.tableName ?? "",
     customerName: doc.customerName ?? "",
+    customerEmail: doc.customerEmail ?? "",
     contactNumber: doc.contactNumber ?? "",
     startTime: doc.startTime instanceof Date ? doc.startTime.toISOString() : null,
     endTime: doc.endTime instanceof Date ? doc.endTime.toISOString() : null,
@@ -42,8 +44,57 @@ function genRef(start) {
   return `RS-${y}${m}${day}-${suffix}`;
 }
 
-export function reservationService({ reservationModel, tableModel, db }) {
+export function reservationService({ reservationModel, tableModel, db, calendarService, mailer }) {
   const activityLogs = db.collection("activityLogs");
+
+  // Best-effort Google Calendar sync: a calendar outage must never fail a
+  // booking, so failures are logged and the reservation stays unchanged.
+  async function attachCalendarEvent(doc) {
+    if (!calendarService || !calendarService.enabled) return doc;
+    try {
+      const eventId = await calendarService.createReservationEvent(doc);
+      if (!eventId) return doc;
+      await reservationModel.update(doc._id, {
+        calendarEventId: eventId,
+        updatedAt: new Date(),
+      });
+      return (await reservationModel.findByRef(doc.ref)) || doc;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("[gamehub] calendar event create failed:", e && e.message ? e.message : e);
+      return doc;
+    }
+  }
+
+  async function removeCalendarEvent(doc) {
+    if (!calendarService || !calendarService.enabled || !doc.calendarEventId) return;
+    try {
+      await calendarService.deleteReservationEvent(doc.calendarEventId);
+      await reservationModel.update(doc._id, { calendarEventId: null });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("[gamehub] calendar event delete failed:", e && e.message ? e.message : e);
+    }
+  }
+
+  // Best-effort "ACCEPTED" email: a mail outage must never fail the decision.
+  // The UI receives `notified` so it can tell the cashier what happened.
+  async function notifyAccepted(doc) {
+    if (!doc || !doc.customerEmail) return false;
+    if (!mailer || !mailer.sendReservationAccepted) {
+      // eslint-disable-next-line no-console
+      console.warn("[gamehub] reservation email skipped: MAIL_USER/MAIL_PASS not configured");
+      return false;
+    }
+    try {
+      const sent = await mailer.sendReservationAccepted(doc);
+      return sent !== false;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("[gamehub] reservation email failed:", e && e.message ? e.message : e);
+      return false;
+    }
+  }
 
   async function createReservation(input) {
     const tableId = String(input?.tableId || "").trim();
@@ -54,6 +105,11 @@ export function reservationService({ reservationModel, tableModel, db }) {
 
     const contactNumber = String(input?.contactNumber || "").trim();
     if (!CONTACT_RE.test(contactNumber)) throwErr(422, "contact number is required");
+
+    const customerEmail = String(input?.customerEmail || "").trim().toLowerCase();
+    if (customerEmail.length > 254 || !EMAIL_RE.test(customerEmail)) {
+      throwErr(422, "valid email is required");
+    }
 
     const startRaw = input?.startTime;
     const start = startRaw instanceof Date ? startRaw : new Date(startRaw);
@@ -97,6 +153,7 @@ export function reservationService({ reservationModel, tableModel, db }) {
       tableId: oid || tableId,
       tableName: table.name ?? "",
       customerName,
+      customerEmail,
       contactNumber,
       startTime: start,
       endTime: end,
@@ -155,6 +212,7 @@ export function reservationService({ reservationModel, tableModel, db }) {
       cancelledAt: now,
       updatedAt: now,
     });
+    await removeCalendarEvent(doc);
     const fresh = await reservationModel.findByRef(r);
     return { ok: true, reservation: shape(fresh) };
   }
@@ -181,7 +239,12 @@ export function reservationService({ reservationModel, tableModel, db }) {
       await activityLogs.insertOne({ actorId: actorId || null, action, target: r, at: now });
     } catch (_) { /* audit best-effort */ }
 
-    const fresh = await reservationModel.findByRef(r);
+    let fresh = await reservationModel.findByRef(r);
+    if (nextStatus === "accepted") {
+      fresh = await attachCalendarEvent(fresh);
+      const notified = await notifyAccepted(fresh);
+      return { ok: true, reservation: shape(fresh), notified };
+    }
     return { ok: true, reservation: shape(fresh) };
   }
 

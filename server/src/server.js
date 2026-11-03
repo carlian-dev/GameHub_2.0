@@ -26,6 +26,8 @@ import { tableService } from "./services/table.service.js";
 import { rateService } from "./services/rate.service.js";
 import { sessionService } from "./services/session.service.js";
 import { reservationService } from "./services/reservation.service.js";
+import { googleCalendarService } from "./services/googleCalendar.service.js";
+import { mailService } from "./services/mail.service.js";
 import { transactionService } from "./services/transaction.service.js";
 import { reportService } from "./services/report.service.js";
 
@@ -70,6 +72,18 @@ async function start() {
       transaction: transactionModel({ db }),
     };
 
+    const mailer = mailService({
+      user: env.MAIL_USER,
+      pass: env.MAIL_PASS,
+      from: env.MAIL_FROM,
+      dryRun: env.MAIL_DRY_RUN,
+    });
+    if (env.MAIL_DRY_RUN) {
+      console.log("[gamehub] mail DRY-RUN enabled (no real email will be sent)");
+    } else if (!mailer.enabled) {
+      console.log("[gamehub] mail disabled (set MAIL_USER/MAIL_PASS to send email)");
+    }
+
     const services = {
       health: healthService({ healthModel: models.health, dbName: env.MONGODB_DB }),
       settings: settingsService({
@@ -77,16 +91,21 @@ async function start() {
         db,
         mongoClient,
         googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
+        googleCalendarFromEnv: {
+          calendarId: env.GOOGLE_CALENDAR_ID,
+          clientEmail: env.GOOGLE_CALENDAR_CLIENT_EMAIL,
+          privateKey: env.GOOGLE_CALENDAR_PRIVATE_KEY,
+        },
       }),
       auth: authService({ userModel: models.user, settingsModel: models.settings, db }),
       invitation: invitationService({
         invitationModel: models.invitation,
         db,
+        mailer,
       }),
       cashier: cashierService({ cashierModel: models.cashier, db }),
       table: tableService({ tableModel: models.table, db }),
       rate: rateService({ rateModel: models.rate }),
-      reservation: reservationService({ reservationModel: models.reservation, tableModel: models.table, db }),
       session: sessionService({
         sessionModel: models.session,
         tableModel: models.table,
@@ -101,6 +120,32 @@ async function start() {
       }),
       report: reportService({ transactionModel: models.transaction }),
     };
+
+    // Calendar sync is DB-backed (settings.googleCalendar), with env fallback
+    // when no document exists. It is always present; methods no-op when disabled.
+    const calendar = {
+      enabled: true,
+      async createReservationEvent(reservation) {
+        const cfg = await services.settings.calendarConfig();
+        if (!cfg.enabled) return "";
+        const svc = googleCalendarService(cfg);
+        return svc.createReservationEvent(reservation);
+      },
+      async deleteReservationEvent(eventId) {
+        const cfg = await services.settings.calendarConfig();
+        if (!cfg.enabled || !eventId) return false;
+        const svc = googleCalendarService(cfg);
+        return svc.deleteReservationEvent(eventId);
+      },
+    };
+    services.calendar = calendar;
+    services.reservation = reservationService({
+      reservationModel: models.reservation,
+      tableModel: models.table,
+      db,
+      calendarService: calendar,
+      mailer,
+    });
 
     const controllers = {
       health: healthController({ healthService: services.health }),

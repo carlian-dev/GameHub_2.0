@@ -184,16 +184,27 @@ export function transactionService({
     },
 
     /** GET /api/cashier/transactions + GET /api/admin/transactions */
-    async list({ from, to, method, limit = 200 } = {}) {
+    async list({ from, to, month, method, limit = 200 } = {}) {
       const filter = {};
       const range = {};
-      if (from) {
-        const d = parseDay(from, "from");
-        if (d) range.$gte = d;
-      }
-      if (to) {
-        const d = parseDay(to, "to");
-        if (d) range.$lt = new Date(d.getTime() + 24 * 60 * 60 * 1000);
+      if (month) {
+        const [y, m] = String(month).split("-").map(Number);
+        if (m < 1 || m > 12) {
+          const err = new Error("month must be YYYY-MM");
+          err.status = 422;
+          throw err;
+        }
+        range.$gte = new Date(Date.UTC(y, m - 1, 1));
+        range.$lt = new Date(Date.UTC(y, m, 1));
+      } else {
+        if (from) {
+          const d = parseDay(from, "from");
+          if (d) range.$gte = d;
+        }
+        if (to) {
+          const d = parseDay(to, "to");
+          if (d) range.$lt = new Date(d.getTime() + 24 * 60 * 60 * 1000);
+        }
       }
       if (Object.keys(range).length > 0) filter.paidAt = range;
       if (method && ["cash", "gcash"].includes(method)) {

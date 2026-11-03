@@ -23,6 +23,17 @@ const REGISTRY = [
     ],
   },
   {
+    key: "googleCalendar",
+    name: "Google Calendar",
+    description: "Accepted reservations become calendar events",
+    available: true,
+    credentials: [
+      { name: "calendarId", label: "Calendar ID", required: true, secret: false },
+      { name: "clientEmail", label: "Service account email", required: true, secret: false },
+      { name: "privateKey", label: "Service account private key", required: true, secret: true },
+    ],
+  },
+  {
     key: "recaptcha",
     name: "reCAPTCHA",
     description: "Bot protection (planned)",
@@ -77,6 +88,11 @@ function effectiveDoc(key, doc) {
   };
 }
 
+// Env fallbacks captured from the service factory (DB authoritative once a
+// document exists; these only apply when the document is positively absent).
+let googleAuthEnvClientId = "";
+let googleCalendarEnv = {};
+
 function defaultDoc(key) {
   const reg = REGISTRY.find((r) => r.key === key);
   if (!reg) return { enabled: false, credentials: {} };
@@ -86,6 +102,40 @@ function defaultDoc(key) {
   }
   let enabled = false;
   if (key === "googleMaps") enabled = true;
+  if (key === "googleAuth") {
+    const cid = String(googleAuthEnvClientId || "").trim();
+    if (cid) {
+      enabled = true;
+      credentials.clientId = {
+        value: cid,
+        last4: credentialHint("googleAuth", "clientId", cid),
+        updatedAt: null,
+      };
+    }
+  }
+  if (key === "googleCalendar") {
+    const calendarId = String((googleCalendarEnv && googleCalendarEnv.calendarId) || "").trim();
+    const clientEmail = String((googleCalendarEnv && googleCalendarEnv.clientEmail) || "").trim();
+    const privateKey = String((googleCalendarEnv && googleCalendarEnv.privateKey) || "").trim();
+    if (calendarId && clientEmail && privateKey) {
+      enabled = true;
+      credentials.calendarId = {
+        value: calendarId,
+        last4: credentialHint("googleCalendar", "calendarId", calendarId),
+        updatedAt: null,
+      };
+      credentials.clientEmail = {
+        value: clientEmail,
+        last4: clientEmail.slice(-4),
+        updatedAt: null,
+      };
+      credentials.privateKey = {
+        value: privateKey,
+        last4: privateKey.slice(-4),
+        updatedAt: null,
+      };
+    }
+  }
   return { enabled, credentials };
 }
 
@@ -101,7 +151,9 @@ function credentialHint(key, name, value) {
   return value.slice(-4);
 }
 
-export function settingsService({ settingsModel, db, mongoClient, googleClientIdFromEnv }) {
+export function settingsService({ settingsModel, db, mongoClient, googleClientIdFromEnv, googleCalendarFromEnv }) {
+  googleAuthEnvClientId = String(googleClientIdFromEnv || "");
+  googleCalendarEnv = googleCalendarFromEnv || {};
   return {
     registry() {
       return REGISTRY;
@@ -151,6 +203,20 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
         };
       });
       return { integrations };
+    },
+    async calendarConfig() {
+      try {
+        const docs = await settingsModel.findMany(["googleCalendar"]);
+        const effective = effectiveDoc("googleCalendar", docs.googleCalendar || null);
+        return {
+          enabled: !!effective.enabled,
+          calendarId: effective.enabled ? effective.credentials.calendarId.value : "",
+          clientEmail: effective.enabled ? effective.credentials.clientEmail.value : "",
+          privateKey: effective.enabled ? effective.credentials.privateKey.value : "",
+        };
+      } catch {
+        return { enabled: false, calendarId: "", clientEmail: "", privateKey: "" };
+      }
     },
     /**
      * settings_plan_update port: build field-level update plan.
@@ -296,6 +362,9 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
         throw err;
       }
 
+      const settingsColl = db.collection("settings");
+      const activityLogs = db.collection("activityLogs");
+
       const existingDoc = await settingsColl.findOne({ key });
       const effective = effectiveDoc(key, existingDoc || null);
       const plan = this.planUpdate(key, effective, data);
@@ -305,12 +374,9 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
       if (Object.keys(plan.unset).length > 0) update.$unset = plan.unset;
       if (Object.keys(plan.set_on_insert).length > 0) update.$setOnInsert = plan.set_on_insert;
 
-      const settingsColl = db.collection("settings");
-      const activityLogs = db.collection("activityLogs");
-
       const session = mongoClient.startSession();
       try {
-        await session.withTransaction(async () => {
+        const shaped = await session.withTransaction(async () => {
           const updated = await settingsColl.findOneAndUpdate(
             { key },
             update,
@@ -333,6 +399,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
           );
           return shaped;
         });
+        return shaped;
       } finally {
         await session.endSession();
       }

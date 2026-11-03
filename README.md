@@ -22,7 +22,7 @@ backend was archived under `archive/Backend/` and is not used at runtime.
   (₱180/h) hourly rates, and an active-sessions view (session lifecycle
   operations follow in a later sprint).
 * **Planned next.** Session start/extend/end with per-minute billing,
-  reservations with overlap protection, food & beverage ordering, cash/GCash
+  reservations with overlap protection, accepted-reservation email alerts, food & beverage ordering, cash/GCash
   payments with receipts, daily/monthly/usage reports with export.
 
 ## Prerequisites
@@ -51,6 +51,11 @@ backend was archived under `archive/Backend/` and is not used at runtime.
    `GOOGLE_CLIENT_ID`, `SESSION_SECRET`, `SESSION_TTL_SECONDS`,
    `AUTH_COOKIE_NAME`, `MAIL_USER`/`MAIL_PASS`/`MAIL_FROM` (for invite mail),
    and `TRUST_PROXY` if behind a proxy. Only used by the Express backend.
+   Optional Google Calendar sync uses `GOOGLE_CALENDAR_ID`,
+   `GOOGLE_CALENDAR_CLIENT_EMAIL`, `GOOGLE_CALENDAR_PRIVATE_KEY` (see
+   `server/.env.example` and the steps below); leave them blank to disable it.
+   After filling them, run `cd server && npm run check:calendar` to verify the
+   service-account key, Calendar API enablement, and calendar sharing.
 
 3. Create the first administrator directly in the `users` collection
    (MongoDB Compass): `{ email, passwordHash (bcrypt), role: "admin",
@@ -143,8 +148,9 @@ GameHub_2.0/
 | `FRONTEND_URL` | Allowed CORS origin for the Frontend |
 | `PORT` | Backend listen port (`8000`) |
 | `GOOGLE_CLIENT_ID` | Google OAuth web client (public identifier) |
-| `MAIL_USER` / `MAIL_PASS` | Gmail sender + app password (invite mail only) |
-| `MAIL_FROM` | Display name on invite mails |
+| `GOOGLE_CALENDAR_ID` / `GOOGLE_CALENDAR_CLIENT_EMAIL` / `GOOGLE_CALENDAR_PRIVATE_KEY` | Optional service-account sync: accepted reservations become events on this shared calendar (blank = disabled) |
+| `MAIL_USER` / `MAIL_PASS` | Gmail sender + app password (cashier invitations and accepted-reservation emails) |
+| `MAIL_FROM` | Display name on outgoing mail |
 | `SESSION_SECRET` | 32 random bytes as 64 hex chars |
 | `SESSION_TTL_SECONDS` | Session rolling TTL (default 43200 = 12h) |
 | `AUTH_COOKIE_NAME` | Session cookie name (default `gh_session`) |

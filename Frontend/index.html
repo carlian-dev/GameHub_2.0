@@ -4,8 +4,8 @@
   Reference-matched: emerald hero over billiard photo, gold accents, warm
   off-white content band with white cards (live available tables CU-002 +
   Find Us with map), feature strip, footer.
-  Nav: Home / Tables / Location + gold Reserve Now pill (scrolls to the live
-  availability section - there is no reservation backend).
+  Nav: Home / Tables / Location + gold Reserve Now pill (jumps to the guest
+  reservation form; the Express API stores requests for cashier approval).
   Staff login lives at src/function/auth/login.html, reachable via /login URL
   only (see login/index.html redirect) - never linked from here.
   Scripts: js/config.js + js/api.js + js/tables-public.js (availability),
@@ -40,7 +40,7 @@
         <a href="#top">Home</a>
         <a href="#tables">Tables</a>
         <a href="#location">Location</a>
-        <a class="nav-cta" href="#tables">Reserve Now</a>
+        <a class="nav-cta" href="#reserve">Reserve Now</a>
       </nav>
       <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
@@ -57,7 +57,7 @@
       <p class="lede">Premium billiard tables, real-time availability, and seamless reservations — all in one place.</p>
       <p class="cta">
         <a class="btn btn-solid" href="#tables">View Tables</a>
-        <a class="btn btn-ghost" href="#tables">Reserve Now</a>
+        <a class="btn btn-ghost" href="#reserve">Reserve Now</a>
       </p>
     </main>
 
@@ -97,46 +97,91 @@
 
   <!-- CU-004..CU-014: guest reservation flow (below available tables + map). -->
   <section class="band reserve-band">
-    <div class="band-inner">
-      <section id="reserve" class="panel-card reserve-card" aria-live="polite">
-        <div class="panel-head">
-          <h2>Reserve a table</h2>
-          <p class="tables-pill" aria-hidden="true"><span class="live-dot"></span><span>Book ahead</span></p>
-        </div>
-        <p class="panel-lede">Pick a table, date and time. No account needed.</p>
+    <div class="reserve-shell">
+      <section id="reserve" class="panel-card reserve-card" aria-labelledby="reserveTitle">
+        <header class="reserve-head">
+          <div>
+            <p class="reserve-eyebrow"><span class="live-dot" aria-hidden="true"></span>Book ahead</p>
+            <h2 id="reserveTitle">Reserve a table</h2>
+            <p class="panel-lede">Choose a table and time. We’ll email you as soon as the team accepts.</p>
+          </div>
+          <span class="reserve-badge">No account needed</span>
+        </header>
 
         <div class="reserve-grid">
-          <form id="reserveForm" class="reserve-form" autocomplete="off">
-            <label>Table
-              <select id="reserveTable" required></select>
-            </label>
-            <label>Date
-              <input id="reserveDate" type="date" required />
-            </label>
-            <label>Time
-              <input id="reserveTime" type="time" required />
-            </label>
-            <label>Duration
-              <select id="reserveDuration">
-                <option value="60">1 hour</option>
-                <option value="120">2 hours</option>
-                <option value="180">3 hours</option>
-              </select>
-            </label>
-            <label>Name
-              <input id="reserveName" type="text" required maxlength="60" placeholder="Your name" />
-            </label>
-            <label>Contact number
-              <input id="reserveContact" type="tel" required placeholder="09xxxxxxxxx" />
-            </label>
+          <form id="reserveForm" class="reserve-form" autocomplete="on" novalidate>
+            <fieldset class="reserve-fieldset">
+              <legend>When</legend>
+              <div class="reserve-fields">
+                <label class="reserve-field reserve-field-wide" for="reserveTable">
+                  <span>Table</span>
+                  <select id="reserveTable" required></select>
+                </label>
+                <label class="reserve-field" for="reserveDate">
+                  <span>Date</span>
+                  <input id="reserveDate" type="date" required />
+                </label>
+                <label class="reserve-field" for="reserveTime">
+                  <span>Time</span>
+                  <input id="reserveTime" type="time" required />
+                </label>
+                <label class="reserve-field reserve-field-wide" for="reserveDuration">
+                  <span>Duration</span>
+                  <select id="reserveDuration">
+                    <option value="60">1 hour</option>
+                    <option value="120">2 hours</option>
+                    <option value="180">3 hours</option>
+                  </select>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="reserve-fieldset">
+              <legend>Your details</legend>
+              <div class="reserve-fields">
+                <label class="reserve-field reserve-field-wide" for="reserveName">
+                  <span>Full name</span>
+                  <input id="reserveName" type="text" required maxlength="60" placeholder="Maria Cruz" autocomplete="name" />
+                </label>
+                <label class="reserve-field" for="reserveContact">
+                  <span>Contact number</span>
+                  <input id="reserveContact" type="tel" required placeholder="09xx xxx xxxx" autocomplete="tel" inputmode="tel" />
+                </label>
+                <label class="reserve-field" for="reserveEmail">
+                  <span>Email</span>
+                  <input id="reserveEmail" type="email" required maxlength="254" placeholder="you@email.com" autocomplete="email" inputmode="email" />
+                </label>
+              </div>
+            </fieldset>
+
+            <p class="reserve-error" id="reserveError" role="alert" hidden></p>
             <div class="reserve-actions">
-              <button type="button" id="reserveReviewBtn" class="btn btn-solid">Review</button>
+              <button type="submit" id="reserveSubmitBtn" class="btn btn-solid" disabled>Confirm reservation</button>
+              <span class="reserve-actions-note">We’ll email your confirmation once accepted.</span>
             </div>
           </form>
 
-          <div id="reserveReview" class="reserve-review" hidden></div>
-          <div id="reserveResult" class="reserve-result" hidden></div>
-        </div></section>
+          <aside class="reserve-side">
+            <div class="reserve-summary" id="reserveSummary">
+              <p class="reserve-summary-kicker">Your booking</p>
+              <h3 id="reserveSummaryTitle">Choose a table</h3>
+              <dl class="reserve-summary-list">
+                <div><dt>Date</dt><dd id="sumDate">—</dd></div>
+                <div><dt>Time</dt><dd id="sumTime">—</dd></div>
+                <div><dt>Duration</dt><dd id="sumDuration">—</dd></div>
+                <div><dt>Name</dt><dd id="sumName">—</dd></div>
+                <div><dt>Contact</dt><dd id="sumContact">—</dd></div>
+                <div><dt>Email</dt><dd id="sumEmail">—</dd></div>
+              </dl>
+              <p class="reserve-summary-note">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                The team reviews every request before confirming.
+              </p>
+            </div>
+            <div class="reserve-result" id="reserveResult" role="status" hidden></div>
+          </aside>
+        </div>
+      </section>
     </div>
   </section>
 

@@ -52,6 +52,7 @@ import {
 // killed the process with an unhandled rejection. A clear message + exit(1)
 // is better than a half-started server.
 let server = null;
+let sessionSweepTimer = null;
 
 async function start() {
   try {
@@ -147,6 +148,29 @@ async function start() {
       mailer,
     });
 
+    // Sessions must end when their countdown reaches 0:00 even if no cashier
+    // has a dashboard open. A startup pass clears any downtime backlog, then
+    // a short interval closes sessions at expiry. list()/start() also sweep
+    // lazily so the next request always sees an already-ended session.
+    const sweepSessions = async () => {
+      try {
+        const { closed } = await services.session.autoEndExpired();
+        if (closed > 0) {
+          // eslint-disable-next-line no-console
+          console.log(`[gamehub] auto-ended ${closed} session(s) at time up`);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[gamehub] session auto-end sweep failed:",
+          err && err.message ? err.message : err
+        );
+      }
+    };
+    await sweepSessions();
+    sessionSweepTimer = setInterval(sweepSessions, 15000);
+    if (typeof sessionSweepTimer.unref === "function") sessionSweepTimer.unref();
+
     const controllers = {
       health: healthController({ healthService: services.health }),
       settings: settingsController({ settingsService: services.settings }),
@@ -188,6 +212,7 @@ start();
 function shutdown(signal) {
   // eslint-disable-next-line no-console
   console.log(`[gamehub] ${signal} received, shutting down`);
+  if (sessionSweepTimer) clearInterval(sessionSweepTimer);
   if (!server) process.exit(0);
   server.close(async () => {
     await closeDb();

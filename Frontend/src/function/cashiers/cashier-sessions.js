@@ -461,6 +461,7 @@ async function refreshSessions(quiet = true) {
   try {
     await cashierGuard();
     bindCashierLogout();
+    setSessionExpiryHandler(() => refreshSessions(true));
     ensureCashierTick();
     refreshSessions(false);
     startCashierPolling(refreshSessions);

@@ -31,20 +31,21 @@ function fmtWhen(iso) {
 }
 
 function fmtLeft(ms) {
-  const over = ms < 0;
-  const a = Math.abs(ms);
+  const a = Math.max(0, ms);
   const h = Math.floor(a / 3600000);
   const m = Math.floor((a % 3600000) / 60000);
   const s = Math.floor((a % 60000) / 1000);
-  const body = h > 0
+  return h > 0
     ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
     : `${m}:${String(s).padStart(2, "0")}`;
-  return (over ? "+" : "") + body;
 }
+
+let expiryReloadAt = 0;
 
 // Per-second ticker for any [data-end] spans rendered on this page.
 function startTick() {
   const tick = () => {
+    let hitZero = false;
     document.querySelectorAll("[data-end]").forEach((el) => {
       const raw = el.getAttribute("data-end");
       if (!raw) return;
@@ -52,9 +53,15 @@ function startTick() {
       if (isNaN(t)) return;
       const left = t - Date.now();
       el.textContent = fmtLeft(left);
-      el.classList.toggle("over", left < 0);
-      el.classList.toggle("warn", left >= 0 && left < 600000);
+      el.classList.toggle("warn", left > 0 && left < 600000);
+      el.classList.remove("over");
+      if (left <= 0) hitZero = true;
     });
+    // A table whose session just ended must flip back to "available".
+    if (hitZero && Date.now() - expiryReloadAt > 10000) {
+      expiryReloadAt = Date.now();
+      load();
+    }
   };
   tick();
   setInterval(tick, 1000);

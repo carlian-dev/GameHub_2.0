@@ -4,7 +4,8 @@
 //   tables.name unique, rates.type unique, invitations.tokenHash unique,
 //   settings.key unique, transactions.ref unique, transactions.sessionId unique,
 //   transactions {paidAt, method} compound,
-//   sessions {tableId:1} unique partial {status:"active"} (optional, duplicate-checked).
+//   sessions {tableId:1} unique partial {status:"active"} (optional, duplicate-checked),
+//   sessions {status:1, endTime:1} for the auto-end sweeper.
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,6 +58,10 @@ async function main() {
     await db.collection("transactions").createIndex(
       { paidAt: 1, method: 1 },
       { name: "idx_transactions_paidAt_method" }
+    );
+    await db.collection("sessions").createIndex(
+      { status: 1, endTime: 1 },
+      { name: "idx_sessions_status_endTime" }
     );
 
     // Optional active-session index: only create if no duplicates already exist.

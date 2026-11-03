@@ -9,6 +9,7 @@ const MIN_DURATION = 60;
 const MAX_DURATION = 1440;
 const MAX_EXTRA = 720;
 const MAX_PLANNED = 1440;
+const AUTO_END_ACTION = "session_auto_end";
 
 /** Get the hour (0-23) in Asia/Manila for a UTC Date. */
 function manilaHour(date) {
@@ -61,8 +62,20 @@ export function sessionService({
   const activityLogs = db.collection("activityLogs");
 
   return {
+    /**
+     * Close every active session whose planned time is up. Called by the
+     * server interval and lazily before list/start so a countdown at 0:00
+     * can never leave a table occupied.
+     */
+    async autoEndExpired(now = new Date()) {
+      return await autoEndExpired(now);
+    },
+
     /** GET /api/admin/sessions + GET /api/cashier/sessions */
     async list({ status = "active", limit = 200 } = {}) {
+      // Converge expired sessions first: the response must never show a
+      // session as active when its countdown has already reached zero.
+      await autoEndExpired();
       const filter = {};
       if (status === "all") {
         // no status filter
@@ -141,7 +154,10 @@ export function sessionService({
         err.status = 422;
         throw err;
       }
-      const customer = String(customerName ?? customer ?? "").trim();
+      // A table whose previous session ran out must be free to start again,
+      // even if the sweep interval has not fired yet.
+      await autoEndExpired();
+      const customer = String(customerName ?? "").trim();
       if (customer === "" || customer.length > 60) {
         const err = new Error("customer name is required (max 60 chars)");
         err.status = 422;
@@ -263,6 +279,13 @@ export function sessionService({
         err.status = 422;
         throw err;
       }
+      // Time is up: end it instead of extending past zero.
+      if (doc.endTime instanceof Date && doc.endTime.getTime() <= Date.now()) {
+        await closeExpired(doc, new Date());
+        const err = new Error("session time is up — it has ended automatically");
+        err.status = 422;
+        throw err;
+      }
       const newPlanned = (doc.plannedMinutes ?? 0) + extra;
       if (newPlanned > MAX_PLANNED) {
         const err = new Error(
@@ -305,12 +328,19 @@ export function sessionService({
         throw err;
       }
       const now = new Date();
-      const chargeAmount = charge(doc, now);
-      const secs = now.getTime() - doc.startTime.getTime();
+      // The countdown is the source of truth: if it already hit zero, close
+      // at the planned end (not at the cashier's click) so the per-hour bill
+      // cannot gain an extra started hour from request/sweep latency.
+      const closedAt =
+        doc.endTime instanceof Date && doc.endTime.getTime() <= now.getTime()
+          ? doc.endTime
+          : now;
+      const chargeAmount = charge(doc, closedAt);
+      const secs = (closedAt.getTime() - doc.startTime.getTime()) / 1000;
       const hours = billedHours(secs);
       await sessionModel.update(id, {
         status: "closed",
-        closedAt: now,
+        closedAt,
         updatedAt: now,
       });
       await freeTable(doc.tableId);
@@ -343,7 +373,16 @@ export function sessionService({
         err.status = 422;
         throw err;
       }
+      // A finished session cannot be voided — close it at zero instead.
       const now = new Date();
+      if (doc.endTime instanceof Date && doc.endTime.getTime() <= now.getTime()) {
+        await closeExpired(doc, now);
+        const err = new Error(
+          "session time is up — it has ended automatically and can no longer be voided"
+        );
+        err.status = 422;
+        throw err;
+      }
       await sessionModel.update(id, {
         status: "cancelled",
         closedAt: now,
@@ -362,8 +401,58 @@ export function sessionService({
     },
   };
 
+  /**
+   * Find active sessions whose endTime is at/before `now` and close each one.
+   * The conditional update makes this safe against a concurrent manual
+   * end/cancel: only the first writer wins, so no double free/log.
+   */
+  async function autoEndExpired(now = new Date()) {
+    const expired = await sessionsColl
+      .find({
+        status: "active",
+        endTime: { $type: "date", $lte: now },
+      })
+      .project({ _id: 1, tableId: 1, endTime: 1 })
+      .toArray();
+    let closed = 0;
+    for (const doc of expired) {
+      if (await closeExpired(doc, now)) closed += 1;
+    }
+    return { ok: true, closed };
+  }
+
+  async function closeExpired(doc, now) {
+    if (!doc || !(doc._id instanceof ObjectId)) return false;
+    // close at the planned end so the bill is exactly the booked duration.
+    const closedAt = doc.endTime instanceof Date ? doc.endTime : now;
+    const res = await sessionsColl.updateOne(
+      { _id: doc._id, status: "active" },
+      {
+        $set: {
+          status: "closed",
+          closedAt,
+          autoEnded: true,
+          updatedAt: now,
+        },
+      }
+    );
+    if (res.modifiedCount !== 1) return false;
+    await freeTable(doc.tableId);
+    await activityLogs.insertOne({
+      actorId: "system",
+      action: AUTO_END_ACTION,
+      target: String(doc._id),
+      at: now,
+    });
+    return true;
+  }
+
   async function freeTable(tableId) {
     if (!(tableId instanceof ObjectId)) return;
+    // A new session may have started between the close and this call — never
+    // mark a table available while another active session owns it.
+    const active = await sessionsColl.findOne({ tableId, status: "active" });
+    if (active) return;
     const t = await tablesColl.findOne({ _id: tableId });
     if (!t || t.archived) return;
     if (t.status === "occupied") {

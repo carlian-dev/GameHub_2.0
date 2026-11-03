@@ -272,6 +272,7 @@ document.getElementById("startForm")?.addEventListener("submit", async (e) => {
     await cashierGuard();
     bindCashierLogout();
     updateStartSummary();
+    setSessionExpiryHandler(() => loadDashboard(true));
     ensureCashierTick();
     loadDashboard(false);
     startCashierPolling(loadDashboard);

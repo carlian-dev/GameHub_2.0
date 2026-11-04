@@ -505,15 +505,21 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .table-card {
   position: relative;
+  width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: 0 1px 2px rgba(11, 21, 38, 0.04);
-  /* extra right padding reserves the chevron strip */
-  padding: 16px 40px 14px 16px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 9px;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
   transition: transform 240ms var(--ease), box-shadow 240ms var(--ease),
     border-color 240ms var(--ease), background-color 240ms var(--ease);
 }
@@ -537,6 +543,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .table-card:hover::before { opacity: 1; }
 .table-card:active { transform: scale(0.99); transition-duration: 100ms; }
+.table-card:focus-visible { border-color: var(--brass-line); }
 .table-card.is-entering { animation: cardin 460ms var(--ease) backwards; }
 @keyframes cardin {
   from { opacity: 0; transform: translateY(16px) scale(0.98); }
@@ -587,20 +594,30 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   border: 1px solid rgba(11, 21, 38, 0.08);
 }
 .table-go {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 26px;
-  height: 26px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  color: var(--muted);
-  transition: color 200ms var(--ease), transform 200ms var(--ease);
+  gap: 6px;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--live-line);
+  background: var(--live-bg);
+  color: var(--live-strong);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: background-color 200ms var(--ease), border-color 200ms var(--ease),
+    color 200ms var(--ease);
 }
-.table-go svg { width: 16px; height: 16px; }
-.table-card:hover .table-go { color: var(--brass-deep); transform: translateY(-50%) translateX(3px); }
+.table-go svg { width: 13px; height: 13px; transition: transform 200ms var(--ease); }
+.table-card:hover .table-go {
+  background: var(--brass-soft);
+  border-color: var(--brass-line);
+  color: var(--brass-deep);
+}
+.table-card:hover .table-go svg { transform: translateX(3px); }
 .table-card.is-skeleton { pointer-events: none; }
 .skel-line, .skel-pill {
   display: block;
@@ -648,6 +665,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .reserve-band { padding-top: clamp(36px, 5vw, 64px); }
 .reserve-shell { max-width: 1180px; margin: 0 auto; }
 .reserve-card { scroll-margin-top: 24px; }
+.reserve-card.is-targeted { animation: reserveFocus 1300ms var(--ease); }
+@keyframes reserveFocus {
+  0% { border-color: var(--brass); box-shadow: 0 0 0 0 rgba(216, 182, 92, 0.45), var(--shadow-card); }
+  55% { border-color: var(--brass-line); box-shadow: 0 0 0 12px rgba(216, 182, 92, 0), var(--shadow-card); }
+  100% { border-color: var(--line); box-shadow: var(--shadow-card); }
+}
 .reserve-head {
   display: flex;
   align-items: flex-start;
@@ -680,6 +703,29 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   letter-spacing: 1.4px;
   text-transform: uppercase;
   white-space: nowrap;
+}
+.reserve-notice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 22px;
+  padding: 10px 14px;
+  border: 1px solid var(--live-line);
+  border-radius: var(--radius-sm);
+  background: var(--live-bg);
+  color: var(--live-strong);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.reserve-notice::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 0 3px rgba(14, 122, 88, 0.14);
 }
 .reserve-grid {
   display: grid;
@@ -1406,8 +1452,16 @@ html[data-theme="dark"] .table-badge {
   border-color: rgba(127, 235, 192, 0.32);
   color: var(--live-on-night);
 }
-html[data-theme="dark"] .table-go { color: var(--cream-faint); }
-html[data-theme="dark"] .table-card:hover .table-go { color: var(--brass-bright); }
+html[data-theme="dark"] .table-go {
+  background: rgba(127, 235, 192, 0.12);
+  border-color: rgba(127, 235, 192, 0.32);
+  color: var(--live-on-night);
+}
+html[data-theme="dark"] .table-card:hover .table-go {
+  background: rgba(216, 182, 92, 0.12);
+  border-color: var(--brass-line);
+  color: var(--brass-bright);
+}
 html[data-theme="dark"] .tables-count {
   background: rgba(216, 182, 92, 0.12);
   border-color: rgba(216, 182, 92, 0.3);
@@ -1441,6 +1495,15 @@ html[data-theme="dark"] .reserve-success-ref {
   background: rgba(127, 235, 192, 0.12);
   border-color: rgba(127, 235, 192, 0.34);
   color: var(--live-on-night);
+}
+html[data-theme="dark"] .reserve-notice {
+  background: rgba(127, 235, 192, 0.12);
+  border-color: rgba(127, 235, 192, 0.34);
+  color: var(--live-on-night);
+}
+html[data-theme="dark"] .reserve-notice::before {
+  background: var(--live-on-night);
+  box-shadow: 0 0 0 3px rgba(127, 235, 192, 0.16);
 }
 html[data-theme="dark"] .reserve-fieldset + .reserve-fieldset { border-top-color: var(--night-line); }
 html[data-theme="dark"] .reserve-eyebrow,
@@ -1550,7 +1613,8 @@ html[data-theme="dark"] .reserve-again:hover { background: rgba(127, 235, 192, 0
   .hero-copy, .staff-card { animation: none; }
   .table-card, .table-card:hover, .table-card:active { transform: none; transition: opacity 200ms ease, border-color 200ms ease; }
   .table-card.is-entering { animation: none; }
-  .table-go, .table-card:hover .table-go { transition: none; transform: translateY(-50%); }
+  .table-go, .table-go svg, .table-card:hover .table-go svg { transition: none; transform: none; }
+  .reserve-card.is-targeted { animation: none; }
   .theme-icon .ic-sun, .theme-icon .ic-moon { transition: none; }
   .scroll-hint i { animation: none; }
   .reserve-result { animation: none; }

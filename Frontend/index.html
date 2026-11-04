@@ -96,7 +96,7 @@
           <h2>Available tables</h2>
           <p class="tables-pill" aria-hidden="true"><span class="live-dot"></span><span id="liveLabel">Checking</span></p>
         </div>
-        <p class="panel-lede">Open tables, updated live.</p>
+        <p class="panel-lede">Open tables, updated live. Tap one to start your reservation.</p>
         <p class="tables-count" id="tablesCount">Checking…</p>
         <div class="tables-grid" id="tablesGrid"></div>
         <p class="tables-meta"><span id="tablesUpdated"></span></p>
@@ -133,6 +133,8 @@
           </div>
           <span class="reserve-badge">No account needed</span>
         </header>
+
+        <p class="reserve-notice" id="reserveNotice" role="status" hidden></p>
 
         <div class="reserve-grid">
           <form id="reserveForm" class="reserve-form" autocomplete="on" novalidate>

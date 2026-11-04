@@ -52,8 +52,11 @@
   }
 
   function buildCard(t, index) {
-    const card = document.createElement("div");
+    const card = document.createElement("button");
+    card.type = "button";
     card.className = "table-card";
+    card.dataset.tableId = t.id;
+    card.setAttribute("aria-label", `Reserve ${t.name} — available now`);
     const top = document.createElement("div");
     top.className = "table-top";
     const dot = document.createElement("span");
@@ -69,9 +72,9 @@
     name.textContent = t.name;
     const sub = document.createElement("span");
     sub.className = "table-sub";
-    sub.textContent = "Open now · walk-ins welcome";
+    sub.textContent = "Open now · tap to reserve";
     // top-down pool-table illustration (aria-hidden: the badge already
-    // states availability) + right-edge chevron matching the reference card
+    // states availability) + a labelled Reserve pill at the card foot
     const art = document.createElement("span");
     art.className = "table-art";
     art.setAttribute("aria-hidden", "true");
@@ -88,12 +91,20 @@
     go.className = "table-go";
     go.setAttribute("aria-hidden", "true");
     go.innerHTML =
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6" /></svg>';
+      '<span>Reserve</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>';
     card.appendChild(top);
     card.appendChild(name);
     card.appendChild(sub);
     card.appendChild(art);
     card.appendChild(go);
+    card.addEventListener("click", () => {
+      const label = card.querySelector(".table-name")?.textContent || t.name;
+      if (window.GameHubReserve && typeof window.GameHubReserve.open === "function") {
+        window.GameHubReserve.open(t.id, label);
+      } else {
+        window.location.hash = "#reserve";
+      }
+    });
     if (!reduceMotion) {
       card.style.animationDelay = `${Math.min(index * 45, 360)}ms`;
       card.classList.add("is-entering");
@@ -140,6 +151,7 @@
         seen.set(t.id, el);
       } else {
         el.querySelector(".table-name").textContent = t.name;
+        el.setAttribute("aria-label", `Reserve ${t.name} — available now`);
         el.classList.remove("is-entering");
       }
       gridEl.appendChild(el);

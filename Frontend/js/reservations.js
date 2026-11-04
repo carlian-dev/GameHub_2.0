@@ -24,6 +24,7 @@
   const sumContact = document.getElementById("sumContact");
   const sumEmail = document.getElementById("sumEmail");
   const resultEl = document.getElementById("reserveResult");
+  const noticeEl = document.getElementById("reserveNotice");
   const cardEl = form.closest(".reserve-card");
 
   const CONTACT_RE = /^[0-9+\-\s()]{7,25}$/;
@@ -31,11 +32,20 @@
   const fields = [tableSel, dateIn, timeIn, nameIn, contactIn, emailIn];
   let submitting = false;
   let showErrors = false;
+  let tablesReady = null;
+  let pendingTable = null;
+  let targetTimer = 0;
 
   function setError(msg) {
     if (!errorEl) return;
     errorEl.textContent = msg || "";
     errorEl.hidden = !msg;
+  }
+
+  function setNotice(msg) {
+    if (!noticeEl) return;
+    noticeEl.textContent = msg || "";
+    noticeEl.hidden = !msg;
   }
 
   function todayISO() {
@@ -178,6 +188,76 @@
     syncSummary();
   }
 
+  // Restore the editable form after a successful request (also used when a
+  // different table is chosen from the live availability grid).
+  function resetResult() {
+    if (cardEl) cardEl.classList.remove("is-complete");
+    resultEl.hidden = true;
+    summaryEl.hidden = false;
+    setError("");
+    setNotice("");
+    showErrors = false;
+    fields.forEach((input) => markField(input, false));
+    syncSummary();
+  }
+
+  // Apply a table chosen from the availability cards once the <select> has its
+  // options. Returns false when the table is no longer in the open list.
+  function applyPendingTable() {
+    if (!pendingTable) return false;
+    const { id, name } = pendingTable;
+    pendingTable = null;
+    const match = Array.from(tableSel.options).find(
+      (opt) => String(opt.value) === String(id)
+    );
+    if (!match) {
+      setNotice("");
+      setError(`${name || "That table"} just became unavailable. Choose another open table.`);
+      tableSel.focus({ preventScroll: true });
+      syncSummary();
+      return false;
+    }
+    tableSel.value = match.value;
+    setError("");
+    setNotice(`${match.textContent} selected — choose your date and time below.`);
+    syncSummary();
+    return true;
+  }
+
+  /**
+   * Called by js/tables-public.js when an available-table card is clicked.
+   * Jumps to the booking card, preselects the table, and focuses the date.
+   */
+  function openReservation(tableId, tableName) {
+    if (cardEl && cardEl.classList.contains("is-complete")) resetResult();
+    pendingTable = { id: tableId, name: tableName };
+    setError("");
+    setNotice("");
+
+    if (!cardEl) return;
+    window.clearTimeout(targetTimer);
+    cardEl.classList.add("is-targeted");
+    targetTimer = window.setTimeout(
+      () => cardEl.classList.remove("is-targeted"),
+      1400
+    );
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    cardEl.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, "", "#reserve");
+    }
+
+    const afterScroll = reduceMotion ? 0 : 420;
+    const finish = () => {
+      if (applyPendingTable()) {
+        window.setTimeout(() => dateIn.focus({ preventScroll: true }), afterScroll);
+      }
+    };
+    if (tablesReady) tablesReady.then(finish);
+    else finish();
+  }
+
   function buildResult(reservation) {
     resultEl.innerHTML = "";
 
@@ -233,13 +313,7 @@
     again.className = "reserve-again";
     again.textContent = "Book another table";
     again.addEventListener("click", () => {
-      if (cardEl) cardEl.classList.remove("is-complete");
-      resultEl.hidden = true;
-      summaryEl.hidden = false;
-      setError("");
-      showErrors = false;
-      fields.forEach((input) => markField(input, false));
-      syncSummary();
+      resetResult();
       tableSel.focus();
     });
 
@@ -279,10 +353,12 @@
         durationMinutes: Number(durSel.value || 60),
       });
       buildResult(reservation);
+      setNotice("");
       form.reset();
       dateIn.value = todayISO();
       timeIn.value = "18:00";
-      await loadTables();
+      tablesReady = loadTables();
+      await tablesReady;
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       resultEl.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
     } catch (err) {
@@ -319,6 +395,14 @@
 
   form.addEventListener("submit", submit);
 
+  // Keep the "selected" notice in sync when the guest changes the dropdown by
+  // hand (the programmatic preselect above updates it directly).
+  tableSel.addEventListener("change", () => {
+    if (!noticeEl || noticeEl.hidden) return;
+    const text = tableSel.options[tableSel.selectedIndex]?.textContent || "";
+    setNotice(text ? `${text} selected — choose your date and time below.` : "");
+  });
+
   if (dateIn) {
     dateIn.value = todayISO();
     dateIn.min = todayISO();
@@ -326,5 +410,8 @@
   if (timeIn) timeIn.value = "18:00";
 
   syncSummary();
-  loadTables();
+  tablesReady = loadTables();
+
+  // Public hook used by the live availability cards (js/tables-public.js).
+  window.GameHubReserve = { open: openReservation };
 })();

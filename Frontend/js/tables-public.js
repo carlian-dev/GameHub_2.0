@@ -1,5 +1,9 @@
-// js/tables-public.js - CU-002 live available-tables section on the landing page.
-// Pair: index.html #tables section <-> GET /api/tables/availability (no login).
+// js/tables-public.js - CU-002 live available-tables section.
+// Pair: index.html #tables (and reserve/index.html) <->
+// GET /api/tables/availability (no login).
+// A card click preselects the booking form when it is on the page
+// (window.GameHubReserve) or, on the landing page, hands off to the
+// reservation page with ?table=<id> so the guest books in one step.
 // Apple-design notes: keyed DOM (polls never flash existing cards), staggered
 // critically-damped entrances on one path (rise+fade, no bounce — no gesture
 // momentum here), skeleton on first load, press-down feedback via CSS,
@@ -49,6 +53,13 @@
       s.appendChild(p);
       gridEl.appendChild(s);
     }
+  }
+
+  // Landing has no booking form: send the chosen table to the reservation page,
+  // where js/reservations.js preselects it from the query string.
+  function reserveUrl(tableId) {
+    const base = section.dataset.reserveHref || "reserve/";
+    return `${base}?table=${encodeURIComponent(tableId)}#reserve`;
   }
 
   function buildCard(t, index) {
@@ -102,7 +113,7 @@
       if (window.GameHubReserve && typeof window.GameHubReserve.open === "function") {
         window.GameHubReserve.open(t.id, label);
       } else {
-        window.location.hash = "#reserve";
+        window.location.href = reserveUrl(t.id);
       }
     });
     if (!reduceMotion) {

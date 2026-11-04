@@ -661,6 +661,15 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .tables-error { color: var(--danger); font-size: 12.5px; margin: 12px 0 0; }
 
+/* ---- Reservation page (reserve/index.html) ---- */
+.band-inner-single { grid-template-columns: 1fr; }
+/* The tables page opens on content, not a tall landing hero. */
+.reserve-hero .hero {
+  min-height: 0;
+  padding-top: clamp(120px, 15vh, 168px);
+  padding-bottom: clamp(44px, 6vh, 68px);
+}
+
 /* Guest reservations (CU-004..CU-014) */
 .reserve-band { padding-top: clamp(36px, 5vw, 64px); }
 .reserve-shell { max-width: 1180px; margin: 0 auto; }
@@ -1120,6 +1129,20 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   text-transform: uppercase;
   color: var(--cream-faint);
 }
+.footer-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--brass-bright);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.footer-back svg { width: 14px; height: 14px; }
+.footer-back:hover { color: var(--cream); }
 
 /* ---- 7. Staff auth (always the dark end of the same system) ---- */
 .staff {

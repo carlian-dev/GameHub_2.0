@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<!--
+  reserve/index.html - customer tables + reservations page (CU-002, CU-004..CU-014).
+  The landing page shows live availability too, but a table card there hands off
+  to this page with the table preselected (?table=<id>#reserve); the full list
+  and the guest reservation form live here.
+  Sections: live available tables (30s refresh) then the guest reservation form.
+  Scripts: js/config.js + js/api.js + js/tables-public.js (availability),
+  js/reservations.js (guest booking form), js/theme.js (light/dark toggle,
+  persisted as gh-theme), js/nav.js (mobile menu).
+  Back to the landing page: brand + nav Home + footer link.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#08111F" />
+  <title>Tables and Reservations — GameHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="preload" as="image" href="../assets/hero-billiards.jpg" fetchpriority="high" />
+  <link rel="stylesheet" href="../css/styles.css" />
+  <script>
+    // Apply the saved theme before first paint so dark mode never flashes ivory.
+    try {
+      document.documentElement.setAttribute(
+        "data-theme",
+        localStorage.getItem("gh-theme") || "light"
+      );
+    } catch (e) { /* private mode */ }
+  </script>
+</head>
+<body class="landing reserve-page" id="top">
+  <div class="hero-wrap reserve-hero">
+    <header class="nav">
+      <a class="brand" href="../index.html" aria-label="GameHub home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="13" fill="none" stroke="#F7F2E6" stroke-width="2" />
+          <circle cx="16" cy="16" r="4" fill="#D8B65C" />
+          <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F7F2E6" stroke-width="2" />
+        </svg>
+        <span class="brand-text">
+          <span class="brand-name">GameHub</span>
+          <span class="brand-tag">Billiard Hall and Sport Bar</span>
+        </span>
+      </a>
+      <nav class="nav-links" id="navLinks" aria-label="Primary">
+        <a href="../index.html">Home</a>
+        <a href="#tables">Tables</a>
+        <a class="nav-cta" href="#reserve">Reserve Now</a>
+      </nav>
+      <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+      </button>
+      <button class="theme-icon" aria-label="Toggle theme">
+        <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2Z" /></svg>
+        <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></svg>
+      </button>
+    </header>
+
+    <main class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow"><span></span>Tables and reservations</p>
+        <h1>Find your<br /><em>table.</em></h1>
+        <p class="lede">Live availability from the hall. Pick an open table, choose your time, and we’ll email you as soon as the team accepts.</p>
+        <p class="cta">
+          <a class="btn btn-solid" href="#tables">See what’s open</a>
+          <a class="btn btn-ghost" href="#reserve">Book a table</a>
+        </p>
+        <p class="hero-meta">
+          <span>Open daily · 8:00 AM – 10:00 PM</span>
+          <span>Rooftop, Paz Building · Malaybalay City</span>
+        </p>
+      </div>
+    </main>
+  </div>
+
+  <section class="band">
+    <div class="band-inner band-inner-single">
+      <header class="band-head">
+        <div>
+          <p class="eyebrow eyebrow-ink"><span></span>The floor<span></span></p>
+          <h2>Live from the hall.</h2>
+        </div>
+        <p class="band-lede">See what's open, grab a cue, and come play.</p>
+      </header>
+
+      <!-- CU-002: live available tables (available + non-archived only, 30s refresh). -->
+      <section id="tables" class="panel-card tables-live" data-state="checking" aria-live="polite">
+        <div class="panel-head">
+          <h2>Available tables</h2>
+          <p class="tables-pill" aria-hidden="true"><span class="live-dot"></span><span id="liveLabel">Checking</span></p>
+        </div>
+        <p class="panel-lede">Open tables, updated live. Tap one to start your reservation.</p>
+        <p class="tables-count" id="tablesCount">Checking…</p>
+        <div class="tables-grid" id="tablesGrid"></div>
+        <p class="tables-meta"><span id="tablesUpdated"></span></p>
+        <p class="tables-error" id="tablesError" hidden></p>
+        <noscript><p>Enable JavaScript to see live table availability.</p></noscript>
+      </section>
+    </div>
+  </section>
+
+  <!-- CU-004..CU-014: guest reservation flow. -->
+  <section class="band reserve-band">
+    <div class="reserve-shell">
+      <section id="reserve" class="panel-card reserve-card" aria-labelledby="reserveTitle">
+        <header class="reserve-head">
+          <div>
+            <p class="reserve-eyebrow"><span class="live-dot" aria-hidden="true"></span>Book ahead</p>
+            <h2 id="reserveTitle">Reserve a table</h2>
+            <p class="panel-lede">Choose a table and time. We’ll email you as soon as the team accepts.</p>
+          </div>
+          <span class="reserve-badge">No account needed</span>
+        </header>
+
+        <p class="reserve-notice" id="reserveNotice" role="status" hidden></p>
+
+        <div class="reserve-grid">
+          <form id="reserveForm" class="reserve-form" autocomplete="on" novalidate>
+            <fieldset class="reserve-fieldset">
+              <legend>When</legend>
+              <div class="reserve-fields">
+                <label class="reserve-field reserve-field-wide" for="reserveTable">
+                  <span>Table</span>
+                  <select id="reserveTable" required></select>
+                </label>
+                <label class="reserve-field" for="reserveDate">
+                  <span>Date</span>
+                  <input id="reserveDate" type="date" required />
+                </label>
+                <label class="reserve-field" for="reserveTime">
+                  <span>Time</span>
+                  <input id="reserveTime" type="time" required />
+                </label>
+                <label class="reserve-field reserve-field-wide" for="reserveDuration">
+                  <span>Duration</span>
+                  <select id="reserveDuration">
+                    <option value="60">1 hour</option>
+                    <option value="120">2 hours</option>
+                    <option value="180">3 hours</option>
+                  </select>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="reserve-fieldset">
+              <legend>Your details</legend>
+              <div class="reserve-fields">
+                <label class="reserve-field reserve-field-wide" for="reserveName">
+                  <span>Full name</span>
+                  <input id="reserveName" type="text" required maxlength="60" placeholder="Maria Cruz" autocomplete="name" />
+                </label>
+                <label class="reserve-field" for="reserveContact">
+                  <span>Contact number</span>
+                  <input id="reserveContact" type="tel" required placeholder="09xx xxx xxxx" autocomplete="tel" inputmode="tel" />
+                </label>
+                <label class="reserve-field" for="reserveEmail">
+                  <span>Email</span>
+                  <input id="reserveEmail" type="email" required maxlength="254" placeholder="you@email.com" autocomplete="email" inputmode="email" />
+                </label>
+              </div>
+            </fieldset>
+
+            <p class="reserve-error" id="reserveError" role="alert" hidden></p>
+            <div class="reserve-actions">
+              <button type="submit" id="reserveSubmitBtn" class="btn btn-solid" disabled>Confirm reservation</button>
+              <span class="reserve-actions-note">We’ll email your confirmation once accepted.</span>
+            </div>
+          </form>
+
+          <aside class="reserve-side">
+            <div class="reserve-summary" id="reserveSummary">
+              <p class="reserve-summary-kicker">Your booking</p>
+              <h3 id="reserveSummaryTitle">Choose a table</h3>
+              <dl class="reserve-summary-list">
+                <div><dt>Date</dt><dd id="sumDate">—</dd></div>
+                <div><dt>Time</dt><dd id="sumTime">—</dd></div>
+                <div><dt>Duration</dt><dd id="sumDuration">—</dd></div>
+                <div><dt>Name</dt><dd id="sumName">—</dd></div>
+                <div><dt>Contact</dt><dd id="sumContact">—</dd></div>
+                <div><dt>Email</dt><dd id="sumEmail">—</dd></div>
+              </dl>
+              <p class="reserve-summary-note">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                The team reviews every request before confirming.
+              </p>
+            </div>
+            <div class="reserve-result" id="reserveResult" role="status" hidden></div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <a class="footer-brand" href="../index.html" aria-label="GameHub home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="13" fill="none" stroke="#F7F2E6" stroke-width="2" />
+          <circle cx="16" cy="16" r="4" fill="#D8B65C" />
+          <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F7F2E6" stroke-width="2" />
+        </svg>
+        <span class="brand-text">
+          <span class="brand-name">GameHub</span>
+          <span class="brand-tag">Billiard Hall and Sport Bar</span>
+        </span>
+      </a>
+      <p class="footer-meta">Rooftop, Paz Building, San Isidro St, Malaybalay City, Bukidnon<br />Open daily · 8:00 AM – 10:00 PM</p>
+      <a class="footer-back" href="../index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
+        Back to home
+      </a>
+      <span class="footer-copy">© 2026 GameHub</span>
+    </div>
+  </footer>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/tables-public.js"></script>
+  <script src="../js/reservations.js"></script>
+  <script src="../js/theme.js"></script>
+  <script src="../js/nav.js"></script>
+</body>
+</html>

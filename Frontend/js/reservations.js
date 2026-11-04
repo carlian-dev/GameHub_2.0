@@ -1,4 +1,5 @@
-// js/reservations.js - CU-004..CU-014 guest reservation flow on the landing page.
+// js/reservations.js - CU-004..CU-014 guest reservation flow on the tables page
+// (reserve/index.html).
 // One screen: the booking summary fills in live while the guest types, and the
 // confirm button enables once every field is filled. The cashier accepts from
 // the reservation queue, which sends the ACCEPTED email.
@@ -26,6 +27,9 @@
   const resultEl = document.getElementById("reserveResult");
   const noticeEl = document.getElementById("reserveNotice");
   const cardEl = form.closest(".reserve-card");
+  // Landing table cards link here as reserve/?table=<id>#reserve, so the guest
+  // arrives with their table already chosen.
+  const urlTable = new URLSearchParams(window.location.search).get("table");
 
   const CONTACT_RE = /^[0-9+\-\s()]{7,25}$/;
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -410,7 +414,14 @@
   if (timeIn) timeIn.value = "18:00";
 
   syncSummary();
-  tablesReady = loadTables();
+  tablesReady = loadTables().then(() => {
+    if (!urlTable) return;
+    pendingTable = { id: urlTable, name: "" };
+    if (applyPendingTable() && window.history && window.history.replaceState) {
+      // Drop the query string (a bare "#reserve" would keep it) and keep the anchor.
+      window.history.replaceState(null, "", `${window.location.pathname}#reserve`);
+    }
+  });
 
   // Public hook used by the live availability cards (js/tables-public.js).
   window.GameHubReserve = { open: openReservation };

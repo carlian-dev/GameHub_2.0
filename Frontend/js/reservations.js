@@ -27,8 +27,8 @@
   const resultEl = document.getElementById("reserveResult");
   const noticeEl = document.getElementById("reserveNotice");
   const cardEl = form.closest(".reserve-card");
-  // Landing table cards link here as reserve/?table=<id>#reserve, so the guest
-  // arrives with their table already chosen.
+  // Deep links arrive as ?table=<id>#reserve, so the guest can land with their
+  // table already chosen. Table cards on this page call openReservation.
   const urlTable = new URLSearchParams(window.location.search).get("table");
 
   const CONTACT_RE = /^[0-9+\-\s()]{7,25}$/;
@@ -417,7 +417,8 @@
   tablesReady = loadTables().then(() => {
     if (!urlTable) return;
     pendingTable = { id: urlTable, name: "" };
-    if (applyPendingTable() && window.history && window.history.replaceState) {
+    applyPendingTable();
+    if (window.history && window.history.replaceState) {
       // Drop the query string (a bare "#reserve" would keep it) and keep the anchor.
       window.history.replaceState(null, "", `${window.location.pathname}#reserve`);
     }

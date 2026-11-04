@@ -1,18 +1,16 @@
 <!DOCTYPE html>
 <!--
-  index.html - customer landing page (CU-001 + CU-002).
+  index.html - customer landing page (CU-001).
   Reference-matched: emerald hero over billiard photo, gold accents, warm
-  off-white content band with white cards (tables CTA + Find Us with map),
-  feature strip, footer.
-  Nav: Home / Tables / Location + gold Reserve Now pill. The booking form (and
-  the reservation queue the Express API fills) lives on reserve/index.html;
-  live availability is shown here and each card links straight into it.
+  off-white content band with a booking CTA + Find Us with map, feature
+  strip, footer.
+  Nav: Home / Tables / Location + gold Reserve Now pill. The live table list
+  and the guest reservation form live on reserve/index.html; this page only
+  links there so the homepage stays clean.
   Staff login lives at src/function/auth/login.html, reachable via /login URL
   only (see login/index.html redirect) - never linked from here.
-  Scripts: js/config.js + js/api.js + js/tables-public.js (availability; a
-  card click goes to the reservation page with that table preselected),
-  js/location-map.js (Find Us map), js/theme.js (light/dark toggle, persisted
-  as gh-theme).
+  Scripts: js/config.js + js/api.js + js/location-map.js (Find Us map),
+  js/theme.js (light/dark toggle, persisted as gh-theme), js/nav.js.
   (Stays at root because static servers look for index.html here.)
 -->
 <html lang="en">
@@ -52,7 +50,7 @@
       </a>
       <nav class="nav-links" id="navLinks" aria-label="Primary">
         <a href="#top">Home</a>
-        <a href="reserve/">Tables</a>
+        <a href="reserve/#tables">Tables</a>
         <a href="#location">Location</a>
         <a class="nav-cta" href="reserve/#reserve">Reserve Now</a>
       </nav>
@@ -87,24 +85,24 @@
       <header class="band-head">
         <div>
           <p class="eyebrow eyebrow-ink"><span></span>The floor<span></span></p>
-          <h2>Live from the hall.</h2>
+          <h2>Plan your visit.</h2>
         </div>
-        <p class="band-lede">See what's open, grab a cue, and come play.</p>
+        <p class="band-lede">Find the hall, check the hours, and reserve your table online.</p>
       </header>
 
-      <!-- CU-002: live available tables (available + non-archived only, 30s refresh).
-           Clicking a card jumps to reserve/index.html with that table selected. -->
-      <section id="tables" class="panel-card tables-live" data-state="checking" aria-live="polite">
-        <div class="panel-head">
-          <h2>Available tables</h2>
-          <p class="tables-pill" aria-hidden="true"><span class="live-dot"></span><span id="liveLabel">Checking</span></p>
+      <!-- CU-002 / CU-004..CU-014 live on reserve/index.html; this is the hand-off. -->
+      <section class="panel-card visit-cta" aria-labelledby="visitTitle">
+        <p class="eyebrow eyebrow-ink"><span></span>Ready to play</p>
+        <h2 id="visitTitle">Your table is waiting.</h2>
+        <p class="visit-lede">Pick your table and time, and we’ll email you as soon as the team accepts. No account needed.</p>
+        <div class="visit-actions">
+          <a class="btn btn-solid" href="reserve/#reserve">Reserve Now</a>
+          <a class="visit-link" href="reserve/#tables">
+            View tables
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+          </a>
         </div>
-        <p class="panel-lede">Open tables, updated live. Tap one to book it.</p>
-        <p class="tables-count" id="tablesCount">Checking…</p>
-        <div class="tables-grid" id="tablesGrid"></div>
-        <p class="tables-meta"><span id="tablesUpdated"></span></p>
-        <p class="tables-error" id="tablesError" hidden></p>
-        <noscript><p>Enable JavaScript to see live table availability.</p></noscript>
+        <p class="visit-note">Walk-ins welcome · Open daily, 8:00 AM – 10:00 PM</p>
       </section>
 
       <section id="location" class="panel-card findus">
@@ -162,7 +160,6 @@
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>
   <script src="js/location-map.js"></script>
-  <script src="js/tables-public.js"></script>
   <script src="js/theme.js"></script>
   <script src="js/nav.js"></script>
 </body>

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <!--
   reserve/index.html - customer tables + reservations page (CU-002, CU-004..CU-014).
-  The landing page shows live availability too, but a table card there hands off
-  to this page with the table preselected (?table=<id>#reserve); the full list
-  and the guest reservation form live here.
+  The landing page stays a clean overview and links here; this page carries the
+  live table list and the guest reservation form. A table card selects the
+  table in the form, and ?table=<id>#reserve keeps deep links preselected.
   Sections: live available tables (30s refresh) then the guest reservation form.
   Scripts: js/config.js + js/api.js + js/tables-public.js (availability),
   js/reservations.js (guest booking form), js/theme.js (light/dark toggle,
@@ -48,6 +48,7 @@
       <nav class="nav-links" id="navLinks" aria-label="Primary">
         <a href="../index.html">Home</a>
         <a href="#tables">Tables</a>
+        <a href="../index.html#location">Location</a>
         <a class="nav-cta" href="#reserve">Reserve Now</a>
       </nav>
       <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks">

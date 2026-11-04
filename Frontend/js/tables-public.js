@@ -1,9 +1,8 @@
 // js/tables-public.js - CU-002 live available-tables section.
-// Pair: index.html #tables (and reserve/index.html) <->
-// GET /api/tables/availability (no login).
-// A card click preselects the booking form when it is on the page
-// (window.GameHubReserve) or, on the landing page, hands off to the
-// reservation page with ?table=<id> so the guest books in one step.
+// Pair: reserve/index.html #tables <-> GET /api/tables/availability (no login).
+// A card click preselects the booking form on this page when the hook exists
+// (window.GameHubReserve); otherwise it reloads with ?table=<id> so the deep
+// link still preselects once js/reservations.js is ready.
 // Apple-design notes: keyed DOM (polls never flash existing cards), staggered
 // critically-damped entrances on one path (rise+fade, no bounce — no gesture
 // momentum here), skeleton on first load, press-down feedback via CSS,
@@ -55,10 +54,10 @@
     }
   }
 
-  // Landing has no booking form: send the chosen table to the reservation page,
-  // where js/reservations.js preselects it from the query string.
+  // Fallback when the booking form has not loaded (or is on another page):
+  // reload this page with the table in the query string.
   function reserveUrl(tableId) {
-    const base = section.dataset.reserveHref || "reserve/";
+    const base = section.dataset.reserveHref || window.location.pathname;
     return `${base}?table=${encodeURIComponent(tableId)}#reserve`;
   }
 

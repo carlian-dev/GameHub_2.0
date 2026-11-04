@@ -6,8 +6,8 @@
   - One interactive accent: brass. Emerald is reserved for live availability.
   - Display type: Fraunces. UI type: Poppins. Same lockup: eyebrow + display
     title with one brass italic word, pill buttons, 1px hairline panels.
-  Covers: landing (hero + live tables + location + feature strip + footer)
-  and staff auth (login / register).
+  Covers: landing (hero + booking hand-off + location + feature strip +
+  footer), reserve (live tables + booking form), and staff auth.
   JS hooks preserved: .table-card/.is-entering/.is-leaving/.is-skeleton,
   .skel-line/.skel-pill, .tables-empty/.tables-retry/.live-dot, #tablesCount,
   #tablesUpdated, #tablesError, #liveLabel, .theme-icon/.is-light, #msg.ok/.err.
@@ -660,6 +660,61 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 .tables-error { color: var(--danger); font-size: 12.5px; margin: 12px 0 0; }
+
+/* Landing: booking hand-off card (the live list + form live on reserve/) */
+.visit-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  background: linear-gradient(150deg, var(--surface) 0%, var(--surface-2) 100%);
+}
+.visit-cta h2 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: clamp(32px, 3.6vw, 44px);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  margin: 14px 0 0;
+  max-width: 12ch;
+}
+.visit-lede {
+  max-width: 46ch;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.75;
+}
+.visit-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 22px;
+  margin-top: 26px;
+}
+.visit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--brass-deep);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.visit-link svg { width: 14px; height: 14px; transition: transform 0.2s var(--ease); }
+.visit-link:hover svg { transform: translateX(3px); }
+.visit-note {
+  margin: 26px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
 
 /* ---- Reservation page (reserve/index.html) ---- */
 .band-inner-single { grid-template-columns: 1fr; }
@@ -1445,6 +1500,12 @@ html[data-theme="dark"] .panel-card {
   border-color: var(--night-line);
   box-shadow: 0 1px 2px rgba(2, 6, 12, 0.4), 0 20px 48px rgba(2, 6, 12, 0.45);
 }
+html[data-theme="dark"] .visit-cta h2 { color: var(--cream); }
+html[data-theme="dark"] .visit-lede,
+html[data-theme="dark"] .visit-note { color: var(--cream-dim); }
+html[data-theme="dark"] .visit-note { border-top-color: var(--night-line); }
+html[data-theme="dark"] .visit-link { color: var(--brass-bright); }
+html[data-theme="dark"] .visit-link:hover { color: var(--cream); }
 html[data-theme="dark"] .findus {
   background: linear-gradient(155deg, var(--night-700) 0%, var(--night-850) 60%, var(--night-950) 100%);
   border-color: var(--night-line-2);
@@ -1637,6 +1698,7 @@ html[data-theme="dark"] .reserve-again:hover { background: rgba(127, 235, 192, 0
   .table-card, .table-card:hover, .table-card:active { transform: none; transition: opacity 200ms ease, border-color 200ms ease; }
   .table-card.is-entering { animation: none; }
   .table-go, .table-go svg, .table-card:hover .table-go svg { transition: none; transform: none; }
+  .visit-link svg { transition: none; }
   .reserve-card.is-targeted { animation: none; }
   .theme-icon .ic-sun, .theme-icon .ic-moon { transition: none; }
   .scroll-hint i { animation: none; }

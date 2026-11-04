@@ -1,7 +1,7 @@
 /* ================================================
-   GameHub staff dashboard shell — reference-matched design system.
-   Palette: Deep Emerald #0B3D2E sidebar, Warm Off-White #F5F3ED page,
-   white cards, Luxury Gold #D4AF37 used sparingly, status pills in
+   GameHub staff dashboard shell - Midnight Navy design system:
+   Cool Slate #F1F5F9 page, white cards, deep navy #0F172A sidebar, gold #D4B44D
+   used sparingly, blue #2563EB primary accent, cyan #0E7490 for GCash/secondary, status pills in
    green/blue/purple/gold. Light-first with a dark counterpart
    (body.dash[data-theme="dark"]).
    All class names preserved for JS hooks (dash.js + per-page scripts).
@@ -14,28 +14,33 @@
    page-level horizontal scrollbar). Mirrors styles.css. */
 *, *::before, *::after { box-sizing: border-box; }
 
-/* ---- 1. Tokens ---- */
+/* ---- 1. Tokens (Midnight Navy - light ladder) ----
+   Cool slate page, white cards, deep navy sidebar (#0F172A), blue as the
+   main interactive accent (#2563EB primary / #0E7490 cyan secondary),
+   emerald (#047857) reserved for availability + success, gold restrained.
+   The dark theme (section 1b) mirrors this ladder at the dark end. */
 .dash {
-  --d-bg: #F5F3ED;
-  --d-bg-2: #EFEBE1;
+  margin: 0;
+  --d-bg: #F1F5F9;
+  --d-bg-2: #E7EDF4;
   --d-surface: #FFFFFF;
-  --d-surface-2: #FAFAF7;
-  --d-sidebar: #0B3D2E;
-  --d-side-2: #145A42;
-  --d-text: #202522;
-  --d-body: #374151;
-  --d-muted: #64748B;
-  --d-faint: #9CA3AF;
-  --d-border: #E5E7EB;
-  --d-border-soft: #F0F1F4;
-  --d-green: #145A42;
-  --d-green-2: #24704F;
-  --d-green-soft: #24704F;
-  --d-green-glow: rgba(20, 90, 66, 0.16);
-  --d-gold: #D4AF37;
-  --d-gold-ink: #A9800F;
-  --d-red: #DC2626;
-  --d-blue: #2563EB;
+  --d-surface-2: #F8FAFC;
+  --d-sidebar: #0F172A;
+  --d-side-2: #2563EB;
+  --d-text: #0F172A;
+  --d-body: #334155;
+  --d-muted: #5B6B80;
+  --d-faint: #6B7A8F;
+  --d-border: #D8E0EA;
+  --d-border-soft: #E7EDF4;
+  --d-green: #047857;
+  --d-green-2: #065F46;
+  --d-green-soft: #047857;
+  --d-green-glow: rgba(4, 120, 87, 0.16);
+  --d-gold: #D4B44D;
+  --d-gold-ink: #8A6A0C;
+  --d-red: #C81E1E;       /* Error text (5.24:1 on the #F1F5F9 page, 5.74:1 on white cards) */
+  --d-blue: #0E7490;
   --d-purple: #7C3AED;
   --d-input-bg: #FFFFFF;
   --d-radius: 14px;
@@ -44,7 +49,25 @@
   --d-top-h: 68px;
   --d-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
   --d-shadow-md: 0 6px 18px rgba(16, 24, 40, 0.09);
-  --d-shadow-lg: 0 24px 60px rgba(6, 26, 19, 0.22);
+  --d-shadow-lg: 0 24px 60px rgba(15, 23, 42, 0.2);
+  /* Action/accent tokens: blue is the main interactive accent (primary
+     buttons/tabs/pagination/focus); --d-green* keeps its success and
+     availability meaning (chips, ok messages, stat icons). */
+  --d-primary: #2563EB;
+  --d-primary-2: #1D4ED8;
+  --d-accent: #2563EB;
+  --d-accent-glow: rgba(37, 99, 235, 0.15);
+  /* Soft icon/tint chips (stat-ic, end-ic, row hovers). Tokenised so dark
+     mode swaps the tint without hardcoding rgba at every call site. */
+  --d-tint-green: rgba(4, 120, 87, 0.1);
+  --d-tint-gold: rgba(212, 180, 77, 0.14);
+  --d-tint-blue: rgba(14, 116, 144, 0.12);
+  --d-tint-purple: rgba(124, 58, 237, 0.12);
+  --d-tint-red: rgba(220, 38, 38, 0.1);
+  --d-tint-green-strong: rgba(4, 120, 87, 0.3);
+  --d-tint-gold-strong: rgba(212, 180, 77, 0.4);
+  --d-side-3: rgba(37, 99, 235, 0.65);
+  --d-busy-ring: rgba(37, 99, 235, 0.3);
   --d-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --d-ease-fast: cubic-bezier(0.4, 0, 0.2, 1);
   min-height: 100vh;
@@ -54,29 +77,51 @@
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+/* ---- 1b. Dark theme: Midnight Navy ----
+   Premium SaaS-style navy (light mode untouched above). Blue is the main
+   interactive accent, gold is restrained/premium, green = availability and
+   success only. All text/surface pairs verified: body 7.6:1, muted 4.8:1,
+   faint 3.4:1 on the #1B2940 card. */
 .dash[data-theme="dark"] {
-  --d-bg: #0B1F17;
-  --d-bg-2: #09170F;
-  --d-surface: #12261D;
-  --d-surface-2: #163024;
-  --d-sidebar: #08190F;
-  --d-side-2: #1B5C43;
-  --d-text: #F5F3ED;
-  --d-body: #D7DCDF;
-  --d-muted: #A7B0B9;
-  --d-faint: #7C8B94;
-  --d-border: #1F3A2E;
-  --d-border-soft: #1A3227;
-  --d-green: #145A42;
-  --d-green-soft: #3FA46A;
-  --d-green-glow: rgba(63, 164, 106, 0.2);
+  --d-bg: #101827;
+  --d-bg-2: #0B1220;
+  --d-surface: #1B2940;
+  --d-surface-2: #243550;
+  --d-sidebar: #0B1220;
+  --d-side-2: #2563EB;
+  --d-text: #F1F5F9;
+  --d-body: #B0BDD0;
+  --d-muted: #8796AC;
+  --d-faint: #6E7D94;
+  --d-border: #35445C;
+  --d-border-soft: #293F5C;
+  --d-green: #34D399;
+  --d-green-2: #2DD4BF;
+  --d-green-soft: #34D399;
+  --d-green-glow: rgba(52, 211, 153, 0.2);
+  --d-gold: #D4AF37;
+  --d-gold-ink: #FBBF24;
   --d-red: #F87171;
   --d-blue: #60A5FA;
-  --d-purple: #C084FC;
-  --d-input-bg: #0A1712;
-  --d-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --d-shadow-md: 0 6px 18px rgba(0, 0, 0, 0.4);
-  --d-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --d-purple: #A78BFA;
+  --d-primary: #2563EB;
+  --d-primary-2: #1D4ED8;
+  --d-accent: #60A5FA;
+  --d-accent-glow: rgba(96, 165, 250, 0.18);
+  --d-tint-green: rgba(52, 211, 153, 0.14);
+  --d-tint-gold: rgba(212, 175, 55, 0.16);
+  --d-tint-blue: rgba(96, 165, 250, 0.16);
+  --d-tint-purple: rgba(167, 139, 250, 0.16);
+  --d-tint-red: rgba(248, 113, 113, 0.14);
+  --d-tint-green-strong: rgba(52, 211, 153, 0.3);
+  --d-tint-gold-strong: rgba(212, 175, 55, 0.4);
+  --d-side-3: rgba(37, 99, 235, 0.65);
+  --d-busy-ring: rgba(37, 99, 235, 0.32);
+  --d-input-bg: #131C2E;
+  --d-shadow-sm: 0 1px 2px rgba(3, 7, 18, 0.4);
+  --d-shadow-md: 0 6px 18px rgba(3, 7, 18, 0.45);
+  --d-shadow-lg: 0 24px 60px rgba(3, 7, 18, 0.6);
+  color-scheme: dark;
   background: var(--d-bg);
 }
 
@@ -87,14 +132,14 @@
   width: var(--d-side-w);
   flex-shrink: 0;
   background: var(--d-sidebar);
-  border-right: 1px solid rgba(0, 0, 0, 0.25);
+  border-right: 1px solid rgba(15, 23, 42, 0.22);
   display: flex;
   flex-direction: column;
   position: sticky;
   top: 0;
   height: 100vh;
   z-index: 40;
-  color: #F5F3ED;
+  color: #F1F5F9;
 }
 .dash-brand {
   display: flex;
@@ -102,12 +147,12 @@
   gap: 12px;
   padding: 20px 22px;
   text-decoration: none;
-  color: #F5F3ED;
-  border-bottom: 1px solid rgba(245, 243, 237, 0.1);
+  color: #F1F5F9;
+  border-bottom: 1px solid rgba(241, 245, 249, 0.1);
   transition: opacity 0.2s ease;
 }
 .dash-brand:hover { opacity: 0.85; }
-.dash-brand svg { width: 34px; height: 34px; flex-shrink: 0; filter: drop-shadow(0 0 8px rgba(212, 173, 42, 0.25)); }
+.dash-brand svg { width: 34px; height: 34px; flex-shrink: 0; filter: drop-shadow(0 0 8px rgba(212, 180, 77, 0.25)); }
 .dash-brand .brand-text { display: flex; flex-direction: column; line-height: 1.05; }
 .dash-brand .brand-name {
   font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
@@ -115,13 +160,15 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #F5F3ED;
+  color: #F1F5F9;
 }
 .dash-brand .brand-tag {
   font-size: 8.5px;
   letter-spacing: 3px;
+  line-height: 1.5;
+  text-wrap: balance;
   text-transform: uppercase;
-  color: rgba(245, 243, 237, 0.6);
+  color: rgba(241, 245, 249, 0.6);
   margin-top: 3px;
 }
 
@@ -140,7 +187,7 @@
   gap: 12px;
   padding: 11px 14px;
   border-radius: var(--d-radius-sm);
-  color: rgba(245, 243, 237, 0.72);
+  color: rgba(241, 245, 249, 0.72);
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
@@ -150,10 +197,31 @@
   border: 1px solid transparent;
 }
 .dash-nav a svg { width: 18px; height: 18px; flex-shrink: 0; transition: color 0.22s ease; }
-.dash-nav a:hover { background: rgba(245, 243, 237, 0.08); color: #F5F3ED; }
+.dash-nav a:hover { background: rgba(241, 245, 249, 0.08); color: #F1F5F9; }
 .dash-nav a.active { color: #FFFFFF; font-weight: 600; }
 .dash-nav a.active svg { color: var(--d-gold); }
 .dash-nav a.disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Back link (receipt sidebar): bordered arrow tile + two-line label.
+   Extends the .dash-nav link chrome; the tile border is the card look. */
+.dash-back { gap: 12px; padding: 9px 10px; border-radius: 12px; }
+.dash-back-ic {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(244, 241, 230, 0.42); /* >=3:1 vs both sidebar steps */
+  border-radius: 11px;
+  color: #F1F5F9;
+  transition: border-color 0.22s var(--d-ease-fast), background-color 0.22s var(--d-ease-fast);
+}
+.dash-back-ic svg { width: 17px; height: 17px; }
+.dash-back-txt strong { display: block; font-size: 14.5px; font-weight: 700; line-height: 1.25; color: #F1F5F9; }
+.dash-back-txt small { display: block; margin-top: 2px; font-size: 12px; color: rgba(244, 241, 230, 0.62); } /* 5.8:1 on the sidebar */
+.dash-back:hover { background: rgba(244, 241, 230, 0.08); }
+.dash-back:hover .dash-back-ic { border-color: rgba(244, 241, 230, 0.7); background: rgba(244, 241, 230, 0.06); }
 
 .dash-nav-pill {
   position: absolute;
@@ -162,8 +230,8 @@
   top: 0;
   height: 0;
   border-radius: var(--d-radius-sm);
-  background: linear-gradient(90deg, var(--d-side-2), rgba(20, 90, 66, 0.65));
-  border: 1px solid rgba(245, 243, 237, 0.1);
+  background: linear-gradient(90deg, var(--d-side-2), var(--d-side-3));
+  border: 1px solid rgba(241, 245, 249, 0.1);
   z-index: 0;
   opacity: 0;
   pointer-events: none;
@@ -176,7 +244,7 @@
   align-items: center;
   gap: 12px;
   padding: 14px 20px;
-  border-top: 1px solid rgba(245, 243, 237, 0.1);
+  border-top: 1px solid rgba(241, 245, 249, 0.1);
   background: rgba(0, 0, 0, 0.16);
 }
 .avatar-circle {
@@ -191,12 +259,33 @@
   font-weight: 800;
   font-size: 15px;
   flex-shrink: 0;
-  box-shadow: 0 0 0 3px rgba(212, 173, 42, 0.2), 0 6px 16px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 0 3px rgba(212, 180, 77, 0.2), 0 6px 16px rgba(0, 0, 0, 0.3);
 }
 .dash-user { min-width: 0; overflow: hidden; }
 .dash-user div { min-width: 0; overflow: hidden; }
-.dash-user strong { display: block; font-size: 13.5px; color: #F5F3ED; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dash-user small { color: rgba(245, 243, 237, 0.55); font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; }
+.dash-user strong { display: block; font-size: 13.5px; color: #F1F5F9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-user small { color: rgba(241, 245, 249, 0.55); font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; }
+
+/* Dark sidebar chrome: cool the warm-cream tints to the navy slate scale
+   (the sidebar is dark in both themes, only the tint temperature changes).
+   Active icon goes blue per the Midnight Navy accent rule. */
+.dash[data-theme="dark"] .dash-side { color: var(--d-text); border-right-color: rgba(241, 245, 249, 0.1); }
+.dash[data-theme="dark"] .dash-brand,
+.dash[data-theme="dark"] .dash-brand .brand-name,
+.dash[data-theme="dark"] .dash-user strong { color: var(--d-text); }
+.dash[data-theme="dark"] .dash-brand,
+.dash[data-theme="dark"] .dash-user { border-top-color: rgba(241, 245, 249, 0.1); }
+.dash[data-theme="dark"] .dash-brand { border-bottom-color: rgba(241, 245, 249, 0.1); }
+.dash[data-theme="dark"] .dash-brand .brand-tag,
+.dash[data-theme="dark"] .dash-user small { color: rgba(241, 245, 249, 0.55); }
+.dash[data-theme="dark"] .dash-nav a { color: rgba(241, 245, 249, 0.72); }
+.dash[data-theme="dark"] .dash-nav a:hover { background: rgba(241, 245, 249, 0.08); color: var(--d-text); }
+.dash[data-theme="dark"] .dash-nav a.active { color: #FFFFFF; }
+.dash[data-theme="dark"] .dash-nav a.active svg { color: var(--d-blue); }
+.dash[data-theme="dark"] .dash-nav-pill { border-color: rgba(241, 245, 249, 0.12); }
+.dash[data-theme="dark"] .dash-back-ic { border-color: rgba(241, 245, 249, 0.42); color: var(--d-text); }
+.dash[data-theme="dark"] .dash-back:hover { background: rgba(241, 245, 249, 0.08); }
+.dash[data-theme="dark"] .dash-back:hover .dash-back-ic { border-color: rgba(241, 245, 249, 0.7); background: rgba(241, 245, 249, 0.06); }
 
 /* ---- 3. Top header ---- */
 .dash-main { flex: 1; min-width: 0; display: block; }
@@ -216,7 +305,7 @@
   -webkit-backdrop-filter: blur(14px) saturate(160%);
   z-index: 30;
 }
-.dash[data-theme="dark"] .dash-top { background: rgba(11, 31, 23, 0.82); }
+.dash[data-theme="dark"] .dash-top { background: rgba(21, 31, 50, 0.85); }
 
 .dash-iconbtn {
   width: 40px;
@@ -231,7 +320,7 @@
   cursor: pointer;
   transition: border-color 0.2s ease, transform 0.15s ease;
 }
-.dash-iconbtn:hover { border-color: var(--d-green-soft); }
+.dash-iconbtn:hover { border-color: var(--d-accent); }
 .dash-iconbtn:active { transform: scale(0.96); }
 .dash-iconbtn svg { width: 18px; height: 18px; }
 
@@ -247,7 +336,7 @@
   max-width: 380px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-.dash-search:focus-within { border-color: var(--d-green-soft); box-shadow: 0 0 0 3px var(--d-green-glow); }
+.dash-search:focus-within { border-color: var(--d-accent); box-shadow: 0 0 0 3px var(--d-accent-glow); }
 .dash-search svg { width: 16px; height: 16px; color: var(--d-faint); }
 .dash-search input {
   background: none;
@@ -307,6 +396,8 @@
 
 /* ---- 4. Content + stat cards ---- */
 .dash-content { padding: 28px 30px 52px; max-width: 1360px; margin: 0 auto; min-width: 0; }
+/* Dashboard home only: tighter gap between the top bar and the page heading. */
+.dash-content.dash-home { padding-top: 16px; }
 .dash-pagehead { margin-bottom: 22px; }
 .dash-pagehead h1 {
   font-family: "Poppins", system-ui, sans-serif;
@@ -341,25 +432,24 @@
 }
 a.dash-stat:hover {
   transform: translateY(-3px);
-  border-color: var(--d-green-soft);
+  border-color: var(--d-accent);
   box-shadow: var(--d-shadow-md);
 }
 .dash-stat .stat-ic {
   width: 40px;
   height: 40px;
   border-radius: 11px;
-  display: inline-flex;
+  display: flex; /* block-level: inline-flex left a stray baseline gap under the icon */
   align-items: center;
   justify-content: center;
   margin-bottom: 14px;
-  background: rgba(20, 90, 66, 0.1);
+  background: var(--d-tint-green);
   color: var(--d-green);
 }
 .dash-stat .stat-ic svg { width: 20px; height: 20px; }
-.dash-stat .stat-ic.ic-gold { background: rgba(212, 173, 42, 0.14); color: var(--d-gold-ink); }
-.dash-stat .stat-ic.ic-blue { background: rgba(37, 99, 235, 0.12); color: var(--d-blue); }
-.dash-stat .stat-ic.ic-purple { background: rgba(124, 58, 237, 0.12); color: var(--d-purple); }
-.dash-stat .stat-ic.ic-red { background: rgba(220, 38, 38, 0.1); color: var(--d-red); }
+.dash-stat .stat-ic.ic-gold { background: var(--d-tint-gold); color: var(--d-gold-ink); }
+.dash-stat .stat-ic.ic-blue { background: var(--d-tint-blue); color: var(--d-blue); }
+.dash-stat .stat-ic.ic-purple { background: var(--d-tint-purple); color: var(--d-purple); }
 .dash-stat small {
   display: block;
   color: var(--d-muted);
@@ -405,7 +495,7 @@ a.dash-stat:hover {
 .dash-panel h2 { margin: 0; font-size: 17px; font-weight: 700; color: var(--d-text); letter-spacing: -0.01em; }
 .dash-panel h3 { margin: 18px 0 8px; font-size: 15px; font-weight: 700; color: var(--d-text); }
 .dash-panel > p { color: var(--d-muted); font-size: 13.5px; line-height: 1.6; margin: 6px 0 12px; }
-.dash-panel a { color: var(--d-green-soft); text-decoration: none; font-weight: 600; }
+.dash-panel a { color: var(--d-blue); text-decoration: none; font-weight: 600; } /* inline links = photo table-blue */
 .dash-panel a:hover { text-decoration: underline; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .panel-head .view-all { font-size: 13px; white-space: nowrap; }
@@ -424,6 +514,11 @@ a.dash-stat:hover {
 .statuslist .sl-name { font-weight: 600; color: var(--d-text); }
 .statuslist .sl-meta { margin-left: auto; color: var(--d-muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .statuslist .sl-empty { color: var(--d-muted); font-size: 13.5px; padding: 12px 2px; }
+/* Cashier dashboard active list only (#activeList): name left, timer + Manage
+   right-aligned so the row scans table -> countdown -> action. */
+#activeList .sl-row .timer { margin-left: auto; min-width: 78px; text-align: right; white-space: nowrap; }
+#activeList .sl-sub { color: var(--d-muted); font-weight: 500; }
+#activeList .rowbtn { margin-right: 0; }
 
 /* Simple bar chart (no chart library) */
 .chart { display: flex; align-items: flex-end; gap: clamp(6px, 1.4vw, 14px); height: 150px; padding-top: 8px; position: relative; }
@@ -432,7 +527,7 @@ a.dash-stat:hover {
   width: 100%;
   max-width: 42px;
   border-radius: 8px 8px 4px 4px;
-  background: linear-gradient(180deg, var(--d-green-2), var(--d-green));
+  background: linear-gradient(180deg, var(--d-primary-2), var(--d-primary));
   min-height: 6px;
   transition: filter 0.2s ease;
   position: relative;
@@ -469,14 +564,13 @@ a.dash-stat:hover {
   cursor: pointer;
   transition: all 0.2s var(--d-ease-fast);
 }
-.dash-tabs button:hover { color: var(--d-text); border-color: var(--d-green-soft); }
+.dash-tabs button:hover { color: var(--d-text); border-color: var(--d-accent); }
 .dash-tabs button.on {
-  background: var(--d-green);
+  background: var(--d-primary);
   color: #fff;
-  border-color: var(--d-green);
-  box-shadow: 0 4px 12px var(--d-green-glow);
+  border-color: var(--d-primary);
+  box-shadow: 0 4px 12px var(--d-accent-glow);
 }
-.dash[data-theme="dark"] .dash-tabs button.on { background: var(--d-green-2); border-color: var(--d-green-2); }
 
 .dash-tablewrap {
   overflow-x: auto;
@@ -513,9 +607,11 @@ a.dash-stat:hover {
   border-bottom: 1px solid var(--d-border);
 }
 .dash-tablewrap td { color: var(--d-body); }
+/* Cashier tables page has only 2 columns — keep Status hugging its badges. */
+#cashierTbl th:nth-child(2), #cashierTbl td:nth-child(2) { width: 1%; white-space: nowrap; }
 .dash-tablewrap tbody tr { transition: background-color 0.15s ease; }
-.dash-tablewrap tbody tr:hover { background: rgba(20, 90, 66, 0.04); }
-.dash[data-theme="dark"] .dash-tablewrap tbody tr:hover { background: rgba(63, 164, 106, 0.06); }
+.dash-tablewrap tbody tr:hover { background: rgba(37, 99, 235, 0.05); }
+.dash[data-theme="dark"] .dash-tablewrap tbody tr:hover { background: rgba(96, 165, 250, 0.07); }
 .dash-tablewrap tr.dim { opacity: 0.5; }
 .dash-tablewrap tr:last-child td { border-bottom: 0; }
 
@@ -529,7 +625,7 @@ a.dash-stat:hover {
   animation: dshimmer 1.6s ease-in-out infinite;
 }
 .dash[data-theme="dark"] .sk-bar {
-  background: linear-gradient(100deg, rgba(245, 243, 237, 0.05) 30%, rgba(245, 243, 237, 0.12) 50%, rgba(245, 243, 237, 0.05) 70%);
+  background: linear-gradient(100deg, rgba(241, 245, 249, 0.05) 30%, rgba(241, 245, 249, 0.12) 50%, rgba(241, 245, 249, 0.05) 70%);
   background-size: 200% 100%;
 }
 @keyframes dshimmer { from { background-position: 180% 0; } to { background-position: -80% 0; } }
@@ -543,22 +639,30 @@ a.dash-stat:hover {
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
-.badge.available, .badge.closed, .badge.paid { background: #E7F6EE; color: #147A4F; }
-.badge.occupied, .badge.active { background: #E6F0FF; color: #2563EB; }
+.badge.available, .badge.closed { background: #D1FAE5; color: #047857; }
+.badge.paid { background: #CCFBF1; color: #0F766E; }
+.badge.occupied, .badge.active { background: #E0F2FE; color: #0E7490; }
 .badge.reserved { background: #F3E8FF; color: #7C3AED; }
-.badge.pending { background: #FCF6DE; color: #A9800F; }
-.badge.archived { background: #F3F4F6; color: #6B7280; }
-.badge.declined, .badge.maintenance { background: #FEE2E2; color: #DC2626; }
-.badge.method-cash { background: #E7F6EE; color: #145A42; }
-.badge.method-gcash { background: #E6F0FF; color: #2563EB; }
-.dash[data-theme="dark"] .badge.available, .dash[data-theme="dark"] .badge.closed, .dash[data-theme="dark"] .badge.paid,
-.dash[data-theme="dark"] .badge.method-cash { background: rgba(63, 164, 106, 0.16); color: #7EE2A8; }
+.badge.pending { background: #FCF6DE; color: #8A6A0C; } /* was 3.35:1 on this chip; #8A6A0C = 4.67:1 */
+.badge.archived { background: #F3F4F6; color: #4B5563; } /* #6B7280 was 4.39:1; #4B5563 = 6.9:1 */
+.badge.declined, .badge.maintenance { background: #FEE2E2; color: #B91C1C; } /* #DC2626 was 3.95:1; #B91C1C = 5.3:1 */
+.badge.method-cash { background: #D1FAE5; color: #047857; }
+.badge.method-gcash { background: #E0F2FE; color: #0E7490; } /* photo table-blue */
+/* Dark status colors follow the Midnight Navy spec: green = available,
+   blue = occupied, violet = reserved, amber = pending, red = error,
+   teal = paid. Backgrounds are solid tints (not alpha) so contrast holds
+   over normal and hovered rows alike; each pair lands >= 4.5:1:
+   available 5.1, paid 5.3, occupied 4.7, reserved 4.7, pending 5.7,
+   archived 4.8, declined 4.7. */
+.dash[data-theme="dark"] .badge.available, .dash[data-theme="dark"] .badge.closed,
+.dash[data-theme="dark"] .badge.method-cash { background: #204951; color: #34D399; }
+.dash[data-theme="dark"] .badge.paid { background: #1E4958; color: #2DD4BF; }
 .dash[data-theme="dark"] .badge.occupied, .dash[data-theme="dark"] .badge.active,
-.dash[data-theme="dark"] .badge.method-gcash { background: rgba(96, 165, 250, 0.16); color: #93C5FD; }
-.dash[data-theme="dark"] .badge.reserved { background: rgba(192, 132, 252, 0.16); color: #D8B4FE; }
-.dash[data-theme="dark"] .badge.pending { background: rgba(212, 173, 42, 0.16); color: #F0D27A; }
-.dash[data-theme="dark"] .badge.archived { background: rgba(156, 163, 175, 0.16); color: #C3CAD2; }
-.dash[data-theme="dark"] .badge.declined, .dash[data-theme="dark"] .badge.maintenance { background: rgba(248, 113, 113, 0.16); color: #FCA5A5; }
+.dash[data-theme="dark"] .badge.method-gcash { background: #233856; color: #60A5FA; }
+.dash[data-theme="dark"] .badge.reserved { background: #26314F; color: #A78BFA; }
+.dash[data-theme="dark"] .badge.pending { background: #46463B; color: #FBBF24; }
+.dash[data-theme="dark"] .badge.archived { background: #28364D; color: #94A3B8; }
+.dash[data-theme="dark"] .badge.declined, .dash[data-theme="dark"] .badge.maintenance { background: #2F2F44; color: #F87171; }
 
 .rowbtn {
   border: 1px solid var(--d-border);
@@ -573,8 +677,8 @@ a.dash-stat:hover {
   margin: 2px 6px 2px 0;
   transition: all 0.18s var(--d-ease-fast);
 }
-.rowbtn:hover { border-color: var(--d-green-soft); color: var(--d-green-soft); }
-.rowbtn.go { background: var(--d-green); border-color: var(--d-green); color: #fff; }
+.rowbtn:hover { border-color: var(--d-accent); color: var(--d-accent); }
+.rowbtn.go { background: var(--d-primary); border-color: var(--d-primary); color: #fff; }
 .rowbtn.go:hover { filter: brightness(1.12); color: #fff; }
 .rowbtn.gold { background: var(--d-gold); border-color: var(--d-gold); color: #231a02; }
 .rowbtn.gold:hover { filter: brightness(1.06); color: #231a02; }
@@ -599,10 +703,10 @@ a.dash-stat:hover {
 }
 .dash .btn:hover { filter: brightness(1.08); }
 .dash .btn:active { transform: translateY(1px); }
-.dash .btn-solid { background: var(--d-green); color: #fff; box-shadow: 0 6px 18px var(--d-green-glow); }
-.dash .btn-gold { background: var(--d-gold); color: #231a02; box-shadow: 0 6px 18px rgba(212, 173, 42, 0.28); }
+.dash .btn-solid { background: var(--d-primary); color: #fff; box-shadow: 0 6px 18px var(--d-accent-glow); }
 .dash .btn-ghost { border-color: var(--d-border); color: var(--d-text); background: transparent; }
-.dash .btn-ghost:hover { border-color: var(--d-green-soft); color: var(--d-green-soft); }
+/* Secondary action hover = photo table-blue (light step on dark surfaces). */
+.dash .btn-ghost:hover { border-color: var(--d-blue); color: var(--d-blue); }
 .dash .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; filter: none; }
 .dash .btn.busy { position: relative; color: transparent; pointer-events: none; }
 .dash .btn.busy::after {
@@ -616,7 +720,7 @@ a.dash-stat:hover {
   border-radius: 50%;
   animation: dspin 0.8s linear infinite;
 }
-.dash .btn-ghost.busy::after { border-color: rgba(20, 90, 66, 0.3); border-top-color: var(--d-green); }
+.dash .btn-ghost.busy::after { border-color: var(--d-busy-ring); border-top-color: var(--d-primary); }
 @keyframes dspin { to { transform: rotate(360deg); } }
 
 /* Messages: neutral info, green ok, red err, spinner while loading */
@@ -636,7 +740,7 @@ a.dash-stat:hover {
   margin: 0 8px 0 0;
   vertical-align: -2px;
   border: 2px solid var(--d-border);
-  border-top-color: var(--d-green-soft);
+  border-top-color: var(--d-accent);
   border-radius: 50%;
   animation: dspin 0.8s linear infinite;
 }
@@ -673,8 +777,8 @@ a.dash-stat:hover {
   margin: 0;
   transition: all 0.18s var(--d-ease-fast);
 }
-.page-btn:hover:not(:disabled) { border-color: var(--d-green-soft); color: var(--d-green-soft); }
-.page-btn.on { background: var(--d-green); border-color: var(--d-green); color: #fff; }
+.page-btn:hover:not(:disabled) { border-color: var(--d-accent); color: var(--d-accent); }
+.page-btn.on { background: var(--d-primary); border-color: var(--d-primary); color: #fff; }
 .page-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .dash-empty { color: var(--d-muted); font-size: 13.5px; padding: 18px 2px; margin: 0; }
@@ -757,7 +861,7 @@ a.dash-stat:hover {
 .end-note {
   margin-top: 14px;
   background: #FCF6DE;
-  border: 1px solid rgba(212, 173, 42, 0.35);
+  border: 1px solid rgba(212, 180, 77, 0.35);
   border-radius: 12px;
   padding: 12px 14px;
 }
@@ -773,8 +877,7 @@ a.dash-stat:hover {
 .end-note-head svg { width: 17px; height: 17px; flex-shrink: 0; }
 .end-note-text { margin: 6px 0 0; font-size: 13px; line-height: 1.55; color: var(--d-body); }
 .end-modal .modal-actions { margin-top: 18px; }
-.dash[data-theme="dark"] .end-ic { background: rgba(63, 164, 106, 0.16); color: #7EE2A8; }
-.dash[data-theme="dark"] .end-note { background: rgba(212, 173, 42, 0.08); border-color: rgba(212, 173, 42, 0.28); }
+.dash[data-theme="dark"] .end-note { background: rgba(212, 175, 55, 0.08); border-color: rgba(212, 175, 55, 0.3); }
 
 .modal-field { display: block; text-align: left; margin: 0 0 16px; }
 .modal-field span, .modal-select > span, .modal-times span {
@@ -800,8 +903,8 @@ a.dash-stat:hover {
 }
 .modal-field input:focus, .modal-select select:focus, .modal-times input:focus {
   outline: none;
-  border-color: var(--d-green-soft);
-  box-shadow: 0 0 0 3px var(--d-green-glow);
+  border-color: var(--d-accent);
+  box-shadow: 0 0 0 3px var(--d-accent-glow);
 }
 .modal-field input[aria-invalid="true"] { border-color: var(--d-red); box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14); }
 .modal-field .modal-err { display: none; margin-top: 6px; font-size: 12px; color: var(--d-red); }
@@ -879,13 +982,13 @@ a.dash-stat:hover {
   font-size: 12px;
   font-weight: 700;
   color: var(--d-green-soft);
-  background: rgba(20, 90, 66, 0.1);
-  border: 1px solid rgba(20, 90, 66, 0.3);
+  background: var(--d-tint-green);
+  border: 1px solid var(--d-tint-green-strong);
   border-radius: 999px;
   padding: 6px 13px;
   white-space: nowrap;
 }
-.start-avail.empty { color: var(--d-gold-ink); background: rgba(212, 173, 42, 0.12); border-color: rgba(212, 173, 42, 0.4); }
+.start-avail.empty { color: var(--d-gold-ink); background: var(--d-tint-gold); border-color: var(--d-tint-gold-strong); }
 #startMsg.ok { color: var(--d-green-soft); }
 #startMsg.err { color: var(--d-red); }
 .start-grid {
@@ -919,8 +1022,8 @@ a.dash-stat:hover {
 }
 .field input:focus {
   outline: none;
-  border-color: var(--d-green-soft);
-  box-shadow: 0 0 0 3px var(--d-green-glow);
+  border-color: var(--d-accent);
+  box-shadow: 0 0 0 3px var(--d-accent-glow);
 }
 .field input[aria-invalid="true"] { border-color: var(--d-red); box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.14); }
 .select-wrap { position: relative; display: block; }
@@ -955,17 +1058,17 @@ a.dash-stat:hover {
 }
 .select-wrap select:focus {
   outline: none;
-  border-color: var(--d-green-soft);
-  box-shadow: 0 0 0 3px var(--d-green-glow);
+  border-color: var(--d-accent);
+  box-shadow: 0 0 0 3px var(--d-accent-glow);
 }
 .field input:focus-visible, .select-wrap select:focus-visible, .stepper input:focus-visible,
 .chip:focus-visible, .step-btn:focus-visible, .start-btn:focus-visible {
-  outline: 2px solid var(--d-green-soft);
+  outline: 2px solid var(--d-accent);
   outline-offset: 2px;
 }
 
 .start-duration {
-  background: rgba(20, 90, 66, 0.04);
+  background: rgba(37, 99, 235, 0.05);
   border: 1px solid var(--d-border);
   border-radius: 12px;
   padding: 16px;
@@ -973,7 +1076,7 @@ a.dash-stat:hover {
   gap: 12px;
   align-content: start;
 }
-.dash[data-theme="dark"] .start-duration { background: rgba(63, 164, 106, 0.05); }
+.dash[data-theme="dark"] .start-duration { background: rgba(96, 165, 250, 0.05); }
 .dur-row { display: flex; align-items: stretch; gap: 10px; }
 .stepper {
   flex: 1;
@@ -986,7 +1089,7 @@ a.dash-stat:hover {
   min-width: 0;
   transition: border-color 0.2s ease;
 }
-.stepper:focus-within { border-color: var(--d-green-soft); }
+.stepper:focus-within { border-color: var(--d-accent); }
 .stepper label {
   flex: 1;
   display: grid;
@@ -1023,13 +1126,14 @@ a.dash-stat:hover {
   width: 42px;
   border: 0;
   background: none;
-  color: var(--d-green-soft);
+  color: var(--d-accent);
   font-size: 20px;
   font-weight: 700;
   cursor: pointer;
   transition: background-color 0.15s ease, transform 0.1s ease;
 }
-.step-btn:hover { background: rgba(20, 90, 66, 0.1); }
+.step-btn:hover { background: rgba(37, 99, 235, 0.08); }
+.dash[data-theme="dark"] .step-btn:hover { background: rgba(52, 211, 153, 0.12); }
 .step-btn:active { transform: scale(0.94); }
 .dur-sep { align-self: center; font-size: 22px; font-weight: 700; color: var(--d-faint); }
 .chip {
@@ -1044,9 +1148,11 @@ a.dash-stat:hover {
   cursor: pointer;
   transition: all 0.18s var(--d-ease-fast);
 }
-.chip:hover { color: var(--d-text); border-color: var(--d-green-soft); }
-.chip.on { background: var(--d-green); color: #fff; border-color: var(--d-green); }
+.chip:hover { color: var(--d-text); border-color: var(--d-accent); }
+.chip.on { background: var(--d-primary); color: #fff; border-color: var(--d-primary); }
 .start-summary { margin: 0; font-size: 13px; color: var(--d-muted); font-variant-numeric: tabular-nums; }
+/* Cashier start form only: separates the estimated end time from the steppers. */
+#startSummary { padding-top: 10px; border-top: 1px solid var(--d-border-soft); }
 .start-summary strong { color: var(--d-text); }
 .start-btn {
   display: flex;
@@ -1056,7 +1162,7 @@ a.dash-stat:hover {
   width: 100%;
   border: 0;
   border-radius: var(--d-radius-sm);
-  background: var(--d-green);
+  background: var(--d-primary);
   color: #fff;
   padding: 13px 16px;
   font-size: 14px;
@@ -1064,7 +1170,7 @@ a.dash-stat:hover {
   font-family: inherit;
   letter-spacing: 0.4px;
   cursor: pointer;
-  box-shadow: 0 6px 18px var(--d-green-glow);
+  box-shadow: 0 6px 18px var(--d-accent-glow);
   transition: filter 0.15s ease, transform 0.1s ease;
 }
 .start-btn svg { width: 16px; height: 16px; }
@@ -1085,9 +1191,9 @@ a.dash-stat:hover {
   gap: 8px;
   transition: border-color 0.2s ease, transform 0.2s var(--d-ease);
 }
-.tc-card:hover { border-color: var(--d-green-soft); transform: translateY(-2px); }
+.tc-card:hover { border-color: var(--d-accent); transform: translateY(-2px); }
 .tc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.tc-name { font-weight: 700; color: var(--d-text); font-size: 14.5px; }
+.tc-name { font-weight: 700; color: var(--d-text); font-size: 14.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tc-meta { font-size: 12px; color: var(--d-muted); font-variant-numeric: tabular-nums; }
 .tc-meta svg { width: 15px; height: 15px; display: block; }
 .tcgrid-empty { color: var(--d-muted); font-size: 13.5px; padding: 10px 2px; }
@@ -1116,12 +1222,14 @@ a.dash-stat:hover {
   width: 52px; height: 52px;
   margin: 0 auto 12px;
   border-radius: 50%;
-  background: rgba(20, 90, 66, 0.12);
+  background: rgba(4, 120, 87, 0.12);
   color: var(--d-green-soft);
   display: flex; align-items: center; justify-content: center;
 }
 .bill-done .bill-ok svg { width: 26px; height: 26px; }
 .bill-done .bill-ok.err { background: rgba(220, 38, 38, 0.1); color: var(--d-red); }
+.dash[data-theme="dark"] .bill-done .bill-ok { background: rgba(52, 211, 153, 0.14); }
+.dash[data-theme="dark"] .bill-done .bill-ok.err { background: rgba(248, 113, 113, 0.14); }
 
 /* ---- 11. Receipt ---- */
 .receipt {
@@ -1214,20 +1322,11 @@ a.dash-stat:hover {
 @media (prefers-contrast: more) {
   .dash-panel, .dash-stat, .dash-tablewrap th { border: 2px solid var(--d-text); }
 }
-::selection { background: var(--d-green); color: #fff; }
+::selection { background: var(--d-primary); color: #fff; } /* light: same green as before; dark: blue, keeps white text at 5.1:1 */
 :focus-visible {
-  outline: 2px solid var(--d-green-soft);
+  outline: 2px solid var(--d-accent);
   outline-offset: 2px;
   border-radius: 6px;
-}
-.sr-only {
-  position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 /* in-page anchors offset */

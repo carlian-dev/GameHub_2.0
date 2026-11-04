@@ -1,10 +1,5 @@
 <!DOCTYPE html>
-<!--
-  login/index.html - makes bare /login URL work on static servers.
-  Purpose: static hosts only resolve real files, so /login alone would 404.
-  This redirect file lives at /login/ and instantly forwards to the real
-  staff login at ../src/function/auth/login.html (which stays unlinked from landing).
--->
+<!-- /login redirect shim - static hosts need a real file; forwards to staff login. -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />

@@ -2,6 +2,7 @@
 // migration.md §13.6: DB authoritative, env defaults only when doc absent,
 // masked credentials, fail-closed config, transaction + audit on update.
 import { maskValue } from "../utils/mask.js";
+import { isValidGoogleClientId } from "../utils/google.js";
 
 const REGISTRY = [
   {
@@ -68,10 +69,10 @@ function credentialsMap(basis) {
   return raw && typeof raw === "object" ? raw : {};
 }
 
-function effectiveDoc(key, doc) {
+function effectiveDoc(key, doc, envClientId) {
   const reg = REGISTRY.find((r) => r.key === key);
   if (!reg) return null;
-  const basis = doc || defaultDoc(key);
+  const basis = doc || defaultDoc(key, envClientId);
   const stored = credentialsMap(basis);
   const credentials = {};
   for (const cred of reg.credentials) {
@@ -93,7 +94,9 @@ function effectiveDoc(key, doc) {
   };
 }
 
-function defaultDoc(key) {
+// Effective defaults used ONLY while a settings document is positively absent
+// (architecture.md §2.1). Once a document exists the DB wins.
+function defaultDoc(key, envClientId) {
   const reg = REGISTRY.find((r) => r.key === key);
   if (!reg) return { enabled: false, credentials: {} };
   const credentials = {};
@@ -101,7 +104,22 @@ function defaultDoc(key) {
     credentials[cred.name] = { value: "", last4: "" };
   }
   let enabled = false;
-  if (key === "googleMaps") enabled = true;
+  if (key === "googleAuth") {
+    // GOOGLE_CLIENT_ID is the default client ID (parity with the archived PHP
+    // settings_default()). Without this the login page never shows the Google
+    // button on a fresh database.
+    const clientId = String(envClientId || "").trim();
+    if (isValidGoogleClientId(clientId)) {
+      enabled = true;
+      credentials.clientId = {
+        value: clientId,
+        last4: credentialHint("googleAuth", "clientId", clientId),
+      };
+    }
+  } else if (key === "googleMaps") {
+    // Legacy default: the keyless embed is shown when nothing is configured.
+    enabled = true;
+  }
   return { enabled, credentials };
 }
 
@@ -138,8 +156,8 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
     async publicConfig() {
       try {
         const docs = await settingsModel.findMany(["googleAuth", "googleMaps"]);
-        const auth = effectiveDoc("googleAuth", docs.googleAuth || null);
-        const maps = effectiveDoc("googleMaps", docs.googleMaps || null);
+        const auth = effectiveDoc("googleAuth", docs.googleAuth || null, googleClientIdFromEnv);
+        const maps = effectiveDoc("googleMaps", docs.googleMaps || null, googleClientIdFromEnv);
         return {
           googleAuth: {
             enabled: auth.enabled,
@@ -163,7 +181,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
       const docs = await settingsModel.findMany(keys);
       const integrations = REGISTRY.map((reg) => {
         const doc = docs[reg.key] || null;
-        const effective = effectiveDoc(reg.key, doc);
+        const effective = effectiveDoc(reg.key, doc, googleClientIdFromEnv);
         const credentials = reg.credentials.map((c) => {
           const raw = effective && effective.credentials && effective.credentials[c.name] ? effective.credentials[c.name] : {};
           return credentialShape(c.name, c, raw);
@@ -295,7 +313,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
         throw err;
       }
       if (key === "googleAuth" && name === "clientId" && value !== "") {
-        if (/\s/.test(value) || !/^[A-Za-z0-9_-]{5,}\.apps\.googleusercontent\.com$/.test(value)) {
+        if (/\s/.test(value) || !isValidGoogleClientId(value)) {
           const err = new Error("Google client ID must end with .apps.googleusercontent.com and include an identifier");
           err.status = 422;
           throw err;
@@ -329,7 +347,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
       const activityLogs = db.collection("activityLogs");
 
       const existingDoc = await settingsColl.findOne({ key });
-      const effective = effectiveDoc(key, existingDoc || null);
+      const effective = effectiveDoc(key, existingDoc || null, googleClientIdFromEnv);
       const plan = this.planUpdate(key, effective, data);
 
       const set = { ...plan.set, updatedAt: new Date(), updatedBy: adminEmail };
@@ -377,7 +395,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
         if (!updated) {
           throw new Error("settings update returned no document");
         }
-        const shaped = this.shape(key, effectiveDoc(key, updated));
+        const shaped = this.shape(key, effectiveDoc(key, updated, googleClientIdFromEnv));
         await activityLogs.insertOne(
           {
             actorId: null,

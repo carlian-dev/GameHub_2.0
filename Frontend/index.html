@@ -1,39 +1,41 @@
 <!DOCTYPE html>
 <!--
-  index.html - customer landing page (CU-001 + CU-002).
-  Reference-matched: emerald hero over billiard photo, gold accents, warm
-  off-white content band with white cards (live available tables CU-002 +
-  Find Us with map), feature strip, footer.
-  Nav: Home / Tables / Location + gold Reserve Now pill (scrolls to the live
-  availability section - there is no reservation backend).
-  Staff login lives at src/function/auth/login.html, reachable via /login URL
-  only (see login/index.html redirect) - never linked from here.
-  Scripts: js/config.js + js/api.js + js/tables-public.js (availability),
-  js/theme.js (light/dark toggle, persisted as gh-theme).
-  (Stays at root because static servers look for index.html here.)
+  index.html - customer landing page: hero, live availability (CU-002),
+  Find Us, features, footer. Staff login is reachable only via /login.
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GameHub — Billiard &amp; More</title>
+  <meta name="theme-color" content="#08111F" />
+  <title>GameHub — Billiard Hall and Sport Bar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="preload" as="image" href="assets/hero-billiards.jpg" fetchpriority="high" />
   <link rel="stylesheet" href="css/styles.css" />
+  <script>
+    // Apply the saved theme before first paint so dark mode never flashes ivory.
+    try {
+      document.documentElement.setAttribute(
+        "data-theme",
+        localStorage.getItem("gh-theme") || "light"
+      );
+    } catch (e) { /* private mode */ }
+  </script>
 </head>
 <body class="landing" id="top">
   <div class="hero-wrap">
     <header class="nav">
       <a class="brand" href="#top" aria-label="GameHub home">
         <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="13" fill="none" stroke="#F5F3ED" stroke-width="2" />
-          <circle cx="16" cy="16" r="4" fill="#D4AF37" />
-          <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F5F3ED" stroke-width="2" />
+          <circle cx="16" cy="16" r="13" fill="none" stroke="#F7F2E6" stroke-width="2" />
+          <circle cx="16" cy="16" r="4" fill="#D8B65C" />
+          <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F7F2E6" stroke-width="2" />
         </svg>
         <span class="brand-text">
           <span class="brand-name">GameHub</span>
-          <span class="brand-tag">Billiard &amp; More</span>
+          <span class="brand-tag">Billiard Hall and Sport Bar</span>
         </span>
       </a>
       <nav class="nav-links" id="navLinks" aria-label="Primary">
@@ -52,30 +54,38 @@
     </header>
 
     <main class="hero">
-      <p class="eyebrow"><span></span>Established 2020</p>
-      <h1>Where Every<br />Shot <em>Counts</em></h1>
-      <p class="lede">Premium billiard tables, real-time availability, and seamless reservations — all in one place.</p>
-      <p class="cta">
-        <a class="btn btn-solid" href="#tables">View Tables</a>
-        <a class="btn btn-ghost" href="#tables">Reserve Now</a>
-      </p>
+      <div class="hero-copy">
+        <h1>Where every<br />shot <em>counts.</em></h1>
+        <p class="lede">Great games start here. Find an available table and get ready to break.</p>
+        <p class="cta">
+          <a class="btn btn-solid" href="#tables">Reserve a table</a>
+          <a class="btn btn-ghost" href="#location">Find the hall</a>
+        </p>
+        <p class="hero-meta">
+          <span>Open daily · 8:00 AM – 10:00 PM</span>
+          <span>Rooftop, Paz Building · Malaybalay City</span>
+        </p>
+      </div>
     </main>
-
-    <footer class="scroll-hint" aria-hidden="true">
-      <span>Scroll</span>
-      <i></i>
-    </footer>
   </div>
 
   <section class="band">
     <div class="band-inner">
+      <header class="band-head">
+        <div>
+          <p class="eyebrow eyebrow-ink"><span></span>The floor<span></span></p>
+          <h2>Live from the hall.</h2>
+        </div>
+        <p class="band-lede">See what's open, grab a cue, and come play.</p>
+      </header>
+
       <!-- CU-002: live available tables (available + non-archived only, 30s refresh). -->
       <section id="tables" class="panel-card tables-live" data-state="checking" aria-live="polite">
         <div class="panel-head">
           <h2>Available tables</h2>
           <p class="tables-pill" aria-hidden="true"><span class="live-dot"></span><span id="liveLabel">Checking</span></p>
         </div>
-        <p class="panel-lede">Open tables right now — updates itself while you watch.</p>
+        <p class="panel-lede">Open tables, updated live.</p>
         <p class="tables-count" id="tablesCount">Checking…</p>
         <div class="tables-grid" id="tablesGrid"></div>
         <p class="tables-meta"><span id="tablesUpdated"></span></p>
@@ -87,9 +97,14 @@
         <span class="findus-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" /><circle cx="12" cy="10" r="2.6" /></svg>
         </span>
-        <h2>Find Us</h2>
+        <p class="findus-kicker">Visit us</p>
+        <h2>Find the hall</h2>
         <p class="location-address">Rooftop, Paz Building, San Isidro St, Malaybalay City, Bukidnon</p>
         <p class="location-hours">Open daily · 8:00 AM – 10:00 PM</p>
+        <a class="findus-link" href="https://www.google.com/maps/search/?api=1&amp;query=8.1530406,125.1300626" target="_blank" rel="noopener">
+          Open in Google Maps
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9" /></svg>
+        </a>
         <div class="map-frame" id="mapFrame" hidden></div>
       </section>
     </div>
@@ -99,23 +114,34 @@
     <div class="features-inner">
       <span class="feature">
         <i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.6" /></svg></i>
-        Great Tables
+        Great tables
       </span>
       <span class="feature">
         <i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg></i>
-        Real-Time Availability
+        Real-time availability
       </span>
       <span class="feature">
-        <i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="16" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg></i>
-        Easy Reservations
+        <i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7" /><path d="M17 8l4 4-4 4M21 12H10" /></svg></i>
+        Walk-ins welcome
       </span>
     </div>
   </section>
 
   <footer class="site-footer">
-    <div class="features-inner">
-      <span>© 2026 GameHub — Billiard &amp; More</span>
-      <span>Rooftop, Paz Building, Malaybalay City, Bukidnon · Open daily 8:00 AM – 10:00 PM</span>
+    <div class="footer-inner">
+      <a class="footer-brand" href="#top" aria-label="GameHub home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="13" fill="none" stroke="#F7F2E6" stroke-width="2" />
+          <circle cx="16" cy="16" r="4" fill="#D8B65C" />
+          <path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F7F2E6" stroke-width="2" />
+        </svg>
+        <span class="brand-text">
+          <span class="brand-name">GameHub</span>
+          <span class="brand-tag">Billiard Hall and Sport Bar</span>
+        </span>
+      </a>
+      <p class="footer-meta">Rooftop, Paz Building, San Isidro St, Malaybalay City, Bukidnon<br />Open daily · 8:00 AM – 10:00 PM</p>
+      <span class="footer-copy">© 2026 GameHub</span>
     </div>
   </footer>
 

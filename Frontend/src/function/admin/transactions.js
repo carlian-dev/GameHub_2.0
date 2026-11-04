@@ -99,7 +99,7 @@ async function loadDaily() {
   try {
     const r = await getDailyReport(day);
     document.getElementById("incGross").textContent = fmtPeso(r.gross);
-    document.getElementById("incCount").textContent = `${r.count} payment(s) on ${r.date}`;
+    document.getElementById("incCount").textContent = `${r.count} ${r.count === 1 ? "payment" : "payments"} on ${r.date}`;
     document.getElementById("incCash").textContent = fmtPeso(r.byMethod.cash.gross);
     document.getElementById("incCashCount").textContent = `${r.byMethod.cash.count} cash`;
     document.getElementById("incGcash").textContent = fmtPeso(r.byMethod.gcash.gross);
@@ -124,7 +124,7 @@ async function loadTransactions() {
     if (f.method && f.method !== "all") params.method = f.method;
     const { transactions } = await listTransactions(params, true);
     const n = paintTransactions(transactions || []);
-    msg.textContent = `${n} transaction(s) shown.`;
+    msg.textContent = `Showing ${n} ${n === 1 ? "bill" : "bills"}.`;
     msg.className = "dash-msg ok";
     dashStamp(document.getElementById("stamp"));
   } catch (e) {

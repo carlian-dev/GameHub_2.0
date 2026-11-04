@@ -209,7 +209,7 @@ async function load() {
   if (daily) {
     document.getElementById("stRevenue").textContent = peso(daily.gross);
     document.getElementById("stRevenueSub").textContent =
-      `${daily.count} payment(s) today`;
+      `${daily.count} ${daily.count === 1 ? "payment" : "payments"} today`;
   }
   if (closedRows) renderRecent(closedRows);
   if (transactions) renderChart(transactions);
@@ -219,7 +219,7 @@ async function load() {
     msg.textContent = "Couldn't load dashboard stats. Check your connection and refresh.";
     msg.className = "dash-msg err";
   } else if (missing > 0) {
-    msg.textContent = `Loaded with ${missing} section(s) unavailable.`;
+    msg.textContent = `Loaded with ${missing} ${missing === 1 ? "section" : "sections"} unavailable.`;
     msg.className = "dash-msg";
   } else {
     msg.textContent = dashStamp();

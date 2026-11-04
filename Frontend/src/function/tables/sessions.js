@@ -76,7 +76,7 @@ async function loadSessions() {
     const { sessions } = await listSessions(sessTab);
     sessRows = sessions;
     const n = paintSessions(sessions);
-    msg.textContent = `${n} session(s) shown (${sessTab}). Auto-refresh 30s.`;
+    msg.textContent = `Showing ${n} ${sessTab} ${n === 1 ? "session" : "sessions"} · auto-refresh 30s.`;
     msg.className = "dash-msg ok";
     document.getElementById("empty").hidden = n > 0;
   } catch (e) {

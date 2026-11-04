@@ -377,7 +377,7 @@ async function loadSessions(quiet = false) {
   try {
     const { sessions } = await listCashierSessions("active");
     const n = paintSessions(sessions || []);
-    setSessMsg(`${n} active session(s).`, "ok");
+    setSessMsg(`Showing ${n} active ${n === 1 ? "session" : "sessions"}.`, "ok");
     dashStamp(document.getElementById("sessStamp"));
   } catch (e) {
     setSessMsg(e.message, "err");
@@ -403,7 +403,7 @@ async function loadBilling(quiet = false) {
     setBillMsg(
       unbilled.length === 0
         ? "Nothing awaiting payment."
-        : `${unbilled.length} closed session(s) awaiting payment.`,
+        : `${unbilled.length} closed ${unbilled.length === 1 ? "session" : "sessions"} awaiting payment.`,
       unbilled.length === 0 ? "ok" : ""
     );
     for (const s of unbilled.slice(0, 20)) {

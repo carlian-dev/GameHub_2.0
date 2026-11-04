@@ -4,8 +4,9 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { invitationModel } from "../models/invitation.model.js";
+import { isValidGoogleClientId } from "../utils/google.js";
 
-export function authService({ userModel, settingsModel, db }) {
+export function authService({ userModel, settingsModel, db, googleClientIdFromEnv = "" }) {
   const usersColl = db.collection("users");
   const activityLogsColl = db.collection("activityLogs");
 
@@ -240,12 +241,16 @@ export function authService({ userModel, settingsModel, db }) {
         err.status = 503;
         throw err;
       }
-      if (!authDoc || !authDoc.enabled) {
-        const err = new Error("Google sign-in is not configured");
-        err.status = 503;
-        throw err;
+      // Google Auth settings: DB authoritative, but while no document exists
+      // GOOGLE_CLIENT_ID is the default — the same rule GET /api/config uses
+      // (architecture.md §2.1). A document that exists always wins.
+      let clientId = "";
+      if (authDoc) {
+        if (authDoc.enabled) clientId = authDoc.credentials?.clientId?.value || "";
+      } else {
+        clientId = String(googleClientIdFromEnv || "").trim();
+        if (!isValidGoogleClientId(clientId)) clientId = "";
       }
-      const clientId = authDoc.credentials?.clientId?.value || "";
       if (!clientId) {
         const err = new Error("Google sign-in is not configured");
         err.status = 503;
@@ -273,6 +278,16 @@ export function authService({ userModel, settingsModel, db }) {
         const err2 = new Error("Google sign-in is temporarily unavailable");
         err2.status = 503;
         throw err2;
+      }
+
+      // Check the audience: a token minted for some other Google app is never
+      // accepted (migration.md §13.1: bad `aud` → 401). The button is rendered
+      // with the same client ID GET /api/config publishes, so a legitimate
+      // sign-in always matches.
+      if (tokeninfo.aud !== clientId) {
+        const err = new Error("invalid Google sign-in");
+        err.status = 401;
+        throw err;
       }
 
       // Check email_verified is the string "true".

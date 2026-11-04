@@ -75,7 +75,12 @@ export async function wireApp() {
       mongoClient,
       googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
     }),
-    auth: authService({ userModel: models.user, settingsModel: models.settings, db }),
+    auth: authService({
+      userModel: models.user,
+      settingsModel: models.settings,
+      db,
+      googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
+    }),
     invitation: invitationService({
       invitationModel: models.invitation,
       db,

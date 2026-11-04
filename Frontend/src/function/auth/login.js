@@ -121,8 +121,22 @@ async function initGoogleLogin() {
         } catch (e) { msg.textContent = e.message; msg.className = "err"; }
       },
     });
+    const card = gbtn.closest(".staff-card");
+    let buttonWidth = 320;
+    if (card) {
+      const cs = getComputedStyle(card);
+      const inner =
+        card.clientWidth -
+        parseFloat(cs.paddingLeft || 0) -
+        parseFloat(cs.paddingRight || 0);
+      buttonWidth = Math.max(240, Math.min(340, Math.floor(inner)));
+    }
     google.accounts.id.renderButton(gbtn, {
-      theme: "outline", size: "large", text: "signin_with", width: 280,
+      theme: "filled_black",
+      size: "large",
+      text: "signin_with",
+      locale: "en",
+      width: buttonWidth,
     });
     // Reveal only after the button rendered successfully.
     if (divider) divider.hidden = false;

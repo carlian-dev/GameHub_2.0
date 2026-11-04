@@ -26,6 +26,12 @@ function setEmpty(show, text) {
   if (text) el.textContent = text;
   el.hidden = !show;
 }
+function countMsg(n) {
+  const label = tab === "invites"
+    ? "invitation"
+    : tab === "archived" ? "archived cashier" : "active cashier";
+  return `Showing ${n} ${label}${n === 1 ? "" : "s"}.`;
+}
 
 // Optimistically apply fields to one cached row (or drop it when it leaves
 // the current filter with remove=true). Returns undo() restoring the snapshot.
@@ -51,7 +57,7 @@ function patchRow(id, fields, remove = false) {
 
 function repaint() {
   const n = paint(lastRows);
-  setMsg(`${n} shown (${tab}).`);
+  setMsg(countMsg(n));
   setEmpty(n === 0, "No staff match your search.");
 }
 
@@ -180,7 +186,7 @@ async function load() {
     const list = (await listCashiers(tab === "archived" ? "archived" : "active", "cashier")).cashiers;
     lastRows = list;
     const n = paint(list);
-    setMsg(`${n} shown (${tab}).`);
+    setMsg(countMsg(n));
     setEmpty(n === 0, "No staff in this view yet.");
   } catch (e) {
     setMsg(e.message, "err");
@@ -245,7 +251,7 @@ async function loadInvites() {
     tb.appendChild(invRow(v));
     n++;
   }
-  setMsg(`${n} shown (invites).`);
+  setMsg(countMsg(n));
   setEmpty(n === 0, "No invitations match. Use “Invite cashier” to send one.");
 }
 

@@ -123,7 +123,13 @@ function renderActiveList(sessions) {
     row.className = "sl-row";
     const left = document.createElement("span");
     left.className = "sl-name";
-    left.textContent = `${s.tableName || "Table"} · ${s.customerName || "Customer"}`;
+    // Table number stands out; customer name sits muted beside it.
+    const tbl = document.createElement("strong");
+    tbl.textContent = s.tableName || "Table";
+    const cust = document.createElement("span");
+    cust.className = "sl-sub";
+    cust.textContent = ` · ${s.customerName || "Customer"}`;
+    left.append(tbl, cust);
     const timer = document.createElement("span");
     timer.className = "timer";
     timer.setAttribute("data-end", s.endTime || "");

@@ -24,14 +24,14 @@
 | AD-020 | Administrator should be able to view monthly income reports. |
 | AD-021 | Administrator should be able to view table usage reports. |
 | AD-022 | Administrator should be able to view total playing-hours reports. |
-| AD-023 | Administrator should be able to filter reports by a selected date range. |
-| AD-024 | Administrator should be able to export reports. |
+| **AD-023 | Administrator should be able to filter reports by a selected date range. **|
+| **AD-024 | Administrator should be able to view customer sessions |
 | AD-025 | Administrator should be able to view transaction records. |
 | AD-026 | Administrator should be able to view activity logs for important system and operational actions. |
 | AD-027 | Administrator should be able to view customer session history. |
-| AD-028 | Administrator should be able to view reservations. |
+| **AD-028 | Administrator should be able to view and cancel reservations.** |
 | AD-029 | Administrator should be able to update reservation information. |
-| AD-030 | Administrator should be able to cancel reservations. |
+**| AD-030 | Administrator should be able to handle reservation check-in** |
 | AD-031 | Administrator should be able to add food and beverage products. |
 | AD-032 | Administrator should be able to update food and beverage product information and prices. |
 | AD-033 | Administrator should be able to archive food and beverage products. |
@@ -56,11 +56,11 @@
 | CA-009 | Cashier should be able to extend an active customer session. |
 | CA-010 | Cashier should be able to view the running session timer. |
 | CA-011 | Cashier should be able to end an active customer session. |
-| CA-012 | Cashier should be able to cancel or void an incorrectly created session when authorized. |
+**| CA-012 | Cashier should be able to cancel or void an incorrectly created session when authorized.** |
 | CA-013 | Cashier should be able to view session details and session history. |
 | CA-014 | System should automatically calculate the session charge based on the actual session duration and the applicable table rate, using per-minute billing. |
 | CA-015 | Cashier should be able to check in a customer with a valid reservation. |
-| CA-016 | Cashier should be able to view reservation details needed for check-in. |
+**| CA-016 | Cashier should be able to view reservation details needed for check-in.** |
 | CA-017 | Cashier should be able to view tables categorized as Available, Occupied, Reserved, or Under Maintenance. |
 | CA-018 | Cashier should be able to update operational table status between Available and Occupied as part of normal cashier operations. |
 | CA-019 | Cashier should be able to view applicable table rates. |
@@ -83,8 +83,8 @@
 | CU-001 | Customer should be able to view information about the GameHub establishment and its services. |
 | CU-002 | Customer should be able to view currently available tables. |
 | CU-003 | Customer should be able to view applicable table rates. |
-| CU-004 | Customer should be able to select a preferred table, reservation date, and reservation time. |
-| CU-005 | Customer should be able to provide the name and contact number required for a reservation. |
+**| CU-004 | Customer should be able to select a preferred table, reservation date, and reservation time. |**
+**| CU-005 | Customer should be able to provide the name and contact number required for a reservation.** |
 | CU-006 | Customer should be able to review reservation details before confirmation. |
 | CU-007 | Customer should be able to confirm a reservation. |
 | CU-008 | System should prevent overlapping reservations for the same table and time period. |

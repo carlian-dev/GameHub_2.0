@@ -4,7 +4,6 @@
 import { env } from "./config/env.js";
 import { getDb, getMongoClient } from "./config/db.js";
 import { setupRoutes } from "./app.js";
-import { createMailer } from "./utils/mailer.js";
 
 // Models
 import { healthModel } from "./models/health.model.js";
@@ -14,6 +13,7 @@ import { invitationModel } from "./models/invitation.model.js";
 import { cashierModel } from "./models/cashier.model.js";
 import { tableModel } from "./models/table.model.js";
 import { rateModel } from "./models/rate.model.js";
+import { reservationModel } from "./models/reservation.model.js";
 import { sessionModel } from "./models/session.model.js";
 import { transactionModel } from "./models/transaction.model.js";
 
@@ -26,6 +26,9 @@ import { cashierService } from "./services/cashier.service.js";
 import { tableService } from "./services/table.service.js";
 import { rateService } from "./services/rate.service.js";
 import { sessionService } from "./services/session.service.js";
+import { reservationService } from "./services/reservation.service.js";
+import { googleCalendarService } from "./services/googleCalendar.service.js";
+import { mailService } from "./services/mail.service.js";
 import { transactionService } from "./services/transaction.service.js";
 import { reportService } from "./services/report.service.js";
 
@@ -38,19 +41,21 @@ import {
   cashierController,
   tableController,
   rateController,
+  reservationController,
   sessionController,
   transactionController,
   reportController,
 } from "./controllers/index.js";
 
 let wired = false;
+let wiredGraph = null;
 
 /**
  * Connect to Mongo, build the dependency graph and mount /api routes.
- * Safe to call once per process; repeat calls are a no-op.
+ * Safe to call once per process; repeat calls return the same graph.
  */
 export async function wireApp() {
-  if (wired) return;
+  if (wired) return wiredGraph;
   const db = await getDb();
   const mongoClient = getMongoClient();
 
@@ -63,9 +68,24 @@ export async function wireApp() {
     cashier: cashierModel({ db }),
     table: tableModel({ db }),
     rate: rateModel({ db }),
+    reservation: reservationModel({ db }),
     session: sessionModel({ db }),
     transaction: transactionModel({ db }),
   };
+
+  const mailer = mailService({
+    user: env.MAIL_USER,
+    pass: env.MAIL_PASS,
+    from: env.MAIL_FROM,
+    dryRun: env.MAIL_DRY_RUN,
+  });
+  if (env.MAIL_DRY_RUN) {
+    // eslint-disable-next-line no-console
+    console.log("[gamehub] mail DRY-RUN enabled (no real email will be sent)");
+  } else if (!mailer.enabled) {
+    // eslint-disable-next-line no-console
+    console.log("[gamehub] mail disabled (set MAIL_USER/MAIL_PASS to send email)");
+  }
 
   const services = {
     health: healthService({ healthModel: models.health, dbName: env.MONGODB_DB }),
@@ -74,6 +94,11 @@ export async function wireApp() {
       db,
       mongoClient,
       googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
+      googleCalendarFromEnv: {
+        calendarId: env.GOOGLE_CALENDAR_ID,
+        clientEmail: env.GOOGLE_CALENDAR_CLIENT_EMAIL,
+        privateKey: env.GOOGLE_CALENDAR_PRIVATE_KEY,
+      },
     }),
     auth: authService({
       userModel: models.user,
@@ -84,7 +109,7 @@ export async function wireApp() {
     invitation: invitationService({
       invitationModel: models.invitation,
       db,
-      mailer: createMailer(),
+      mailer,
     }),
     cashier: cashierService({ cashierModel: models.cashier, db }),
     table: tableService({ tableModel: models.table, db }),
@@ -104,6 +129,32 @@ export async function wireApp() {
     report: reportService({ transactionModel: models.transaction }),
   };
 
+  // Calendar sync is DB-backed (settings.googleCalendar), with env fallback
+  // when no document exists. It is always present; methods no-op when disabled.
+  const calendar = {
+    enabled: true,
+    async createReservationEvent(reservation) {
+      const cfg = await services.settings.calendarConfig();
+      if (!cfg.enabled) return "";
+      const svc = googleCalendarService(cfg);
+      return svc.createReservationEvent(reservation);
+    },
+    async deleteReservationEvent(eventId) {
+      const cfg = await services.settings.calendarConfig();
+      if (!cfg.enabled || !eventId) return false;
+      const svc = googleCalendarService(cfg);
+      return svc.deleteReservationEvent(eventId);
+    },
+  };
+  services.calendar = calendar;
+  services.reservation = reservationService({
+    reservationModel: models.reservation,
+    tableModel: models.table,
+    db,
+    calendarService: calendar,
+    mailer,
+  });
+
   const controllers = {
     health: healthController({ healthService: services.health }),
     settings: settingsController({ settingsService: services.settings }),
@@ -112,6 +163,7 @@ export async function wireApp() {
     cashier: cashierController({ cashierService: services.cashier }),
     table: tableController({ tableService: services.table }),
     rate: rateController({ rateService: services.rate }),
+    reservation: reservationController({ reservationService: services.reservation }),
     session: sessionController({ sessionService: services.session }),
     transaction: transactionController({ transactionService: services.transaction }),
     report: reportController({ reportService: services.report }),
@@ -119,5 +171,6 @@ export async function wireApp() {
 
   setupRoutes(controllers);
   wired = true;
-  return { models, services, controllers };
+  wiredGraph = { models, services, controllers };
+  return wiredGraph;
 }

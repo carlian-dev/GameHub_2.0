@@ -1,5 +1,17 @@
 <!DOCTYPE html>
-<!-- Admin transactions - daily income, filtered bills, CSV export, receipts. -->
+<!--
+  src/function/admin/transactions.html - bills + period income (Sprint 3).
+  Pair: transactions.js <-> server/src/routes/transaction.routes.js
+  (admin list) + server/src/routes/report.routes.js
+  (reports_income/export). Admin-only page in the dashboard shell.
+  Stat cards show income for the selected period (getIncomeReport):
+  day+month = that date, month only = that month, no month = the whole year.
+  table lists ref|paid|table|customer|total|method|change with method badges,
+  client-side pagination and an "Updated" stamp. Filters are a real <form>
+  (Enter applies). Export CSV downloads via anchor (credentials:include
+  cookies, not api() JSON); receipt opens shared/receipt.html?ref=...
+  for PDF download.
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -69,7 +81,7 @@
         <div class="dash-cards" id="incomeCards">
           <div class="dash-stat">
             <span class="stat-ic ic-gold" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16v12H4z" /><path d="M4 11h16" /><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none" /></svg></span>
-            <small>Income (selected day)</small><strong id="incGross">–</strong><em id="incCount">–</em>
+            <small>Income (selected period)</small><strong id="incGross">–</strong><em id="incCount">–</em>
           </div>
           <div class="dash-stat">
             <span class="stat-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="18" height="12" rx="2" /><circle cx="12" cy="12" r="2.4" /></svg></span>
@@ -83,13 +95,16 @@
 
         <section class="dash-panel" aria-labelledby="filter-h">
           <h2 id="filter-h">Filter</h2>
-          <p>Daily income follows the From date.</p>
+          <p>Pick Month + Day + Year, then press Apply to show that period's income and bills. Day empty = whole month, Month empty = whole year.</p>
           <form id="filterForm" class="filter-row">
-            <label class="field" for="fFrom"><span class="field-label">From</span>
-              <input id="fFrom" name="from" type="date" />
+            <label class="field" for="fMonth"><span class="field-label">Month</span>
+              <span class="select-wrap"><select id="fMonth" name="month"></select></span>
             </label>
-            <label class="field" for="fTo"><span class="field-label">To</span>
-              <input id="fTo" name="to" type="date" />
+            <label class="field" for="fDay"><span class="field-label">Day</span>
+              <span class="select-wrap"><select id="fDay" name="day"></select></span>
+            </label>
+            <label class="field" for="fYear"><span class="field-label">Year</span>
+              <span class="select-wrap"><select id="fYear" name="year"></select></span>
             </label>
             <label class="field" for="fMethod"><span class="field-label">Method</span>
               <span class="select-wrap"><select id="fMethod" name="method">

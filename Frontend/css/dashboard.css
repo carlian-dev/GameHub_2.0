@@ -14,6 +14,20 @@
    page-level horizontal scrollbar). Mirrors styles.css. */
 *, *::before, *::after { box-sizing: border-box; }
 
+/* Screen-reader-only label (keeps headings in the a11y tree without sighted
+   clutter). Mirrors the utility used by the public pages. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ---- 1. Tokens (Midnight Navy - light ladder) ----
    Cool slate page, white cards, deep navy sidebar (#0F172A), blue as the
    main interactive accent (#2563EB primary / #0E7490 cyan secondary),
@@ -511,7 +525,9 @@ a.dash-stat:hover {
   font-size: 14px;
 }
 .statuslist .sl-row:last-child { border-bottom: 0; }
-.statuslist .sl-name { font-weight: 600; color: var(--d-text); }
+.statuslist .sl-name { flex: 1; min-width: 0; font-weight: 600; color: var(--d-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.statuslist .sl-ref { color: var(--d-faint); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.statuslist .sl-time { margin-left: auto; color: var(--d-muted); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .statuslist .sl-meta { margin-left: auto; color: var(--d-muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .statuslist .sl-empty { color: var(--d-muted); font-size: 13.5px; padding: 12px 2px; }
 /* Cashier dashboard active list only (#activeList): name left, timer + Manage
@@ -782,6 +798,198 @@ a.dash-stat:hover {
 .page-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .dash-empty { color: var(--d-muted); font-size: 13.5px; padding: 18px 2px; margin: 0; }
+
+/* ---- 5b. Reservation approval queue ---- */
+.res-pagehead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.res-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  color: var(--d-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.res-sync .live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #16A34A;
+  box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45);
+  animation: resPulse 2.4s ease-out infinite;
+}
+@keyframes resPulse {
+  0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.45); }
+  70% { box-shadow: 0 0 0 8px rgba(22, 163, 74, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+}
+.res-panel { padding: 22px; }
+.res-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.res-segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--d-border);
+  border-radius: 999px;
+  background: var(--d-surface-2);
+}
+.res-segment button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--d-muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.18s var(--d-ease), color 0.18s var(--d-ease), box-shadow 0.18s var(--d-ease);
+}
+.res-segment button:hover { color: var(--d-text); }
+.res-segment button.on {
+  background: var(--d-surface);
+  color: var(--d-green-soft);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08), 0 4px 12px rgba(16, 24, 40, 0.06);
+}
+.res-segment button span {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(20, 90, 66, 0.09);
+  color: var(--d-green-soft);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.res-segment button.on span { background: rgba(20, 90, 66, 0.13); }
+.dash[data-theme="dark"] .res-segment { background: var(--d-bg); }
+.dash[data-theme="dark"] .res-segment button.on { background: var(--d-surface-2); box-shadow: none; }
+.dash[data-theme="dark"] .res-segment button span { background: rgba(63, 164, 106, 0.14); }
+.dash[data-theme="dark"] .res-card:hover { border-color: var(--d-green-soft); }
+.res-lede {
+  margin: 0 0 14px;
+  color: var(--d-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.res-lede strong { color: var(--d-green-soft); letter-spacing: 0.04em; }
+.res-queue {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 14px;
+}
+.res-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius);
+  background: var(--d-surface);
+  box-shadow: var(--d-shadow-sm);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s var(--d-ease);
+}
+.res-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(20, 90, 66, 0.3);
+  box-shadow: var(--d-shadow-md);
+}
+.res-card.status-reserved { border-left: 3px solid var(--d-gold); }
+.res-card.status-accepted { border-left: 3px solid #16A34A; }
+.res-card.status-rejected { border-left: 3px solid var(--d-red); }
+.res-card.is-busy { opacity: 0.6; pointer-events: none; }
+.res-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.res-card-ref {
+  color: var(--d-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.res-card-name { margin: 0; color: var(--d-text); font-size: 18px; letter-spacing: -0.01em; line-height: 1.2; }
+.res-card-contact { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 0; font-size: 12.5px; }
+.res-card-contact a { color: var(--d-green-soft); text-decoration: none; }
+.res-card-contact a:hover { text-decoration: underline; }
+.res-card-noemail { color: var(--d-faint); font-style: italic; }
+.res-card-sep { color: var(--d-faint); }
+.res-card-when {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 16px;
+  padding: 11px 0;
+  border-top: 1px solid var(--d-border-soft);
+  border-bottom: 1px solid var(--d-border-soft);
+}
+.res-card-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 4px 0; }
+.res-card-cell span {
+  color: var(--d-faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+.res-card-cell strong { color: var(--d-text); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.res-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: auto; }
+.res-card-booked { margin: 0; color: var(--d-faint); font-size: 11px; }
+.res-card-actions { display: flex; gap: 8px; margin-left: auto; }
+.res-btn {
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+.res-btn:active { transform: scale(0.97); }
+.res-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+.res-btn-accept { background: var(--d-green); color: #fff; }
+.res-btn-accept:hover { filter: brightness(1.12); }
+.res-btn-reject { background: transparent; border-color: var(--d-border); color: var(--d-muted); }
+.res-btn-reject:hover { background: rgba(220, 38, 38, 0.06); border-color: var(--d-red); color: var(--d-red); }
+.res-card-decision { color: var(--d-muted); font-size: 12px; font-weight: 600; }
+.res-skel { gap: 12px; pointer-events: none; border-left: 3px solid var(--d-border); }
+.res-skel-line { height: 12px; border-radius: 6px; }
+.res-skel-line.w35 { width: 35%; }
+.res-skel-line.w50 { width: 50%; }
+.res-skel-line.w60 { width: 60%; }
+.res-skel-line.w80 { width: 80%; }
+@media (max-width: 1100px) {
+  .res-queue { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+}
+@media (max-width: 620px) {
+  .res-panel { padding: 16px; }
+  .res-queue { grid-template-columns: 1fr; }
+  .res-segment { width: 100%; overflow-x: auto; }
+  .res-segment button { flex: 1; justify-content: center; white-space: nowrap; }
+  .res-card-foot { align-items: flex-start; flex-direction: column; }
+  .res-card-actions { width: 100%; }
+  .res-btn { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .res-sync .live-dot { animation: none; }
+  .res-card { transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+  .res-card:hover { transform: none; }
+  .sk-bar { animation: none; }
+}
 
 /* ---- 6. Modal ---- */
 .dash-modal {

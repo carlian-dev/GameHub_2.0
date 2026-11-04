@@ -34,6 +34,17 @@ const SETTINGS = [
     updatedBy: null,
   },
   {
+    key: "googleCalendar",
+    enabled: false,
+    credentials: {
+      calendarId: { value: "", last4: "", updatedAt: null },
+      clientEmail: { value: "", last4: "", updatedAt: null },
+      privateKey: { value: "", last4: "", updatedAt: null },
+    },
+    updatedAt: null,
+    updatedBy: null,
+  },
+  {
     key: "recaptcha",
     enabled: false,
     credentials: {

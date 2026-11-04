@@ -1,8 +1,8 @@
-// src/function/admin/transactions.js - bills + daily income logic.
-// Pair: transactions.html <-> Backend transactions_admin_list + reports_daily/export.
-// Guard: admin-only. Filter form: ?from&to&method (AD-023), Enter applies.
-// Daily income card follows the From date (or today). Table = client-side
-// pagination (10/page), proper method badges, "Updated" stamp + skeletons.
+// src/function/admin/transactions.js - bills + period income logic.
+// Pair: transactions.html <-> Backend transactions_admin_list + reports_income/export.
+// Guard: admin-only. One filter form feeds both the income cards and the table:
+// day+month = that date, month only = that month, no month = the whole year.
+// Table = client-side pagination (10/page), method badges, "Updated" stamp.
 // Export downloads CSV via anchor URL (cookies sent, not api() JSON) so the
 // file saves instead of parsing as JSON.
 
@@ -87,19 +87,98 @@ function paintTransactions(list) {
 
 function currentFilter() {
   return {
-    from: document.getElementById("fFrom").value,
-    to: document.getElementById("fTo").value,
+    month: document.getElementById("fMonth").value, // "01"–"12"
+    day: document.getElementById("fDay").value, // "" = whole month
+    year: document.getElementById("fYear").value,
     method: document.getElementById("fMethod").value || "all",
   };
 }
 
-async function loadDaily() {
-  const { from } = currentFilter();
-  const day = from || new Date().toISOString().slice(0, 10);
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+// Month dropdown: blank (whole year) + January–December.
+function populateMonths() {
+  const sel = document.getElementById("fMonth");
+  addOption(sel, "", "All months");
+  for (let m = 1; m <= 12; m++) {
+    addOption(sel, pad2(m), MONTH_NAMES[m - 1]);
+  }
+  const now = new Date();
+  sel.value = pad2(now.getMonth() + 1);
+}
+
+// Day dropdown: blank (all days) + 1–31.
+function populateDays() {
+  const sel = document.getElementById("fDay");
+  addOption(sel, "", "All days");
+  for (let d = 1; d <= 31; d++) addOption(sel, String(d), String(d));
+  sel.value = "";
+}
+
+// Year dropdown: current year and the five before it.
+function populateYears() {
+  const sel = document.getElementById("fYear");
+  const now = new Date();
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 5; y--) {
+    addOption(sel, String(y), String(y));
+  }
+  sel.value = String(now.getFullYear());
+}
+
+function addOption(sel, value, label) {
+  const opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = label;
+  sel.appendChild(opt);
+}
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function selectedDate() {
+  const f = currentFilter();
+  const now = new Date();
+  return {
+    year: Number(f.year) || now.getFullYear(),
+    month: Number(f.month) || 0, // 0 = all months
+    day: Number(f.day) || 0, // 0 = whole month/year
+  };
+}
+
+// Range for the income cards and the table alike:
+// day + month → that date, month only → that month, neither → the whole year.
+function filterRange() {
+  const { year, month, day } = selectedDate();
+  if (month && day >= 1) {
+    const d = `${year}-${pad2(month)}-${pad2(day)}`;
+    return { from: d, to: d };
+  }
+  if (month) {
+    const last = new Date(year, month, 0).getDate();
+    return { from: `${year}-${pad2(month)}-01`, to: `${year}-${pad2(month)}-${pad2(last)}` };
+  }
+  return { from: `${year}-01-01`, to: `${year}-12-31` };
+}
+
+function incomeLabel() {
+  const { year, month, day } = selectedDate();
+  if (month && day) return `${MONTH_NAMES[month - 1]} ${day}, ${year}`;
+  if (month) return MONTH_NAMES[month - 1];
+  return String(year);
+}
+
+async function loadIncome() {
+  const { from, to } = filterRange();
+  const { month, day } = selectedDate();
   try {
-    const r = await getDailyReport(day);
+    const r = await getIncomeReport(from, to);
+    const on = month && day >= 1 ? "on" : "in";
     document.getElementById("incGross").textContent = fmtPeso(r.gross);
-    document.getElementById("incCount").textContent = `${r.count} ${r.count === 1 ? "payment" : "payments"} on ${r.date}`;
+    document.getElementById("incCount").textContent = `${r.count} payment(s) ${on} ${incomeLabel()}`;
     document.getElementById("incCash").textContent = fmtPeso(r.byMethod.cash.gross);
     document.getElementById("incCashCount").textContent = `${r.byMethod.cash.count} cash`;
     document.getElementById("incGcash").textContent = fmtPeso(r.byMethod.gcash.gross);
@@ -118,9 +197,8 @@ async function loadTransactions() {
   document.getElementById("pager").hidden = true;
   try {
     const f = currentFilter();
-    const params = {};
-    if (f.from) params.from = f.from;
-    if (f.to) params.to = f.to;
+    const { from, to } = filterRange();
+    const params = { from, to };
     if (f.method && f.method !== "all") params.method = f.method;
     const { transactions } = await listTransactions(params, true);
     const n = paintTransactions(transactions || []);
@@ -133,19 +211,21 @@ async function loadTransactions() {
     document.getElementById("empty").hidden = false;
     document.getElementById("empty").textContent = "Couldn't load transactions — change the filter or refresh to retry.";
   }
-  loadDaily();
 }
 
+// Filter changes stay pending until Apply is pressed.
 document.getElementById("filterForm").addEventListener("submit", (e) => {
   e.preventDefault();
   loadTransactions();
+  loadIncome();
 });
 
 document.getElementById("export").addEventListener("click", () => {
   // CSV download: anchor navigation keeps the session cookie (credentials),
   // while api() would try to parse the CSV as JSON and fail.
   const f = currentFilter();
-  const url = exportReportUrl({ from: f.from, to: f.to, method: f.method });
+  const { from, to } = filterRange();
+  const url = exportReportUrl({ from, to, method: f.method });
   const a = document.createElement("a");
   a.href = url;
   a.download = "";
@@ -153,7 +233,7 @@ document.getElementById("export").addEventListener("click", () => {
   a.click();
   a.remove();
   dashToast(
-    `CSV for ${f.from || "start"} → ${f.to || "today"} (${f.method}) is downloading.`,
+    `CSV for ${from === to ? from : `${from} → ${to}`} (${f.method}) is downloading.`,
     "ok",
     { title: "Export started" }
   );
@@ -167,6 +247,10 @@ document.getElementById("export").addEventListener("click", () => {
     const name = me.email || "admin";
     document.getElementById("who").textContent = name;
     document.getElementById("avatar").textContent = name.charAt(0).toUpperCase();
+    populateMonths();
+    populateDays();
+    populateYears();
+    loadIncome();
     await loadTransactions();
   } catch (e) {
     if (String(e.message || "").includes("401") || String(e.message || "").includes("not logged")) {

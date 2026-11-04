@@ -24,6 +24,17 @@ const REGISTRY = [
     ],
   },
   {
+    key: "googleCalendar",
+    name: "Google Calendar",
+    description: "Accepted reservations become calendar events",
+    available: true,
+    credentials: [
+      { name: "calendarId", label: "Calendar ID", required: true, secret: false },
+      { name: "clientEmail", label: "Service account email", required: true, secret: false },
+      { name: "privateKey", label: "Service account private key", required: true, secret: true },
+    ],
+  },
+  {
     key: "recaptcha",
     name: "reCAPTCHA",
     description: "Bot protection (planned)",
@@ -69,10 +80,10 @@ function credentialsMap(basis) {
   return raw && typeof raw === "object" ? raw : {};
 }
 
-function effectiveDoc(key, doc, envClientId) {
+function effectiveDoc(key, doc) {
   const reg = REGISTRY.find((r) => r.key === key);
   if (!reg) return null;
-  const basis = doc || defaultDoc(key, envClientId);
+  const basis = doc || defaultDoc(key);
   const stored = credentialsMap(basis);
   const credentials = {};
   for (const cred of reg.credentials) {
@@ -94,9 +105,12 @@ function effectiveDoc(key, doc, envClientId) {
   };
 }
 
-// Effective defaults used ONLY while a settings document is positively absent
-// (architecture.md §2.1). Once a document exists the DB wins.
-function defaultDoc(key, envClientId) {
+// Env fallbacks captured from the service factory (DB authoritative once a
+// document exists; these only apply when the document is positively absent).
+let googleAuthEnvClientId = "";
+let googleCalendarEnv = {};
+
+function defaultDoc(key) {
   const reg = REGISTRY.find((r) => r.key === key);
   if (!reg) return { enabled: false, credentials: {} };
   const credentials = {};
@@ -104,21 +118,43 @@ function defaultDoc(key, envClientId) {
     credentials[cred.name] = { value: "", last4: "" };
   }
   let enabled = false;
+  if (key === "googleMaps") enabled = true;
   if (key === "googleAuth") {
     // GOOGLE_CLIENT_ID is the default client ID (parity with the archived PHP
     // settings_default()). Without this the login page never shows the Google
-    // button on a fresh database.
-    const clientId = String(envClientId || "").trim();
-    if (isValidGoogleClientId(clientId)) {
+    // button on a fresh database. Only a well-formed client ID is published.
+    const cid = String(googleAuthEnvClientId || "").trim();
+    if (isValidGoogleClientId(cid)) {
       enabled = true;
       credentials.clientId = {
-        value: clientId,
-        last4: credentialHint("googleAuth", "clientId", clientId),
+        value: cid,
+        last4: credentialHint("googleAuth", "clientId", cid),
+        updatedAt: null,
       };
     }
-  } else if (key === "googleMaps") {
-    // Legacy default: the keyless embed is shown when nothing is configured.
-    enabled = true;
+  }
+  if (key === "googleCalendar") {
+    const calendarId = String((googleCalendarEnv && googleCalendarEnv.calendarId) || "").trim();
+    const clientEmail = String((googleCalendarEnv && googleCalendarEnv.clientEmail) || "").trim();
+    const privateKey = String((googleCalendarEnv && googleCalendarEnv.privateKey) || "").trim();
+    if (calendarId && clientEmail && privateKey) {
+      enabled = true;
+      credentials.calendarId = {
+        value: calendarId,
+        last4: credentialHint("googleCalendar", "calendarId", calendarId),
+        updatedAt: null,
+      };
+      credentials.clientEmail = {
+        value: clientEmail,
+        last4: clientEmail.slice(-4),
+        updatedAt: null,
+      };
+      credentials.privateKey = {
+        value: privateKey,
+        last4: privateKey.slice(-4),
+        updatedAt: null,
+      };
+    }
   }
   return { enabled, credentials };
 }
@@ -148,7 +184,9 @@ async function hasTransactionSupport(client) {
   }
 }
 
-export function settingsService({ settingsModel, db, mongoClient, googleClientIdFromEnv }) {
+export function settingsService({ settingsModel, db, mongoClient, googleClientIdFromEnv, googleCalendarFromEnv }) {
+  googleAuthEnvClientId = String(googleClientIdFromEnv || "");
+  googleCalendarEnv = googleCalendarFromEnv || {};
   return {
     registry() {
       return REGISTRY;
@@ -156,8 +194,8 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
     async publicConfig() {
       try {
         const docs = await settingsModel.findMany(["googleAuth", "googleMaps"]);
-        const auth = effectiveDoc("googleAuth", docs.googleAuth || null, googleClientIdFromEnv);
-        const maps = effectiveDoc("googleMaps", docs.googleMaps || null, googleClientIdFromEnv);
+        const auth = effectiveDoc("googleAuth", docs.googleAuth || null);
+        const maps = effectiveDoc("googleMaps", docs.googleMaps || null);
         return {
           googleAuth: {
             enabled: auth.enabled,
@@ -181,7 +219,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
       const docs = await settingsModel.findMany(keys);
       const integrations = REGISTRY.map((reg) => {
         const doc = docs[reg.key] || null;
-        const effective = effectiveDoc(reg.key, doc, googleClientIdFromEnv);
+        const effective = effectiveDoc(reg.key, doc);
         const credentials = reg.credentials.map((c) => {
           const raw = effective && effective.credentials && effective.credentials[c.name] ? effective.credentials[c.name] : {};
           return credentialShape(c.name, c, raw);
@@ -198,6 +236,20 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
         };
       });
       return { integrations };
+    },
+    async calendarConfig() {
+      try {
+        const docs = await settingsModel.findMany(["googleCalendar"]);
+        const effective = effectiveDoc("googleCalendar", docs.googleCalendar || null);
+        return {
+          enabled: !!effective.enabled,
+          calendarId: effective.enabled ? effective.credentials.calendarId.value : "",
+          clientEmail: effective.enabled ? effective.credentials.clientEmail.value : "",
+          privateKey: effective.enabled ? effective.credentials.privateKey.value : "",
+        };
+      } catch {
+        return { enabled: false, calendarId: "", clientEmail: "", privateKey: "" };
+      }
     },
     /**
      * settings_plan_update port: build field-level update plan.
@@ -347,7 +399,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
       const activityLogs = db.collection("activityLogs");
 
       const existingDoc = await settingsColl.findOne({ key });
-      const effective = effectiveDoc(key, existingDoc || null, googleClientIdFromEnv);
+      const effective = effectiveDoc(key, existingDoc || null);
       const plan = this.planUpdate(key, effective, data);
 
       const set = { ...plan.set, updatedAt: new Date(), updatedBy: adminEmail };
@@ -395,7 +447,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
         if (!updated) {
           throw new Error("settings update returned no document");
         }
-        const shaped = this.shape(key, effectiveDoc(key, updated, googleClientIdFromEnv));
+        const shaped = this.shape(key, effectiveDoc(key, updated));
         await activityLogs.insertOne(
           {
             actorId: null,

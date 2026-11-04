@@ -1,8 +1,9 @@
 // src/function/cashiers/cashier-common.js - shared cashier shell helpers.
 // Pages: cashier-dashboard.html (start), cashier-sessions.html (lifecycle +
-// billing), cashier-tables.html (read-only). Pair: js/dash.js (shell) +
-// js/api.js (endpoints). Guard + identity + timers live here so the three
-// pages stay 1:1 with their HTML without duplicating auth logic.
+// billing), cashier-reservations.html (accept/reject requests),
+// cashier-tables.html (read-only). Pair: js/dash.js (shell) + js/api.js
+// (endpoints). Guard + identity + timers live here so the pages stay 1:1 with
+// their HTML without duplicating auth logic.
 
 /** Cashier-only guard. Sets #who/#avatar, binds #out. Returns `me` or redirects. */
 async function cashierGuard() {
@@ -34,26 +35,59 @@ function fmtClock(iso) {
 }
 
 function fmtLeft(ms) {
-  const over = ms < 0;
-  const a = Math.abs(ms);
+  // Time never counts below zero: the session ends at 0:00, and the server
+  // closes it (the page refreshes to drop the row).
+  const a = Math.max(0, ms);
   const h = Math.floor(a / 3600000);
   const m = Math.floor((a % 3600000) / 60000);
   const s = Math.floor((a % 60000) / 1000);
-  const body = h > 0
+  return h > 0
     ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
     : `${m}:${String(s).padStart(2, "0")}`;
-  return (over ? "+" : "") + body + (over ? " over" : "");
+}
+
+let sessionExpiryHandler = null;
+let sessionExpiryTimer = null;
+const sessionExpirySeen = new WeakSet();
+
+/** Register the page's refresh function; called when a countdown hits 0:00. */
+function setSessionExpiryHandler(fn) {
+  sessionExpiryHandler = typeof fn === "function" ? fn : null;
 }
 
 /** Recompute every countdown cell from its session endTime (called each second). */
 function tickTimers() {
   const now = Date.now();
+  let hitZero = false;
   document.querySelectorAll("[data-end]").forEach((el) => {
-    const ms = new Date(el.getAttribute("data-end")).getTime() - now;
+    const raw = el.getAttribute("data-end");
+    if (!raw) return;
+    const end = new Date(raw).getTime();
+    if (isNaN(end)) return;
+    const ms = end - now;
     el.textContent = fmtLeft(ms);
-    el.classList.toggle("over", ms < 0);
-    el.classList.toggle("warn", ms >= 0 && ms < 10 * 60000);
+    el.classList.toggle("warn", ms > 0 && ms < 10 * 60000);
+    el.classList.remove("over");
+    if (ms <= 0 && !sessionExpirySeen.has(el)) {
+      sessionExpirySeen.add(el);
+      hitZero = true;
+    }
   });
+  if (
+    hitZero &&
+    typeof sessionExpiryHandler === "function" &&
+    sessionExpiryTimer === null
+  ) {
+    // Let the server's 0:00 sweep run before asking for fresh truth.
+    sessionExpiryTimer = setTimeout(() => {
+      sessionExpiryTimer = null;
+      try {
+        sessionExpiryHandler();
+      } catch {
+        /* the page reports its own load errors */
+      }
+    }, 1200);
+  }
 }
 
 let cashierTickStarted = false;

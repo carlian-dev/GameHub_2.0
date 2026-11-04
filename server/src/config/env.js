@@ -27,6 +27,10 @@ export const env = {
   SESSION_TTL_SECONDS: Number(process.env.SESSION_TTL_SECONDS || 43200),
   AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME || "gh_session",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "",
+  // Optional: accepted reservations become events on this shared calendar.
+  GOOGLE_CALENDAR_ID: process.env.GOOGLE_CALENDAR_ID || "",
+  GOOGLE_CALENDAR_CLIENT_EMAIL: process.env.GOOGLE_CALENDAR_CLIENT_EMAIL || "",
+  GOOGLE_CALENDAR_PRIVATE_KEY: process.env.GOOGLE_CALENDAR_PRIVATE_KEY || "",
   MAIL_USER: process.env.MAIL_USER || "",
   MAIL_PASS: process.env.MAIL_PASS || "",
   MAIL_FROM: process.env.MAIL_FROM || "GameHub",

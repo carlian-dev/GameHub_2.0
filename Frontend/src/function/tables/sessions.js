@@ -1,10 +1,12 @@
 // src/function/tables/sessions.js - admin sessions watch logic. Pair: sessions.html
 // <-> server/src/routes/session.routes.js (enriched list, AD-014/AD-027).
 // Shows which cashier operates each session plus a per-second live timer
-// (remaining = endTime - now; overtime in red). Tabs: active/closed/all.
-// Guard: admin-only. Data refetches every 30s; timers tick locally each second.
+// (remaining = endTime - now; stops at 0:00, when the server auto-ends it).
+// Tabs: active/closed/all. Guard: admin-only. Data refetches every 30s;
+// timers tick locally each second.
 let sessTab = "active";
 let sessRows = [];
+let sessExpiryReloadAt = 0;
 
 function fmtClock(iso) {
   if (!iso) return "—";
@@ -13,19 +15,18 @@ function fmtClock(iso) {
 }
 
 function fmtLeft(ms) {
-  const over = ms < 0;
-  const a = Math.abs(ms);
+  const a = Math.max(0, ms);
   const h = Math.floor(a / 3600000);
   const m = Math.floor((a % 3600000) / 60000);
   const s = Math.floor((a % 60000) / 1000);
-  const body = h > 0
+  return h > 0
     ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
     : `${m}:${String(s).padStart(2, "0")}`;
-  return (over ? "+" : "") + body + (over ? " over" : "");
 }
 
 function tickTimers() {
   const now = Date.now();
+  let hitZero = false;
   document.querySelectorAll("#tbl [data-end]").forEach((el) => {
     const raw = el.getAttribute("data-end");
     if (!raw) { el.textContent = "—"; return; }
@@ -33,9 +34,15 @@ function tickTimers() {
     const tr = el.closest("tr");
     const isActive = tr && tr.dataset.status === "active";
     el.textContent = isActive ? fmtLeft(ms) : "—";
-    el.classList.toggle("over", isActive && ms < 0);
-    el.classList.toggle("warn", isActive && ms >= 0 && ms < 10 * 60000);
+    el.classList.toggle("warn", isActive && ms > 0 && ms < 10 * 60000);
+    el.classList.remove("over");
+    if (isActive && ms <= 0) hitZero = true;
   });
+  // The row should disappear as soon as the server closes the session.
+  if (hitZero && Date.now() - sessExpiryReloadAt > 10000) {
+    sessExpiryReloadAt = Date.now();
+    loadSessions();
+  }
 }
 
 function paintSessions(list) {

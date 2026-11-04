@@ -213,17 +213,15 @@ function tickTimers() {
     const t = new Date(el.getAttribute("data-end")).getTime();
     if (isNaN(t)) return;
     const left = t - Date.now();
-    const over = left < 0;
-    const a = Math.abs(left);
+    const a = Math.max(0, left);
     const h = Math.floor(a / 3600000);
     const m = Math.floor((a % 3600000) / 60000);
     const s = Math.floor((a % 60000) / 1000);
-    const body = h > 0
+    el.textContent = h > 0
       ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
       : `${m}:${String(s).padStart(2, "0")}`;
-    el.textContent = (over ? "+" : "") + body;
-    el.classList.toggle("over", over);
-    el.classList.toggle("warn", !over && left < 600000);
+    el.classList.toggle("warn", left > 0 && left < 600000);
+    el.classList.remove("over");
   });
 }
 setInterval(() => {

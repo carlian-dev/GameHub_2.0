@@ -16,11 +16,13 @@ export default function apiRoutes({ controllers }) {
   const router = Router();
 
   // Public routes (no login required): health, config, register, invite check,
-  // public table availability.
+  // public table availability, rates, reservations.
   registerPublicRoutes(router, {
     healthController: controllers.health,
     settingsController: controllers.settings,
     tableController: controllers.table,
+    rateController: controllers.rate,
+    reservationController: controllers.reservation,
   });
 
   // Auth routes (session-based): login, logout, me, google, register, invite token.

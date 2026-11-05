@@ -5,6 +5,6 @@
   "path": "/api/admin/reports/export?format=csv",
   "expect": {
     "status": 200,
-    "body": "ref,paidAt,table,customer,cashier,minutes,billedHours,rate,rateType,total,method,received,change\n"
+    "body": "ref,paidAt,table,customer,cashier,minutes,billedHours,rate,rateType,total,method,received,change,sessionTotal,fnbTotal,items\n"
   }
 }

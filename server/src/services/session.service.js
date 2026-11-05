@@ -3,6 +3,7 @@
 // rate snapshot (18:00-23:59 Asia/Manila = special), per-hour billing.
 import { ObjectId } from "mongodb";
 import { round2 } from "../utils/numbers.js";
+import { fnbTotalOf } from "../utils/billing.js";
 
 const RATE_FALLBACK = 140;
 const MIN_DURATION = 60;
@@ -142,6 +143,8 @@ export function sessionService({
           rateType: d.rateType ?? null,
           closedAt:
             d.closedAt instanceof Date ? d.closedAt.toISOString() : null,
+          fnbTotal: fnbTotalOf(d),
+          fnbLineCount: Array.isArray(d.fnbOrders) ? d.fnbOrders.length : 0,
         })),
       };
     },
@@ -478,6 +481,8 @@ export function sessionService({
       rateType: doc.rateType ?? null,
       closedAt:
         doc.closedAt instanceof Date ? doc.closedAt.toISOString() : null,
+      fnbTotal: fnbTotalOf(doc),
+      fnbLineCount: Array.isArray(doc.fnbOrders) ? doc.fnbOrders.length : 0,
     };
   }
 }

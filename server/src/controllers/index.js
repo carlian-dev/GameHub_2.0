@@ -475,6 +475,116 @@ export function cashierController({ cashierService }) {
   };
 }
 
+// -------- F&B products (Sprint 5) --------
+export function productController({ productService }) {
+  return {
+    adminList: asyncHandler(async (req, res) => {
+      const result = await productService.list({
+        status: req.query.status,
+        category: req.query.category,
+        q: req.query.q,
+      });
+      res.status(200).json(result);
+    }),
+
+    cashierList: asyncHandler(async (req, res) => {
+      const result = await productService.cashierList({
+        category: req.query.category,
+        q: req.query.q,
+      });
+      res.status(200).json(result);
+    }),
+
+    create: asyncHandler(async (req, res) => {
+      const result = await productService.add(
+        req.body || {},
+        req.session && req.session.user
+      );
+      res.status(201).json(result);
+    }),
+
+    update: asyncHandler(async (req, res) => {
+      const { id } = req.params || {};
+      if (!id) throw new HttpError(422, "invalid id");
+      const result = await productService.update(
+        id,
+        req.body || {},
+        req.session && req.session.user
+      );
+      res.status(200).json(result);
+    }),
+
+    archive: asyncHandler(async (req, res) => {
+      const { id } = req.params || {};
+      if (!id) throw new HttpError(422, "invalid id");
+      const result = await productService.archive(
+        id,
+        req.session && req.session.user
+      );
+      res.status(200).json(result);
+    }),
+
+    unarchive: asyncHandler(async (req, res) => {
+      const { id } = req.params || {};
+      if (!id) throw new HttpError(422, "invalid id");
+      const result = await productService.unarchive(
+        id,
+        req.session && req.session.user
+      );
+      res.status(200).json(result);
+    }),
+  };
+}
+
+// -------- F&B order lines (Sprint 5) --------
+export function orderController({ orderService }) {
+  return {
+    bill: asyncHandler(async (req, res) => {
+      const { id } = req.params || {};
+      if (!id) throw new HttpError(422, "invalid id");
+      const result = await orderService.bill(id);
+      res.status(200).json(result);
+    }),
+
+    add: asyncHandler(async (req, res) => {
+      const { id } = req.params || {};
+      if (!id) throw new HttpError(422, "invalid id");
+      const result = await orderService.add(
+        id,
+        {
+          productId: req.body?.productId,
+          qty: req.body?.qty,
+        },
+        req.session && req.session.user
+      );
+      res.status(200).json(result);
+    }),
+
+    update: asyncHandler(async (req, res) => {
+      const { id, lineId } = req.params || {};
+      if (!id) throw new HttpError(422, "invalid id");
+      const result = await orderService.update(
+        id,
+        lineId,
+        { qty: req.body?.qty },
+        req.session && req.session.user
+      );
+      res.status(200).json(result);
+    }),
+
+    remove: asyncHandler(async (req, res) => {
+      const { id, lineId } = req.params || {};
+      if (!id) throw new HttpError(422, "invalid id");
+      const result = await orderService.remove(
+        id,
+        lineId,
+        req.session && req.session.user
+      );
+      res.status(200).json(result);
+    }),
+  };
+}
+
 // -------- Reservations (public, guest) --------
 export function reservationController({ reservationService }) {
   return {

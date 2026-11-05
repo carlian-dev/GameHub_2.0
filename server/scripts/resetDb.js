@@ -43,6 +43,7 @@ async function main() {
       db.collection("activityLogs").deleteMany({}),
       db.collection("sessions").deleteMany({}),
       db.collection("transactions").deleteMany({}),
+      db.collection("products").deleteMany({}),
       db.collection("authSessions").deleteMany({}),
     ]);
 

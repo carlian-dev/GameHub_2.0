@@ -16,6 +16,7 @@ import { rateModel } from "./models/rate.model.js";
 import { reservationModel } from "./models/reservation.model.js";
 import { sessionModel } from "./models/session.model.js";
 import { transactionModel } from "./models/transaction.model.js";
+import { productModel } from "./models/product.model.js";
 
 // Services
 import { healthService } from "./services/health.service.js";
@@ -31,6 +32,8 @@ import { googleCalendarService } from "./services/googleCalendar.service.js";
 import { mailService } from "./services/mail.service.js";
 import { transactionService } from "./services/transaction.service.js";
 import { reportService } from "./services/report.service.js";
+import { productService } from "./services/product.service.js";
+import { orderService } from "./services/order.service.js";
 
 // Controllers
 import {
@@ -45,6 +48,8 @@ import {
   sessionController,
   transactionController,
   reportController,
+  productController,
+  orderController,
 } from "./controllers/index.js";
 
 let wired = false;
@@ -71,6 +76,7 @@ export async function wireApp() {
     reservation: reservationModel({ db }),
     session: sessionModel({ db }),
     transaction: transactionModel({ db }),
+    product: productModel({ db }),
   };
 
   const mailer = mailService({
@@ -87,6 +93,13 @@ export async function wireApp() {
     console.log("[gamehub] mail disabled (set MAIL_USER/MAIL_PASS to send email)");
   }
 
+  const sessionSvc = sessionService({
+    sessionModel: models.session,
+    tableModel: models.table,
+    userModel: models.user,
+    rateModel: models.rate,
+    db,
+  });
   const services = {
     health: healthService({ healthModel: models.health, dbName: env.MONGODB_DB }),
     settings: settingsService({
@@ -114,19 +127,15 @@ export async function wireApp() {
     cashier: cashierService({ cashierModel: models.cashier, db }),
     table: tableService({ tableModel: models.table, db }),
     rate: rateService({ rateModel: models.rate }),
-    session: sessionService({
-      sessionModel: models.session,
-      tableModel: models.table,
-      userModel: models.user,
-      rateModel: models.rate,
-      db,
-    }),
+    session: sessionSvc,
     transaction: transactionService({
       transactionModel: models.transaction,
       sessionModel: models.session,
+      sessionService: sessionSvc,
       db,
     }),
     report: reportService({ transactionModel: models.transaction }),
+    product: productService({ productModel: models.product, db }),
   };
 
   // Calendar sync is DB-backed (settings.googleCalendar), with env fallback
@@ -154,6 +163,13 @@ export async function wireApp() {
     calendarService: calendar,
     mailer,
   });
+  services.order = orderService({
+    sessionModel: models.session,
+    productModel: models.product,
+    transactionModel: models.transaction,
+    sessionService: sessionSvc,
+    db,
+  });
 
   const controllers = {
     health: healthController({ healthService: services.health }),
@@ -167,6 +183,8 @@ export async function wireApp() {
     session: sessionController({ sessionService: services.session }),
     transaction: transactionController({ transactionService: services.transaction }),
     report: reportController({ reportService: services.report }),
+    product: productController({ productService: services.product }),
+    order: orderController({ orderService: services.order }),
   };
 
   setupRoutes(controllers);

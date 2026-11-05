@@ -47,6 +47,18 @@ async function start() {
       // eslint-disable-next-line no-console
       console.log("[gamehub] API routes wired");
     });
+    server.on("error", (err) => {
+      if (err && err.code === "EADDRINUSE") {
+        // eslint-disable-next-line no-console
+        console.error(`[gamehub] port ${env.PORT} is already in use by another process.`);
+        // eslint-disable-next-line no-console
+        console.error("[gamehub] stop the old process, then restart. (npm run dev now frees port 8000 automatically.)");
+        process.exit(1);
+      }
+      // eslint-disable-next-line no-console
+      console.error("[gamehub] listen failed:", err && err.message ? err.message : err);
+      process.exit(1);
+    });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[gamehub] startup failed:", err && err.message ? err.message : err);

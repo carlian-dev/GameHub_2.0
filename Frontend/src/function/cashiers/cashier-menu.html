@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!--
+  src/function/cashiers/cashier-menu.html - read-only F&B menu (Sprint 5, CA-026).
+  Pair: cashier-menu.js <-> GET /api/cashier/products (active only).
+  Sidebar: Dashboard, Sessions, Menu (active), Reservations, Tables.
+  Guard: logged-in cashiers stay. Products are grouped by category and
+  searchable locally; no add/edit/archive controls on this page.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Menu — GameHub cashier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../../css/dashboard.css" />
+</head>
+<body class="dash" data-theme="light">
+  <div class="dash-app">
+    <aside class="dash-side" aria-label="Cashier navigation">
+      <a class="dash-brand" href="./cashier-dashboard.html">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#F4F1E6" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#D4B44D" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F4F1E6" stroke-width="2" /></svg>
+        <span class="brand-text"><span class="brand-name">GameHub</span><span class="brand-tag">Billiard Hall and Sport Bar</span></span>
+      </a>
+      <nav class="dash-nav">
+        <a href="./cashier-dashboard.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="./cashier-sessions.html" title="Active sessions with live timers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4a3 3 0 0 1 6 0" /><path d="M9 11h6M9 15h4" /></svg>
+          <span>Sessions</span>
+        </a>
+        <a href="./cashier-menu.html" class="active" aria-current="page" title="Food and beverage menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3v6a3 3 0 0 0 6 0V3" /><path d="M8 9v12" /><path d="M16 3h2a3 3 0 0 1 0 6h-2" /><path d="M18 9v12" /></svg>
+          <span>Menu</span>
+        </a>
+        <a href="./cashier-reservations.html" title="Customer reservation requests">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="16" rx="2" /><path d="M4 10h16M8 3v4M16 3v4" /><path d="M9 15l2 2 4-4" /></svg>
+          <span>Reservations</span>
+        </a>
+        <a href="./cashier-tables.html" title="Tables live statuses (read-only)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.6" /></svg>
+          <span>Tables</span>
+        </a>
+      </nav>
+      <div class="dash-user">
+        <span class="avatar-circle" id="avatar">C</span>
+        <div><strong id="who">Checking...</strong><small>Cashier</small></div>
+      </div>
+    </aside>
+
+    <div class="dash-main">
+      <header class="dash-top">
+        <button class="dash-iconbtn dash-menu" aria-label="Open menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <div class="dash-top-right">
+          <button class="dash-theme" aria-label="Toggle theme">
+            <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4 6.6 6.6 0 0 0 20 13.2Z" /></svg>
+            <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" /></svg>
+          </button>
+          <button class="dash-logout" id="out">Log out</button>
+        </div>
+      </header>
+
+      <main class="dash-content">
+        <div class="dash-pagehead">
+          <h1>Menu</h1>
+          <span data-today></span>
+        </div>
+
+        <section class="dash-panel" aria-labelledby="menu-h">
+          <div class="panel-head">
+            <h2 id="menu-h">Food &amp; beverage</h2>
+            <span class="dash-stamp" id="stamp"></span>
+          </div>
+          <p>Read-only menu. Ask an administrator to add, change, or archive a product. Add items to a bill from the <a href="./cashier-sessions.html">Sessions</a> page.</p>
+          <div class="menu-toolbar">
+            <label class="dash-search" for="menuSearch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+              <input id="menuSearch" type="search" placeholder="Search menu" aria-label="Search menu" autocomplete="off" />
+            </label>
+            <div class="menu-chips" role="group" aria-label="Filter by category">
+              <button type="button" class="chip on" data-cat="" aria-pressed="true">All</button>
+              <button type="button" class="chip" data-cat="food" aria-pressed="false">Food</button>
+              <button type="button" class="chip" data-cat="beverage" aria-pressed="false">Beverage</button>
+              <button type="button" class="chip" data-cat="other" aria-pressed="false">Other</button>
+            </div>
+            <button type="button" class="rowbtn" id="retry" hidden>Retry</button>
+          </div>
+          <p class="dash-msg" id="msg" role="status">Loading menu…</p>
+          <div class="menu-groups" id="menuGroups"></div>
+          <p class="dash-empty" id="empty" hidden>No menu items yet — ask an administrator.</p>
+        </section>
+      </main>
+    </div>
+  </div>
+  <script src="../../../js/config.js"></script>
+  <script src="../../../js/api.js"></script>
+  <script src="../../../js/dash.js"></script>
+  <script src="./cashier-common.js"></script>
+  <script src="./cashier-menu.js"></script>
+</body>
+</html>

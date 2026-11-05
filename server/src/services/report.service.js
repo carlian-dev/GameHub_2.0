@@ -5,14 +5,22 @@ import { round2 } from "../utils/numbers.js";
 function summarize(docs) {
   let count = 0;
   let gross = 0;
+  let sessionGross = 0;
+  let fnbGross = 0;
   const byMethod = {
     cash: { count: 0, gross: 0 },
     gcash: { count: 0, gross: 0 },
   };
   for (const d of docs) {
     const t = Number(d.total ?? 0);
+    // Legacy transactions have no sessionTotal/fnbTotal split: the whole
+    // amount is session income and F&B is zero.
+    const st = Number(d.sessionTotal != null ? d.sessionTotal : t);
+    const ft = Number(d.fnbTotal != null ? d.fnbTotal : 0);
     count += 1;
     gross += t;
+    sessionGross += st;
+    fnbGross += ft;
     const m = String(d.method ?? "").toLowerCase();
     if (byMethod[m]) {
       byMethod[m].count += 1;
@@ -20,9 +28,39 @@ function summarize(docs) {
     }
   }
   gross = round2(gross);
+  sessionGross = round2(sessionGross);
+  fnbGross = round2(fnbGross);
   byMethod.cash.gross = round2(byMethod.cash.gross);
   byMethod.gcash.gross = round2(byMethod.gcash.gross);
-  return { count: count, gross: gross, byMethod: byMethod };
+  return {
+    count: count,
+    gross: gross,
+    sessionGross: sessionGross,
+    fnbGross: fnbGross,
+    byMethod: byMethod,
+  };
+}
+
+/** One CSV field: quote only when needed; double embedded quotes. */
+function csvCell(value) {
+  const text = value == null ? "" : String(value);
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+/** "Coke x2 @35.00; Chips x1 @50.00" — empty for legacy transactions. */
+function itemSummary(doc) {
+  if (!Array.isArray(doc.items) || doc.items.length === 0) return "";
+  return doc.items
+    .map((item) => {
+      const name = String(item.name ?? "");
+      const qty = Number(item.qty ?? 0);
+      const unit = Number(item.unitPrice ?? 0).toFixed(2);
+      return `${name} x${qty} @${unit}`;
+    })
+    .join("; ");
 }
 
 export function reportService({ transactionModel }) {
@@ -116,26 +154,36 @@ export function reportService({ transactionModel }) {
 
       const lines = [];
       lines.push(
-        "ref,paidAt,table,customer,cashier,minutes,billedHours,rate,rateType,total,method,received,change"
+        "ref,paidAt,table,customer,cashier,minutes,billedHours,rate,rateType,total,method,received,change,sessionTotal,fnbTotal,items"
       );
       for (const d of docs) {
         const paidAt =
           d.paidAt instanceof Date ? d.paidAt.toISOString() : "";
-        lines.push([
-          d.ref ?? "",
-          paidAt,
-          d.tableName ?? "",
-          d.customerName ?? "",
-          d.cashierName ?? "",
-          d.minutes ?? 0,
-          d.billedHours ?? 0,
-          d.pricePerHour ?? 0,
-          d.rateType ?? "",
-          d.total ?? 0,
-          d.method ?? "",
-          d.received ?? 0,
-          d.change ?? 0,
-        ].join(","));
+        const total = d.total != null ? d.total : 0;
+        const sessionTotal = d.sessionTotal != null ? d.sessionTotal : total;
+        const fnbTotal = d.fnbTotal != null ? d.fnbTotal : 0;
+        lines.push(
+          [
+            d.ref ?? "",
+            paidAt,
+            d.tableName ?? "",
+            d.customerName ?? "",
+            d.cashierName ?? "",
+            d.minutes ?? 0,
+            d.billedHours ?? 0,
+            d.pricePerHour ?? 0,
+            d.rateType ?? "",
+            total,
+            d.method ?? "",
+            d.received ?? 0,
+            d.change ?? 0,
+            sessionTotal,
+            fnbTotal,
+            itemSummary(d),
+          ]
+            .map(csvCell)
+            .join(",")
+        );
       }
       return {
         filename: fname,

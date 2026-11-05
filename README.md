@@ -61,7 +61,9 @@ backend was archived under `archive/Backend/` and is not used at runtime.
 3. Create the first administrator directly in the `users` collection
    (MongoDB Compass): `{ email, passwordHash (bcrypt), role: "admin",
    status: "active" }`. The system is single-administrator by design; no
-   endpoint creates administrators.
+   endpoint creates administrators. If you used archive/Backend/scripts/seed_local.php,
+   the seeded admin signs in with email jamespepito833@gmail.com and password
+   AdminPass123!.
 
 4. Run everything with one command (from the repository root):
    ```

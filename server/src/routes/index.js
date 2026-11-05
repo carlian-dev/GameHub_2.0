@@ -11,6 +11,8 @@ import { registerTableRoutes } from "./tables.routes.js";
 import { registerSessionRoutes } from "./session.routes.js";
 import { registerTransactionRoutes } from "./transaction.routes.js";
 import { registerReportRoutes } from "./report.routes.js";
+import { registerProductRoutes } from "./products.routes.js";
+import { registerOrderRoutes } from "./orders.routes.js";
 
 export default function apiRoutes({ controllers }) {
   const router = Router();
@@ -43,6 +45,12 @@ export default function apiRoutes({ controllers }) {
 
   // Session routes (auth required).
   registerSessionRoutes(router, { sessionController: controllers.session });
+
+  // F&B products (Sprint 5): admin catalogue + cashier read-only menu.
+  registerProductRoutes(router, { productController: controllers.product });
+
+  // F&B order lines (Sprint 5): bill summary + cashier mutations.
+  registerOrderRoutes(router, { orderController: controllers.order });
 
   // Transaction routes (auth required).
   registerTransactionRoutes(router, { transactionController: controllers.transaction });

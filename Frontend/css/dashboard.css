@@ -1460,6 +1460,204 @@ a.dash-stat:hover {
 .receipt-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 .receipt-actions .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 
+/* ---- 11b. F&B menu, orders, receipts (Sprint 5) ---- */
+.badge.cat-food { background: var(--d-tint-gold); color: var(--d-gold-ink); }
+.badge.cat-beverage { background: var(--d-tint-blue); color: var(--d-blue); }
+.badge.cat-other { background: var(--d-tint-purple); color: var(--d-purple); }
+.dash[data-theme="dark"] .badge.cat-food { background: #46463B; color: #FBBF24; }
+.dash[data-theme="dark"] .badge.cat-beverage { background: #233856; color: #60A5FA; }
+.dash[data-theme="dark"] .badge.cat-other { background: #2E2A4F; color: #A78BFA; }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.actions-cell { white-space: nowrap; }
+.actions-cell .rowbtn { margin-right: 6px; }
+.actions-cell .rowbtn:last-child { margin-right: 0; }
+
+/* Cashier menu page: search + category chips + grouped cards. */
+.menu-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 14px; }
+.menu-toolbar .dash-search { flex: 1 1 240px; margin: 0; min-width: 0; }
+.menu-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.menu-groups { display: grid; gap: 18px; margin-top: 12px; }
+.menu-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.menu-group-head h3 { margin: 0; font-size: 15px; color: var(--d-text); }
+.menu-count { font-size: 12px; color: var(--d-muted); }
+.menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.menu-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--d-surface-2);
+  border: 1px solid var(--d-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  transition: border-color 0.18s ease, transform 0.18s var(--d-ease);
+}
+.menu-card:hover { border-color: var(--d-accent); transform: translateY(-1px); }
+.menu-name { min-width: 0; font-size: 14px; font-weight: 600; color: var(--d-text); overflow-wrap: anywhere; }
+.menu-price { flex-shrink: 0; font-size: 13.5px; font-weight: 700; color: var(--d-gold-ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Admin product add/edit dialog. */
+.product-box { max-width: 540px; }
+.product-sub { color: var(--d-muted); font-size: 13px; margin: -4px 0 16px; }
+.product-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
+.product-form .field { margin-bottom: 12px; }
+.product-form .field-hint { margin: 2px 0 16px; line-height: 1.55; }
+
+/* F&B order sheet. */
+.order-box { max-width: 720px; }
+.order-sheet { text-align: left; }
+.order-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.order-headtext { min-width: 0; }
+.order-sub { color: var(--d-muted); font-size: 13px; margin: -4px 0 14px; }
+.order-status { flex-shrink: 0; }
+.order-current { border-top: 1px solid var(--d-border-soft); padding-top: 14px; }
+.order-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.order-section-head h3 { margin: 0; font-size: 14.5px; color: var(--d-text); }
+.order-linkbtn {
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: var(--d-accent);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.order-lines { display: grid; gap: 8px; margin: 10px 0; }
+.order-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  background: var(--d-surface-2);
+  border: 1px solid var(--d-border);
+  border-radius: 10px;
+  padding: 9px 11px;
+  transition: opacity 0.18s ease;
+}
+.order-line.busy { opacity: 0.65; }
+.ol-main { min-width: 0; }
+.ol-name { display: block; font-size: 13.5px; font-weight: 600; color: var(--d-text); overflow-wrap: anywhere; }
+.ol-meta { display: block; margin-top: 2px; font-size: 12px; color: var(--d-muted); }
+.ol-qty { display: flex; align-items: center; gap: 4px; }
+.qty-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--d-border);
+  border-radius: 8px;
+  background: var(--d-surface);
+  color: var(--d-text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.qty-btn:hover:not(:disabled) { border-color: var(--d-accent); color: var(--d-accent); }
+.qty-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.qty-input {
+  width: 48px;
+  height: 30px;
+  padding: 0 4px;
+  text-align: center;
+  border: 1px solid var(--d-border);
+  border-radius: 8px;
+  background: var(--d-input-bg);
+  color: var(--d-text);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.qty-input:focus { outline: none; border-color: var(--d-accent); box-shadow: 0 0 0 3px var(--d-accent-glow); }
+.ol-total { min-width: 76px; text-align: right; font-size: 13.5px; font-weight: 700; color: var(--d-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ol-remove { margin-right: 0; padding: 5px 9px; font-size: 12px; }
+.order-totals {
+  display: grid;
+  gap: 6px;
+  background: var(--d-surface-2);
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-sm);
+  padding: 11px 13px;
+  margin: 10px 0 0;
+}
+.order-totals .bs-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; color: var(--d-muted); }
+.order-totals .bs-row strong { color: var(--d-text); font-variant-numeric: tabular-nums; text-align: right; }
+.order-totals .bs-row.total { border-top: 1px dashed var(--d-border); padding-top: 8px; margin-top: 2px; font-size: 15px; }
+.order-picker { border-top: 1px solid var(--d-border-soft); margin-top: 16px; padding-top: 14px; }
+.order-search { width: 100%; max-width: none; margin: 0 0 10px; }
+.order-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.order-chips .chip { padding: 7px 12px; font-size: 12.5px; }
+.order-products { display: grid; gap: 7px; max-height: 240px; overflow-y: auto; padding: 2px; }
+.order-product {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--d-border-soft);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.order-product.busy { opacity: 0.65; }
+.op-main { min-width: 0; }
+.op-name { display: block; font-size: 13.5px; font-weight: 600; color: var(--d-text); overflow-wrap: anywhere; }
+.op-meta { display: block; margin-top: 1px; font-size: 12px; color: var(--d-muted); }
+.op-qty { width: 56px; }
+.op-add { margin-right: 0; padding: 6px 11px; }
+
+/* Payment sheet item lines. */
+.bill-items {
+  display: grid;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--d-surface-2);
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-sm);
+  padding: 10px 12px;
+  margin: 0 0 12px;
+}
+.bill-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; font-size: 13px; color: var(--d-body); }
+.bi-name { min-width: 0; overflow-wrap: anywhere; }
+.bi-meta { color: var(--d-muted); font-size: 12px; white-space: nowrap; }
+.bi-total { color: var(--d-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bill-state { display: grid; gap: 10px; }
+.bill-state .modal-actions { margin-top: 0; }
+
+/* Itemized receipt (page + PDF preview). */
+.receipt-fnb { margin-top: 18px; }
+.receipt-fnb h2 { font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Arial, sans-serif; margin: 0 0 4px; font-size: 16px; color: var(--d-text); }
+.receipt-items th {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--d-border);
+  color: var(--d-muted);
+  font-size: 11px;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  text-align: left;
+}
+.receipt-items th:nth-child(n+2),
+.receipt-items td:nth-child(n+2) { text-align: right; }
+.receipt-items td { font-variant-numeric: tabular-nums; }
+.receipt-totals { margin-top: 4px; }
+
+@media (max-width: 640px) {
+  .order-line { grid-template-columns: minmax(0, 1fr) auto; }
+  .order-line .ol-main { grid-column: 1; }
+  .order-line .ol-qty { grid-column: 1; grid-row: 2; }
+  .order-line .ol-total { grid-column: 2; grid-row: 1; align-self: start; }
+  .order-line .ol-remove { grid-column: 2; grid-row: 2; justify-self: end; }
+  .order-product { grid-template-columns: minmax(0, 1fr) auto; }
+  .order-product .op-main { grid-column: 1; }
+  .order-product .op-qty { grid-column: 1; grid-row: 2; justify-self: start; }
+  .order-product .op-add { grid-column: 2; grid-row: 1 / span 2; }
+  .product-grid { grid-template-columns: 1fr; }
+  .menu-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 430px) {
+  .menu-grid { grid-template-columns: 1fr; }
+  .order-line .ol-total { min-width: 0; }
+}
+
 /* ---- 12. Mobile drawer scrim ---- */
 .dash-scrim {
   display: none;

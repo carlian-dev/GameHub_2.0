@@ -1,12 +1,16 @@
 // Transaction service — billing + payment close-out.
-// migration.md §13.5: two-step flow (end session → create transaction),
-// double-bill guard (409), short-payment guard (422), ref GH-YYYYMMDD-XXXX
-// with retry on collision, per-hour billing from session snapshot.
+// Sprint 3 flow extended with F&B (Sprint 5): one payment covers
+// session charge + F&B subtotal, and the transaction stores item snapshots.
+// Guards: closed session, one transaction per session (unique sessionId),
+// short payment (422), duplicate payment (409), and a session-level billing
+// lock so an order edit can never land after the total is computed.
 import { ObjectId } from "mongodb";
 import { round2 } from "../utils/numbers.js";
+import { billedHours, billTotals, fnbItems } from "../utils/billing.js";
 
 const REF_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const MAX_REF_RETRIES = 5;
+const LOCK_STALE_MS = 5 * 60 * 1000;
 
 function refOnce() {
   let suffix = "";
@@ -14,11 +18,6 @@ function refOnce() {
     suffix += REF_CHARS[Math.floor(Math.random() * 36)];
   }
   return `GH-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${suffix}`;
-}
-
-function billedHours(secs) {
-  if (secs < 0) secs = 0;
-  return Math.max(1, Math.ceil(secs / 3600));
 }
 
 function actorName(sessionUser, usersColl) {
@@ -43,6 +42,7 @@ function actorName(sessionUser, usersColl) {
 export function transactionService({
   transactionModel,
   sessionModel,
+  sessionService,
   db,
 }) {
   const sessionsColl = db.collection("sessions");
@@ -50,8 +50,55 @@ export function transactionService({
   const usersColl = db.collection("users");
   const activityLogs = db.collection("activityLogs");
 
+  async function releaseLock(oid) {
+    await sessionsColl.updateOne(
+      { _id: oid, paidTransactionRef: { $exists: false } },
+      { $set: { billingLocked: false, billingLockedAt: null } }
+    );
+  }
+
+  async function lockSession(oid, now) {
+    const staleBefore = new Date(now.getTime() - LOCK_STALE_MS);
+    return await sessionsColl.updateOne(
+      {
+        _id: oid,
+        status: "closed",
+        $or: [
+          { billingLocked: { $ne: true } },
+          { billingLockedAt: { $lt: staleBefore } },
+        ],
+      },
+      { $set: { billingLocked: true, billingLockedAt: now } }
+    );
+  }
+
+  async function explainLockFailure(oid) {
+    const fresh = await sessionsColl.findOne({ _id: oid });
+    if (!fresh) {
+      const err = new Error("session not found");
+      err.status = 404;
+      throw err;
+    }
+    if (fresh.status !== "closed") {
+      const err = new Error(
+        "session must be closed before billing (end it first)"
+      );
+      err.status = 422;
+      throw err;
+    }
+    const dup = await transactionsColl.findOne({ sessionId: oid });
+    if (dup) {
+      const err = new Error(`session already billed (${dup.ref ?? "billed"})`);
+      err.status = 409;
+      throw err;
+    }
+    const err = new Error("payment is in progress, try again");
+    err.status = 409;
+    throw err;
+  }
+
   return {
-    /** POST /api/cashier/transactions — create a bill for a closed session. */
+    /** POST /api/cashier/transactions — bill session + F&B in one payment. */
     async create({ sessionId, method, received }, actor) {
       if (!sessionId || !/^[0-9a-fA-F]{24}$/.test(String(sessionId))) {
         const err = new Error("sessionId is required");
@@ -74,6 +121,15 @@ export function transactionService({
         throw err;
       }
 
+      // Converge an expired session before billing (auto-end edge case).
+      try {
+        if (sessionService && typeof sessionService.autoEndExpired === "function") {
+          await sessionService.autoEndExpired();
+        }
+      } catch {
+        // fall through: the read below reports the truth
+      }
+
       const oid = new ObjectId(sessionId);
       const session = await sessionsColl.findOne({ _id: oid });
       if (!session) {
@@ -90,66 +146,97 @@ export function transactionService({
       }
       const dup = await transactionsColl.findOne({ sessionId: oid });
       if (dup) {
-        const err = new Error(
-          `session already billed (${dup.ref ?? "billed"})`
-        );
+        const err = new Error(`session already billed (${dup.ref ?? "billed"})`);
         err.status = 409;
         throw err;
       }
 
-      const start = session.startTime instanceof Date ? session.startTime : null;
-      if (!start) {
-        const err = new Error(
-          "session has no start time and cannot be billed"
-        );
-        err.status = 422;
-        throw err;
-      }
-      const until =
-        session.closedAt instanceof Date
-          ? new Date(session.closedAt)
-          : new Date();
-      const secs = (until.getTime() - start.getTime()) / 1000;
-      const price =
-        session.pricePerHour != null ? session.pricePerHour : 140;
-      const hours = billedHours(secs);
-      const total = round2(hours * price);
-      const rateType = session.rateType ?? null;
-      if (received < total) {
-        const err = new Error(
-          `short payment: received ${received} < total ${total}`
-        );
-        err.status = 422;
-        throw err;
-      }
-      const change = round2(received - total);
-
       const now = new Date();
-      let inserted = null;
-      for (let i = 0; i < MAX_REF_RETRIES; i++) {
-        const ref = refOnce();
-        if ((await transactionsColl.findOne({ ref })) === null) {
+      const lock = await lockSession(oid, now);
+      if (lock.modifiedCount !== 1) {
+        await explainLockFailure(oid);
+      }
+
+      // Once the lock is held no order edit can change the bill, so the
+      // totals computed from this fresh read are exactly what gets stored.
+      const locked = await sessionsColl.findOne({ _id: oid });
+      if (!locked) {
+        await releaseLock(oid);
+        const err = new Error("session not found");
+        err.status = 404;
+        throw err;
+      }
+
+      let insertedId = null;
+      let insertedRef = "";
+      let sessionTotal = 0;
+      let fnbTotal = 0;
+      let grandTotal = 0;
+      let hours = 0;
+      let secs = 0;
+      let price = 0;
+      let items = [];
+
+      try {
+        const start = locked.startTime instanceof Date ? locked.startTime : null;
+        if (!start) {
+          const err = new Error(
+            "session has no start time and cannot be billed"
+          );
+          err.status = 422;
+          throw err;
+        }
+        const until =
+          locked.closedAt instanceof Date
+            ? new Date(locked.closedAt)
+            : new Date();
+        secs = (until.getTime() - start.getTime()) / 1000;
+        price = locked.pricePerHour != null ? locked.pricePerHour : 140;
+        hours = billedHours(secs);
+        const totals = billTotals(locked, until);
+        sessionTotal = totals.sessionTotal;
+        fnbTotal = totals.fnbTotal;
+        grandTotal = totals.total;
+        items = fnbItems(locked);
+
+        if (received < grandTotal) {
+          const err = new Error(
+            `short payment: received ${received} < total ${grandTotal}`
+          );
+          err.status = 422;
+          throw err;
+        }
+        const change = round2(received - grandTotal);
+        const rateType = locked.rateType ?? null;
+
+        for (let i = 0; i < MAX_REF_RETRIES; i++) {
+          const ref = refOnce();
+          if ((await transactionsColl.findOne({ ref })) !== null) continue;
           try {
             const res = await transactionsColl.insertOne({
               ref,
               sessionId: oid,
-              tableId: session.tableId ?? null,
-              tableName: session.tableName ?? "",
-              customerName: session.customerName ?? "",
+              tableId: locked.tableId ?? null,
+              tableName: locked.tableName ?? "",
+              customerName: locked.customerName ?? "",
               cashierId: actor && actor.id ? String(actor.id) : "",
               cashierName: await actorName(actor, usersColl),
               minutes: Math.ceil(Math.max(0, secs) / 60),
               billedHours: hours,
               pricePerHour: price,
               rateType: rateType,
-              total: total,
+              sessionTotal,
+              fnbTotal,
+              total: grandTotal,
+              items,
               method: method,
               received: received,
               change: change,
               paidAt: now,
               createdAt: now,
             });
-            inserted = res.insertedId;
+            insertedId = res.insertedId;
+            insertedRef = ref;
             break;
           } catch (e) {
             const msg = String(e && e.message ? e.message : e);
@@ -161,25 +248,41 @@ export function transactionService({
             continue;
           }
         }
-      }
-      if (!inserted) {
-        const err = new Error(
-          "could not generate a unique reference, try again"
-        );
-        err.status = 500;
-        throw err;
+
+        if (!insertedId) {
+          const err = new Error(
+            "could not generate a unique reference, try again"
+          );
+          err.status = 500;
+          throw err;
+        }
+      } catch (e) {
+        if (!insertedId) await releaseLock(oid);
+        throw e;
       }
 
+      await sessionsColl.updateOne(
+        { _id: oid },
+        {
+          $set: {
+            billingLocked: true,
+            paidTransactionRef: insertedRef,
+            updatedAt: now,
+          },
+        }
+      );
       await activityLogs.insertOne({
         actorId: actor && actor.id ? String(actor.id) : "",
         action: "payment_record",
-        target: String(inserted),
+        target: String(insertedId),
         sessionId: sessionId,
-        total: total,
+        sessionTotal,
+        fnbTotal,
+        total: grandTotal,
         method: method,
         at: new Date(),
       });
-      const doc = await transactionModel.findById(inserted);
+      const doc = await transactionModel.findById(insertedId);
       return { ok: true, transaction: transactionShape(doc) };
     },
 
@@ -252,6 +355,7 @@ export function transactionService({
 }
 
 function transactionShape(doc) {
+  const total = doc.total != null ? doc.total : 0;
   return {
     id: doc._id != null ? String(doc._id) : null,
     ref: doc.ref ?? "",
@@ -265,7 +369,20 @@ function transactionShape(doc) {
     billedHours: doc.billedHours != null ? doc.billedHours : 0,
     pricePerHour: doc.pricePerHour != null ? doc.pricePerHour : 0,
     rateType: doc.rateType ?? null,
-    total: doc.total != null ? doc.total : 0,
+    sessionTotal: doc.sessionTotal != null ? doc.sessionTotal : total,
+    fnbTotal: doc.fnbTotal != null ? doc.fnbTotal : 0,
+    total: total,
+    items: Array.isArray(doc.items)
+      ? doc.items.map((item) => ({
+          productId:
+            item.productId != null ? String(item.productId) : null,
+          name: item.name ?? "",
+          category: item.category ?? "",
+          unitPrice: item.unitPrice != null ? item.unitPrice : 0,
+          qty: item.qty != null ? item.qty : 0,
+          lineTotal: item.lineTotal != null ? item.lineTotal : 0,
+        }))
+      : [],
     method: doc.method ?? "",
     received: doc.received != null ? doc.received : 0,
     change: doc.change != null ? doc.change : 0,

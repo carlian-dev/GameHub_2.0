@@ -532,6 +532,9 @@ function dashTrapTab(e) {
 
 function dashModalOpen(m, initialEl) {
   dashLastFocus = document.activeElement;
+  // Re-append so the shared dialog always stacks above page-local sheets
+  // (order/payment/end dialogs also use .dash-modal).
+  document.body.appendChild(m);
   document.addEventListener("keydown", dashTrapTab, true);
   document.body.style.overflow = "hidden";
   m.classList.add("open");
@@ -541,7 +544,10 @@ function dashModalOpen(m, initialEl) {
 function dashModalClose(m) {
   m.classList.remove("open");
   document.removeEventListener("keydown", dashTrapTab, true);
-  document.body.style.overflow = "";
+  // Keep the page locked while another sheet (order/payment) is still open.
+  if (!document.querySelector(".dash-modal.open")) {
+    document.body.style.overflow = "";
+  }
   if (dashLastFocus && dashLastFocus.focus) {
     try { dashLastFocus.focus(); } catch { /* trigger removed */ }
   }

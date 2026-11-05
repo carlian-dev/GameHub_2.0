@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<!--
+  src/function/admin/menu.html - F&B product catalogue (Sprint 5).
+  Pair: menu.js <-> server/src/routes/products.routes.js
+  (GET/POST /api/admin/products, PUT /:id, archive/unarchive).
+  Admin-only page in the dashboard shell. Filters: status
+  (active/archived/all), category (food/beverage/other), name search.
+  Add/Edit uses one in-page dialog; archive/unarchive use dashConfirm.
+  No native popups, no innerHTML for product data.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Menu — GameHub admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../../css/dashboard.css" />
+  <link rel="stylesheet" href="../../../css/settings.css" />
+</head>
+<body class="dash" data-theme="light">
+  <div class="dash-app">
+    <aside class="dash-side" aria-label="Admin navigation">
+      <a class="dash-brand" href="./admin-dashboard.html">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#F4F1E6" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#D4B44D" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F4F1E6" stroke-width="2" /></svg>
+        <span class="brand-text"><span class="brand-name">GameHub</span><span class="brand-tag">Billiard Hall and Sport Bar</span></span>
+      </a>
+      <nav class="dash-nav">
+        <a href="./admin-dashboard.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="./cashiers.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 15.2c1.7.8 2.7 2.3 3 4.8" /></svg>
+          <span>Staff</span>
+        </a>
+        <a href="../tables/tables.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.6" /></svg>
+          <span>Tables</span>
+        </a>
+        <a href="../tables/rates.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9Z" /><circle cx="8" cy="8" r="1.6" /></svg>
+          <span>Rates</span>
+        </a>
+        <a href="../tables/sessions.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg>
+          <span>Sessions</span>
+        </a>
+        <a href="./menu.html" class="active" aria-current="page" title="Food and beverage catalogue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3v6a3 3 0 0 0 6 0V3" /><path d="M8 9v12" /><path d="M16 3h2a3 3 0 0 1 0 6h-2" /><path d="M18 9v12" /></svg>
+          <span>Menu</span>
+        </a>
+        <a href="./transactions.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V4" /><path d="M4 20h16" /><path d="M8 16v-5M12 16V8M16 16v-3M20 16V6" /></svg>
+          <span>Transactions</span>
+        </a>
+      </nav>
+      <div class="dash-user">
+        <span class="avatar-circle" id="avatar">A</span>
+        <div><strong id="who">Checking...</strong><small>Admin</small></div>
+      </div>
+    </aside>
+
+    <div class="dash-main">
+      <header class="dash-top">
+        <button class="dash-iconbtn dash-menu" aria-label="Open menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <div class="dash-top-right">
+          <div data-admin-settings data-settings-url="./settings.html"></div>
+        </div>
+      </header>
+
+      <main class="dash-content">
+        <div class="dash-pagehead">
+          <h1>Menu</h1>
+          <span data-today></span>
+        </div>
+
+        <section class="dash-panel" aria-labelledby="filter-h">
+          <div class="panel-head">
+            <h2 id="filter-h">Product catalogue</h2>
+            <button type="button" class="btn btn-solid" id="addProduct">Add product</button>
+          </div>
+          <p>New products are active immediately. Archived products stay in history but disappear from the cashier menu.</p>
+          <form id="filterForm" class="filter-row" role="search">
+            <label class="field grow-field" for="q">
+              <span class="field-label">Search</span>
+              <input id="q" name="q" type="search" placeholder="Search product name" autocomplete="off" />
+            </label>
+            <label class="field" for="fStatus">
+              <span class="field-label">Status</span>
+              <span class="select-wrap">
+                <select id="fStatus" name="status">
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                  <option value="all">All</option>
+                </select>
+              </span>
+            </label>
+            <label class="field" for="fCategory">
+              <span class="field-label">Category</span>
+              <span class="select-wrap">
+                <select id="fCategory" name="category">
+                  <option value="">All categories</option>
+                  <option value="food">Food</option>
+                  <option value="beverage">Beverage</option>
+                  <option value="other">Other</option>
+                </select>
+              </span>
+            </label>
+          </form>
+        </section>
+
+        <section class="dash-panel" aria-labelledby="products-h">
+          <div class="panel-head">
+            <h2 id="products-h">Products</h2>
+            <span class="dash-stamp" id="stamp"></span>
+          </div>
+          <p class="dash-msg" id="msg" role="status">Loading…</p>
+          <div class="dash-tablewrap">
+            <table id="tbl">
+              <thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="dash-empty" id="empty" hidden>No products in this view yet.</p>
+        </section>
+      </main>
+    </div>
+  </div>
+  <script src="../../../js/config.js"></script>
+  <script src="../../../js/api.js"></script>
+  <script src="../../../js/dash.js"></script>
+  <script src="./menu.js"></script>
+</body>
+</html>

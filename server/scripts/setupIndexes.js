@@ -4,6 +4,7 @@
 //   tables.name unique, rates.type unique, invitations.tokenHash unique,
 //   settings.key unique, transactions.ref unique, transactions.sessionId unique,
 //   transactions {paidAt, method} compound,
+//   products unique nameKey + {archived, category, name} menu read,
 //   sessions {tableId:1} unique partial {status:"active"} (optional, duplicate-checked),
 //   sessions {status:1, endTime:1} for the auto-end sweeper.
 import dotenv from "dotenv";
@@ -58,6 +59,14 @@ async function main() {
     await db.collection("transactions").createIndex(
       { paidAt: 1, method: 1 },
       { name: "idx_transactions_paidAt_method" }
+    );
+    await db.collection("products").createIndex(
+      { nameKey: 1 },
+      { unique: true, name: "uniq_product_nameKey" }
+    );
+    await db.collection("products").createIndex(
+      { archived: 1, category: 1, name: 1 },
+      { name: "idx_products_menu" }
     );
     await db.collection("sessions").createIndex(
       { status: 1, endTime: 1 },

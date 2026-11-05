@@ -216,7 +216,7 @@ async function load() {
   if (daily) {
     document.getElementById("stRevenue").textContent = peso(daily.gross);
     document.getElementById("stRevenueSub").textContent =
-      `${daily.count} ${daily.count === 1 ? "payment" : "payments"} today`;
+      `${daily.count} ${daily.count === 1 ? "payment" : "payments"} today · F&B ${peso(daily.fnbGross || 0)}`;
   }
   if (closedRows) renderRecent(closedRows);
   if (transactions) renderChart(transactions);

@@ -24,6 +24,18 @@ export function requireAdmin(req, res, next) {
   return next();
 }
 
+/** Ensure the logged-in user is a cashier (admins are read-only on orders). */
+export function requireCashier(req, res, next) {
+  const user = req.session && req.session.user;
+  if (!user || !user.id) {
+    return next(new HttpError(401, "not logged in"));
+  }
+  if (user.role !== "cashier") {
+    return next(new HttpError(403, "cashier only"));
+  }
+  return next();
+}
+
 /** Attach the logged-in user to req.authUser for handlers that need it. */
 export function attachAuthUser(req, res, next) {
   req.authUser = req.session && req.session.user ? req.session.user : null;

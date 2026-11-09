@@ -25,6 +25,8 @@ const EXPECTED = [
   { coll: "transactions", name: "uniq_transaction_ref" },
   { coll: "transactions", name: "uniq_transaction_session" },
   { coll: "transactions", name: "idx_transactions_paidAt_method" },
+  { coll: "products", name: "uniq_product_nameKey" },
+  { coll: "products", name: "idx_products_menu" },
   { coll: "sessions", name: "idx_sessions_status_endTime" },
   { coll: "sessions", name: "uniq_active_session_per_table" },
 ];

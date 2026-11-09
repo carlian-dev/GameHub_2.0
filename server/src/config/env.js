@@ -35,6 +35,13 @@ export const env = {
   MAIL_PASS: process.env.MAIL_PASS || "",
   MAIL_FROM: process.env.MAIL_FROM || "GameHub",
   MAIL_DRY_RUN: process.env.MAIL_DRY_RUN === "1",
+  // Optional reCAPTCHA defaults when no `settings.recaptcha` document exists.
+  // The admin Settings page is authoritative once a document is saved.
+  RECAPTCHA_SITE_KEY: process.env.RECAPTCHA_SITE_KEY || "",
+  RECAPTCHA_SECRET_KEY: process.env.RECAPTCHA_SECRET_KEY || "",
+  // Optional: encrypts `secret: true` settings credentials at rest (AES-256-GCM).
+  // Required before an admin can save a reCAPTCHA secret key or Calendar key.
+  SETTINGS_ENCRYPTION_KEY: process.env.SETTINGS_ENCRYPTION_KEY || "",
   TRUST_PROXY: process.env.TRUST_PROXY || "0",
 };
 

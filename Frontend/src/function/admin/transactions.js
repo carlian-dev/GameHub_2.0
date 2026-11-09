@@ -28,24 +28,37 @@ function renderPage() {
   const slice = allRows.slice(start, start + PER_PAGE);
   for (const t of slice) {
     const tr = document.createElement("tr");
-    tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
+    tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
     tr.children[0].textContent = t.ref || "—";
     tr.children[1].textContent = fmtPaid(t.paidAt);
     tr.children[2].textContent = t.tableName || "—";
     tr.children[3].textContent = t.customerName || "—";
     tr.children[4].textContent = fmtPeso(t.total);
+    tr.children[4].classList.add("num");
+    tr.children[4].title = `Session ${fmtPeso(t.sessionTotal)} · F&B ${fmtPeso(t.fnbTotal)}`;
+    const fnb = Number(t.fnbTotal || 0);
+    tr.children[5].textContent = fnb > 0 ? fmtPeso(fnb) : "—";
+    tr.children[5].classList.add("num");
+    if (fnb > 0) {
+      const count = Array.isArray(t.items) ? t.items.length : 0;
+      tr.children[5].title = `${count} F&B line${count === 1 ? "" : "s"}`;
+    }
     const badge = document.createElement("span");
     const m = String(t.method || "").toLowerCase();
     badge.className = `badge method-${m === "gcash" ? "gcash" : "cash"}`;
-    badge.textContent = t.method || "—";
-    tr.children[5].appendChild(badge);
-    tr.children[6].textContent = fmtPeso(t.change);
+    badge.textContent =
+      t.provider === "paymongo"
+        ? "GCash · PayMongo"
+        : t.method || "—";
+    if (t.provider === "paymongo") badge.title = "Paid online via PayMongo";
+    tr.children[6].appendChild(badge);
+    tr.children[7].textContent = fmtPeso(t.change);
     const link = document.createElement("a");
     link.href = `../shared/receipt.html?ref=${encodeURIComponent(t.ref || "")}`;
     link.textContent = "Receipt";
     link.target = "_blank";
     link.rel = "noopener";
-    tr.children[7].appendChild(link);
+    tr.children[8].appendChild(link);
     tb.appendChild(tr);
   }
   document.getElementById("empty").hidden = allRows.length > 0;
@@ -179,6 +192,8 @@ async function loadIncome() {
     const on = month && day >= 1 ? "on" : "in";
     document.getElementById("incGross").textContent = fmtPeso(r.gross);
     document.getElementById("incCount").textContent = `${r.count} payment(s) ${on} ${incomeLabel()}`;
+    document.getElementById("incFnb").textContent =
+      `F&B ${fmtPeso(r.fnbGross)} · Sessions ${fmtPeso(r.sessionGross)}`;
     document.getElementById("incCash").textContent = fmtPeso(r.byMethod.cash.gross);
     document.getElementById("incCashCount").textContent = `${r.byMethod.cash.count} cash`;
     document.getElementById("incGcash").textContent = fmtPeso(r.byMethod.gcash.gross);
@@ -186,6 +201,7 @@ async function loadIncome() {
   } catch (e) {
     document.getElementById("incGross").textContent = "–";
     document.getElementById("incCount").textContent = e.message;
+    document.getElementById("incFnb").textContent = "–";
   }
 }
 

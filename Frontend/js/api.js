@@ -73,10 +73,10 @@ async function listInvites() {
 async function revokeInvite(id) {
   return api(`/api/admin/invitations/${id}/revoke`, { method: "POST" });
 }
-async function login(email, password) {
+async function login(email, password, recaptchaToken = "") {
   return api("/api/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, recaptchaToken }),
   });
 }
 async function loginWithGoogle(idToken) {
@@ -120,6 +120,16 @@ async function updateCashier(id, fields) {
 }
 async function unarchiveCashier(id) {
   return api(`/api/admin/cashiers/${id}/unarchive`, { method: "POST" });
+}
+
+// --- Admin activity log (AD-026): sign-ins, cashier/session/payment actions ---
+async function listActivityLogs({ actorId = "", action = "", from = "", to = "", limit = 200 } = {}) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (actorId) q.set("actorId", actorId);
+  if (action) q.set("action", action);
+  if (from) q.set("from", from);
+  if (to) q.set("to", to);
+  return api(`/api/admin/activity-logs?${q.toString()}`);
 }
 
 // --- Sprint 02: tables (AD-008..AD-013) + rates (AD-016/017) + sessions view (AD-014) ---
@@ -191,6 +201,83 @@ async function listCashierTables(status = "all") {
 }
 async function listPublicTables() {
   return api('/api/tables/availability');
+}
+// --- Sprint 5: F&B catalogue (AD-031/032/033, CA-026) ---
+async function listProducts({ status = "active", category = "", q = "" } = {}) {
+  const query = new URLSearchParams({ status });
+  if (category) query.set("category", category);
+  if (q) query.set("q", q);
+  return api(`/api/admin/products?${query.toString()}`);
+}
+async function createProduct(fields) {
+  return api("/api/admin/products", {
+    method: "POST",
+    body: JSON.stringify(fields),
+  });
+}
+async function updateProduct(id, fields) {
+  return api(`/api/admin/products/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(fields),
+  });
+}
+async function archiveProduct(id) {
+  return api(`/api/admin/products/${encodeURIComponent(id)}/archive`, {
+    method: "POST",
+  });
+}
+async function unarchiveProduct(id) {
+  return api(`/api/admin/products/${encodeURIComponent(id)}/unarchive`, {
+    method: "POST",
+  });
+}
+async function listMenuProducts({ category = "", q = "" } = {}) {
+  const query = new URLSearchParams();
+  if (category) query.set("category", category);
+  if (q) query.set("q", q);
+  const qs = query.toString() ? `?${query.toString()}` : "";
+  return api(`/api/cashier/products${qs}`);
+}
+// --- Sprint 5: session bill + F&B order lines (CA-020/027/028) ---
+async function getBill(sessionId) {
+  return api(`/api/cashier/sessions/${encodeURIComponent(sessionId)}/bill`);
+}
+// --- PayMongo hosted checkout for a closed session bill ---
+async function createPaymongoCheckout(sessionId) {
+  return api(`/api/cashier/sessions/${encodeURIComponent(sessionId)}/paymongo`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+async function getPaymongoCheckout(checkoutId) {
+  return api(`/api/cashier/paymongo/checkouts/${encodeURIComponent(checkoutId)}`);
+}
+async function cancelPaymongoCheckout(sessionId) {
+  return api(
+    `/api/cashier/sessions/${encodeURIComponent(sessionId)}/paymongo/cancel`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+}
+async function addOrderLine(sessionId, productId, qty) {
+  return api(`/api/cashier/sessions/${encodeURIComponent(sessionId)}/orders`, {
+    method: "POST",
+    body: JSON.stringify({ productId, qty }),
+  });
+}
+async function updateOrderLine(sessionId, lineId, qty) {
+  return api(
+    `/api/cashier/sessions/${encodeURIComponent(sessionId)}/orders/${encodeURIComponent(lineId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ qty }),
+    }
+  );
+}
+async function removeOrderLine(sessionId, lineId) {
+  return api(
+    `/api/cashier/sessions/${encodeURIComponent(sessionId)}/orders/${encodeURIComponent(lineId)}`,
+    { method: "DELETE" }
+  );
 }
 // --- Sprint 3: billing close-out (CA-020/022/023/024) + lists (AD-020) + reports (AD-019/021) ---
 async function createTransaction(sessionId, method, received) {

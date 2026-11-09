@@ -1,6 +1,7 @@
 // One-time idempotent seed of the `settings` collection documents
-// (googleAuth, googleMaps, recaptcha, otp). DB is authoritative; env defaults
-// only apply when a document is absent. Guards against gamehub_2_0.
+// (googleAuth, googleMaps, googleCalendar, recaptcha, paymongo, otp). DB is
+// authoritative; env defaults only apply when a document is absent. Guards
+// against gamehub_2_0.
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,6 +51,16 @@ const SETTINGS = [
     credentials: {
       siteKey: { value: "", last4: "", updatedAt: null },
       secretKey: { value: "", last4: "", updatedAt: null },
+    },
+    updatedAt: null,
+    updatedBy: null,
+  },
+  {
+    key: "paymongo",
+    enabled: false,
+    credentials: {
+      secretKey: { value: "", last4: "", updatedAt: null },
+      webhookSecret: { value: "", last4: "", updatedAt: null },
     },
     updatedAt: null,
     updatedBy: null,

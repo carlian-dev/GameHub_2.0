@@ -279,6 +279,10 @@
             message += " The landing page will stop showing the map.";
           } else if (integration.key === "googleCalendar") {
             message += " Accepted reservations will no longer create calendar events.";
+          } else if (integration.key === "recaptcha") {
+            message += " Staff login, cashier signup and reservations will stop showing the bot check.";
+          } else if (integration.key === "paymongo") {
+            message += " Cashiers will no longer be able to create GCash online payment links for session bills.";
           }
           const ok = await dashConfirm(message, `Turn off ${integration.name}?`);
           if (!ok) return;

@@ -63,3 +63,12 @@ export function adminIntegrationsView({ integrations }) {
     integrations,
   };
 }
+
+export function activityView({ logs, total, limit }) {
+  return {
+    ok: true,
+    logs,
+    total,
+    limit,
+  };
+}

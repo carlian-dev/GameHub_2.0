@@ -10,7 +10,7 @@ $adminEmail = 'jamespepito833@gmail.com';
 if ($users->countDocuments(['email' => $adminEmail]) === 0) {
     $users->insertOne([
         'email' => $adminEmail,
-        'passwordHash' => password_hash('Admin123!', PASSWORD_BCRYPT),
+        'passwordHash' => password_hash('AdminPass123!', PASSWORD_BCRYPT),
         'role' => 'admin',
         'status' => 'active',
         'displayName' => 'Admin',

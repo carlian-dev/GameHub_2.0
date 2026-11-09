@@ -194,7 +194,9 @@ Frontend/
    project hashes out.
 4. Destructive actions are gated twice: a role guard plus an explicit
    Yes/No dialog (archive/unarchive). All mutations write to
-   `activityLogs` with actor and target.
+   `activityLogs` with actor and target, and every password/Google sign-in
+   and sign-out is logged too. Admins read the trail at
+   `GET /api/admin/activity-logs` (page `Frontend/src/function/admin/activity.html`).
 5. CORS allows exactly one configured Frontend origin with credentials;
    Frontend and Backend share the `localhost` host so session cookies apply.
 6. Validation is allow-list style per endpoint (roles, statuses, name and

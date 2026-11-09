@@ -43,6 +43,7 @@ async function main() {
       db.collection("activityLogs").deleteMany({}),
       db.collection("sessions").deleteMany({}),
       db.collection("transactions").deleteMany({}),
+      db.collection("products").deleteMany({}),
       db.collection("authSessions").deleteMany({}),
     ]);
 
@@ -131,6 +132,16 @@ async function main() {
         key: "otp",
         enabled: false,
         credentials: {},
+        updatedAt: null,
+        updatedBy: null,
+      },
+      {
+        key: "paymongo",
+        enabled: false,
+        credentials: {
+          secretKey: { value: "", last4: "", updatedAt: null },
+          webhookSecret: { value: "", last4: "", updatedAt: null },
+        },
         updatedAt: null,
         updatedBy: null,
       },

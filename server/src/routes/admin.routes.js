@@ -9,7 +9,13 @@
 //   PUT  /api/admin/cashiers/{id}            (15) cashiers_update
 //   POST /api/admin/cashiers/{id}/archive    (16) cashiers_archive
 //   POST /api/admin/cashiers/{id}/unarchive  (17) cashiers_unarchive
-export function registerAdminRoutes(router, { invitationController, settingsController, cashierController }) {
+//   GET  /api/admin/activity-logs            (18) activity_logs_list
+export function registerAdminRoutes(router, {
+  invitationController,
+  settingsController,
+  cashierController,
+  activityController,
+}) {
   // Invitations
   router.post("/admin/invitations", invitationController.create);
   router.get("/admin/invitations", invitationController.list);
@@ -24,4 +30,7 @@ export function registerAdminRoutes(router, { invitationController, settingsCont
   router.put("/admin/cashiers/:id", cashierController.update);
   router.post("/admin/cashiers/:id/archive", cashierController.archive);
   router.post("/admin/cashiers/:id/unarchive", cashierController.unarchive);
+
+  // Activity log (read-only audit trail)
+  router.get("/admin/activity-logs", activityController.list);
 }

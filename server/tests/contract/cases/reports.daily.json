@@ -10,6 +10,8 @@
       "date": "<dyn>",
       "count": 0,
       "gross": 0,
+      "sessionGross": 0,
+      "fnbGross": 0,
       "byMethod": {
         "cash": { "count": 0, "gross": 0 },
         "gcash": { "count": 0, "gross": 0 }

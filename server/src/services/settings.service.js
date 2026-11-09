@@ -3,6 +3,7 @@
 // masked credentials, fail-closed config, transaction + audit on update.
 import { maskValue } from "../utils/mask.js";
 import { isValidGoogleClientId } from "../utils/google.js";
+import { createSecretBox } from "../utils/secretBox.js";
 
 const REGISTRY = [
   {
@@ -37,11 +38,26 @@ const REGISTRY = [
   {
     key: "recaptcha",
     name: "reCAPTCHA",
-    description: "Bot protection (planned)",
-    available: false,
+    description: "Bot protection for public forms (staff login, cashier signup, reservations)",
+    available: true,
     credentials: [
-      { name: "siteKey", label: "Site key", required: false, secret: false },
-      { name: "secretKey", label: "Secret key", required: false, secret: true },
+      { name: "siteKey", label: "Site key (v2 checkbox)", required: true, secret: false },
+      { name: "secretKey", label: "Secret key", required: true, secret: true },
+    ],
+  },
+  {
+    key: "paymongo",
+    name: "PayMongo",
+    description: "GCash checkout for closed session bills",
+    available: true,
+    credentials: [
+      { name: "secretKey", label: "Secret key", required: true, secret: true },
+      {
+        name: "webhookSecret",
+        label: "Webhook signing secret (optional)",
+        required: false,
+        secret: true,
+      },
     ],
   },
   {
@@ -53,6 +69,13 @@ const REGISTRY = [
   },
 ];
 
+// Secret credentials (`secret: true`) are stored encrypted with AES-256-GCM.
+// The box is created once per service factory call; a bad key fails startup
+// loudly instead of silently storing plaintext.
+let secretBox = createSecretBox("");
+// Env defaults captured from the factory (only used when a document is absent).
+let recaptchaEnv = {};
+
 function credentialShape(name, def, raw) {
   const value = raw && raw.value != null ? String(raw.value) : "";
   const hint = raw && raw.last4 != null ? String(raw.last4) : "";
@@ -63,6 +86,13 @@ function credentialShape(name, def, raw) {
     configured: value !== "",
     masked: maskValue(value, hint),
   };
+}
+
+/** Read a stored credential, decrypting it when it was saved by secretBox. */
+function storedCredentialValue(raw) {
+  if (!raw || typeof raw !== "object") return "";
+  if (raw.ciphertext) return secretBox.decrypt(raw);
+  return String(raw.value || "");
 }
 
 // Read `credentials` as an object keyed by credential name. Older seed scripts
@@ -88,7 +118,10 @@ function effectiveDoc(key, doc) {
   const credentials = {};
   for (const cred of reg.credentials) {
     const raw = stored[cred.name] || {};
-    credentials[cred.name] = { value: String(raw.value || ""), last4: String(raw.last4 || "") };
+    credentials[cred.name] = {
+      value: storedCredentialValue(raw),
+      last4: String(raw.last4 || ""),
+    };
   }
   let enabled = !!basis.enabled;
   for (const cred of reg.credentials) {
@@ -156,6 +189,24 @@ function defaultDoc(key) {
       };
     }
   }
+  if (key === "recaptcha") {
+    // Env defaults only apply while no `settings.recaptcha` document exists.
+    const siteKey = String((recaptchaEnv && recaptchaEnv.siteKey) || "").trim();
+    const secretKey = String((recaptchaEnv && recaptchaEnv.secretKey) || "").trim();
+    if (siteKey && secretKey) {
+      enabled = true;
+      credentials.siteKey = {
+        value: siteKey,
+        last4: siteKey.slice(-4),
+        updatedAt: null,
+      };
+      credentials.secretKey = {
+        value: secretKey,
+        last4: secretKey.slice(-4),
+        updatedAt: null,
+      };
+    }
+  }
   return { enabled, credentials };
 }
 
@@ -184,18 +235,30 @@ async function hasTransactionSupport(client) {
   }
 }
 
-export function settingsService({ settingsModel, db, mongoClient, googleClientIdFromEnv, googleCalendarFromEnv }) {
+export function settingsService({
+  settingsModel,
+  db,
+  mongoClient,
+  googleClientIdFromEnv,
+  googleCalendarFromEnv,
+  settingsEncryptionKey,
+  recaptchaFromEnv,
+}) {
   googleAuthEnvClientId = String(googleClientIdFromEnv || "");
   googleCalendarEnv = googleCalendarFromEnv || {};
+  recaptchaEnv = recaptchaFromEnv || {};
+  secretBox = createSecretBox(settingsEncryptionKey);
   return {
     registry() {
       return REGISTRY;
     },
     async publicConfig() {
       try {
-        const docs = await settingsModel.findMany(["googleAuth", "googleMaps"]);
+        const docs = await settingsModel.findMany(["googleAuth", "googleMaps", "recaptcha", "paymongo"]);
         const auth = effectiveDoc("googleAuth", docs.googleAuth || null);
         const maps = effectiveDoc("googleMaps", docs.googleMaps || null);
+        const recaptcha = effectiveDoc("recaptcha", docs.recaptcha || null);
+        const paymongo = effectiveDoc("paymongo", docs.paymongo || null);
         return {
           googleAuth: {
             enabled: auth.enabled,
@@ -205,12 +268,22 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
             enabled: maps.enabled,
             apiKey: maps.enabled ? maps.credentials.apiKey.value : "",
           },
+          // Only the public site key ever reaches the browser. The secret key
+          // stays server-side and is never returned by any endpoint.
+          recaptcha: {
+            enabled: recaptcha.enabled,
+            siteKey: recaptcha.enabled ? recaptcha.credentials.siteKey.value : "",
+          },
+          // Cashier UI only needs the on/off flag; no PayMongo key is public.
+          paymongo: { enabled: paymongo.enabled },
         };
       } catch {
-        // Fail closed (migration.md §13.6): both disabled/empty, HTTP 200.
+        // Fail closed (migration.md §13.6): all disabled/empty, HTTP 200.
         return {
           googleAuth: { enabled: false, clientId: "" },
           googleMaps: { enabled: false, apiKey: "" },
+          recaptcha: { enabled: false, siteKey: "" },
+          paymongo: { enabled: false },
         };
       }
     },
@@ -252,6 +325,36 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
       }
     },
     /**
+     * Server-only reCAPTCHA config (includes the decrypted secret).
+     * A stored document's `enabled` flag is the admin's intent; missing or
+     * undecryptable keys are reported as empty so the caller can decide.
+     * Read failures are intentionally thrown: verification must fail closed.
+     */
+    async recaptchaConfig() {
+      const docs = await settingsModel.findMany(["recaptcha"]);
+      const doc = docs.recaptcha || null;
+      const effective = effectiveDoc("recaptcha", doc);
+      return {
+        enabled: doc ? !!doc.enabled : !!effective.enabled,
+        siteKey: String(effective.credentials.siteKey?.value || ""),
+        secretKey: String(effective.credentials.secretKey?.value || ""),
+      };
+    },
+    /**
+     * Server-only PayMongo config (includes decrypted secret keys).
+     * PayMongo is only enabled when the required secret key is present; the
+     * webhook secret is optional so polling works without a public tunnel.
+     */
+    async paymongoConfig() {
+      const docs = await settingsModel.findMany(["paymongo"]);
+      const effective = effectiveDoc("paymongo", docs.paymongo || null);
+      return {
+        enabled: !!effective.enabled,
+        secretKey: String(effective.credentials.secretKey?.value || ""),
+        webhookSecret: String(effective.credentials.webhookSecret?.value || ""),
+      };
+    },
+    /**
      * settings_plan_update port: build field-level update plan.
      * Validation and required-credential rules here (testable without DB).
      */
@@ -267,6 +370,9 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
       let enabledChanged = false;
       const changed = [];
       const credentialWrites = {};
+      // Plaintext values used only for the required-credential check below.
+      // Never written to Mongo: secret credentials are encrypted first.
+      const credentialValues = {};
 
       if (Object.prototype.hasOwnProperty.call(data, "enabled")) {
         if (typeof data.enabled !== "boolean") {
@@ -287,7 +393,8 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
           throw err;
         }
         for (const [name, raw] of Object.entries(creds)) {
-          if (!reg.credentials.some((c) => c.name === name)) {
+          const def = reg.credentials.find((c) => c.name === name);
+          if (!def) {
             const err = new Error("unknown credential for this integration");
             err.status = 422;
             throw err;
@@ -299,7 +406,30 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
           }
           const value = String(raw).trim();
           this.validateCredential(key, name, value);
-          credentialWrites[name] = value === "" ? null : { value, last4: credentialHint(key, name, value), updatedAt: new Date() };
+          credentialValues[name] = value;
+          if (value === "") {
+            credentialWrites[name] = null;
+          } else if (def.secret) {
+            // Secret credentials are never stored in plaintext.
+            if (!secretBox.configured) {
+              const err = new Error(
+                "SETTINGS_ENCRYPTION_KEY is not configured; secret credentials cannot be saved"
+              );
+              err.status = 422;
+              throw err;
+            }
+            credentialWrites[name] = {
+              ...secretBox.encrypt(value),
+              last4: credentialHint(key, name, value),
+              updatedAt: new Date(),
+            };
+          } else {
+            credentialWrites[name] = {
+              value,
+              last4: credentialHint(key, name, value),
+              updatedAt: new Date(),
+            };
+          }
           changed.push(`credentials.${name}`);
         }
       }
@@ -312,8 +442,9 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
 
       for (const cred of reg.credentials) {
         if (!cred.required) continue;
-        const cw = credentialWrites[cred.name];
-        const value = cw !== undefined ? String(cw.value ?? "") : String(effective.credentials[cred.name]?.value ?? "");
+        const value = Object.prototype.hasOwnProperty.call(credentialValues, cred.name)
+          ? String(credentialValues[cred.name] ?? "")
+          : String(effective.credentials[cred.name]?.value ?? "");
         if (value !== "") continue;
         if (enabled) {
           if (enabledChanged) {
@@ -348,11 +479,28 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
           continue;
         }
         const current = effective.credentials && effective.credentials[cred.name] ? effective.credentials[cred.name] : {};
-        setOnInsert[`credentials.${cred.name}`] = {
-          value: String(current.value || ""),
-          last4: String(current.last4 || ""),
-          updatedAt: current.updatedAt || null,
-        };
+        const currentValue = String(current.value || "");
+        if (cred.secret && currentValue !== "") {
+          // Env fallbacks are plaintext; never copy them into Mongo as-is.
+          if (!secretBox.configured) {
+            const err = new Error(
+              "SETTINGS_ENCRYPTION_KEY is not configured; secret credentials cannot be saved"
+            );
+            err.status = 422;
+            throw err;
+          }
+          setOnInsert[`credentials.${cred.name}`] = {
+            ...secretBox.encrypt(currentValue),
+            last4: String(current.last4 || ""),
+            updatedAt: current.updatedAt || null,
+          };
+        } else {
+          setOnInsert[`credentials.${cred.name}`] = {
+            value: currentValue,
+            last4: String(current.last4 || ""),
+            updatedAt: current.updatedAt || null,
+          };
+        }
       }
 
       return { enabled, changed, set, unset, set_on_insert: setOnInsert };
@@ -376,13 +524,25 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
         err.status = 422;
         throw err;
       }
+      if (key === "recaptcha" && value !== "" && (/\s/.test(value) || value.length < 20)) {
+        const err = new Error("reCAPTCHA keys contain no spaces and are at least 20 characters");
+        err.status = 422;
+        throw err;
+      }
+      if (key === "paymongo" && value !== "" && (/\s/.test(value) || value.length < 10)) {
+        const err = new Error("PayMongo keys contain no spaces and are at least 10 characters");
+        err.status = 422;
+        throw err;
+      }
     },
 
     /**
      * settings_update: toggle integration and/or replace/clear credentials.
      * Settings write + integration_settings_update audit log in one transaction.
      */
-    async update(key, data, adminEmail) {
+    async update(key, data, actor = {}) {
+      const adminEmail = actor && actor.email ? actor.email : null;
+      const actorId = actor && actor.id ? String(actor.id) : null;
       const reg = REGISTRY.find((r) => r.key === key);
       if (!reg) {
         const err = new Error("unknown integration");
@@ -450,7 +610,7 @@ export function settingsService({ settingsModel, db, mongoClient, googleClientId
         const shaped = this.shape(key, effectiveDoc(key, updated));
         await activityLogs.insertOne(
           {
-            actorId: null,
+            actorId,
             action: "integration_settings_update",
             target: key,
             meta: { enabled: plan.enabled, changed: plan.changed },

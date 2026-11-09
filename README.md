@@ -57,11 +57,23 @@ backend was archived under `archive/Backend/` and is not used at runtime.
    `server/.env.example` and the steps below); leave them blank to disable it.
    After filling them, run `cd server && npm run check:calendar` to verify the
    service-account key, Calendar API enablement, and calendar sharing.
+   Optional reCAPTCHA uses `RECAPTCHA_SITE_KEY`/`RECAPTCHA_SECRET_KEY`, or the
+   admin Settings > API page (recommended). Set `SETTINGS_ENCRYPTION_KEY` before
+   saving any secret key; generate one with
+   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+   PayMongo is configured in Admin > Settings > API too: add the secret key
+   (plus the webhook signing secret for automatic production confirmation),
+   then enable the card. The webhook endpoint is
+   `POST /api/paymongo/webhook`; for local development expose it with a public
+   tunnel or rely on the cashier page's checkout-status polling (no webhook
+   required for a manual test).
 
 3. Create the first administrator directly in the `users` collection
    (MongoDB Compass): `{ email, passwordHash (bcrypt), role: "admin",
    status: "active" }`. The system is single-administrator by design; no
-   endpoint creates administrators.
+   endpoint creates administrators. If you used archive/Backend/scripts/seed_local.php,
+   the seeded admin signs in with email jamespepito833@gmail.com and password
+   AdminPass123!.
 
 4. Run everything with one command (from the repository root):
    ```
@@ -150,6 +162,8 @@ GameHub_2.0/
 | `PORT` | Backend listen port (`8000`) |
 | `GOOGLE_CLIENT_ID` | Google OAuth web client (public identifier) |
 | `GOOGLE_CALENDAR_ID` / `GOOGLE_CALENDAR_CLIENT_EMAIL` / `GOOGLE_CALENDAR_PRIVATE_KEY` | Optional service-account sync: accepted reservations become events on this shared calendar (blank = disabled) |
+| `RECAPTCHA_SITE_KEY` / `RECAPTCHA_SECRET_KEY` | Optional reCAPTCHA v2 defaults, used only while no `settings.recaptcha` document exists (the admin Settings page wins after first save) |
+| `SETTINGS_ENCRYPTION_KEY` | 32 random bytes as 64 hex chars; required before saving secret credentials (reCAPTCHA secret key, Calendar private key, PayMongo keys). Stored secrets use AES-256-GCM |
 | `MAIL_USER` / `MAIL_PASS` | Gmail sender + app password (cashier invitations and accepted-reservation emails) |
 | `MAIL_FROM` | Display name on outgoing mail |
 | `SESSION_SECRET` | 32 random bytes as 64 hex chars |
@@ -157,6 +171,26 @@ GameHub_2.0/
 | `AUTH_COOKIE_NAME` | Session cookie name (default `gh_session`) |
 | `TRUST_PROXY` | `0`, `1`, or hop count when behind a proxy |
 | `MAIL_DRY_RUN` | `1` to log instead of sending mail (tests) |
+
+### PayMongo
+
+PayMongo is optional and disabled by default. Configure it in
+**Admin > Settings > API > PayMongo**:
+
+* **Secret key** — from the PayMongo dashboard (test or live mode).
+* **Webhook signing secret** *(optional but recommended for production)* —
+  created when you add a webhook endpoint at
+  `<backend-public-url>/api/paymongo/webhook` with the
+  `checkout_session.payment.paid` event. Without it, the webhook endpoint
+  rejects requests; the cashier page still confirms payments by polling the
+  checkout status, so local testing does not need a public tunnel.
+
+Only GCash is enabled in the hosted checkout for now. When a cashier selects
+**GCash online** in a closed session’s bill sheet, the server locks the bill,
+creates a PayMongo Checkout Session for the exact total, and shows the hosted
+payment page. Payment is recorded automatically by the signed webhook or by the
+cashier’s status check (polling works without a public tunnel). Cancelling the
+link releases the bill lock after asking PayMongo to expire the session.
 
 ## Scripts
 

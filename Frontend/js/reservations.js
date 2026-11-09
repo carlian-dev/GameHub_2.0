@@ -26,6 +26,7 @@
   const sumEmail = document.getElementById("sumEmail");
   const resultEl = document.getElementById("reserveResult");
   const noticeEl = document.getElementById("reserveNotice");
+  const recaptchaSlot = document.getElementById("recaptchaSlot");
   const cardEl = form.closest(".reserve-card");
   // Deep links arrive as ?table=<id>#reserve, so the guest can land with their
   // table already chosen. Table cards on this page call openReservation.
@@ -342,6 +343,15 @@
       return;
     }
 
+    // reCAPTCHA is injected only when the admin enabled it; when off this
+    // resolves immediately and no token is sent.
+    const human = await GameHubRecaptcha.config();
+    const recaptchaToken = human.enabled ? await GameHubRecaptcha.token() : "";
+    if (human.enabled && !recaptchaToken) {
+      setError("Please complete the reCAPTCHA check.");
+      return;
+    }
+
     setError("");
     submitting = true;
     submitBtn.disabled = true;
@@ -355,6 +365,7 @@
         contactNumber: contactIn.value.trim(),
         startTime: start.toISOString(),
         durationMinutes: Number(durSel.value || 60),
+        recaptchaToken,
       });
       buildResult(reservation);
       setNotice("");
@@ -368,6 +379,8 @@
     } catch (err) {
       setError(err.message);
     } finally {
+      // Tokens are single-use: refresh the widget for the next request.
+      GameHubRecaptcha.reset();
       submitting = false;
       submitBtn.textContent = "Confirm reservation";
       syncSummary();
@@ -414,6 +427,7 @@
   if (timeIn) timeIn.value = "18:00";
 
   syncSummary();
+  GameHubRecaptcha.render(recaptchaSlot);
   tablesReady = loadTables().then(() => {
     if (!urlTable) return;
     pendingTable = { id: urlTable, name: "" };

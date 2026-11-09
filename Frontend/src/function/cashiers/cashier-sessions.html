@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <!--
   src/function/cashiers/cashier-sessions.html - cashier Sessions page.
-  Pair: cashier-sessions.js (active lifecycle CA-004..CA-014 + billing
-  close-out CA-020/022/023/024/025 as ONE dialog) + cashier-common.js
-  (guard/timers) + js/dash.js (shell/dialogs/toasts).
-  Sidebar: Dashboard, Sessions (active), Reservations, Tables. Guard: cashiers stay.
-  Panels: Active sessions (live timers + Extend/End/Void), To bill
-  (closed-unpaid + Recent bills with receipt links).
+  Pair: cashier-sessions.js (active lifecycle CA-004..CA-014 + F&B order
+  sheet CA-026/027/028 + combined billing CA-020/022/023/024/025) +
+  cashier-common.js (guard/timers) + js/dash.js (shell/dialogs/toasts).
+  Sidebar: Dashboard, Sessions (active), Menu, Reservations, Tables.
+  Guard: cashiers stay.
+  Panels: Active sessions (live timers + Orders/Extend/End/Void), To bill
+  (closed-unpaid with F&B lines + Recent bills with receipt links).
 -->
 <html lang="en">
 <head>
@@ -33,6 +34,10 @@
         <a href="./cashier-sessions.html" class="active" aria-current="page" title="Active sessions with live timers">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4a3 3 0 0 1 6 0" /><path d="M9 11h6M9 15h4" /></svg>
           <span>Sessions</span>
+        </a>
+        <a href="./cashier-menu.html" title="Food and beverage menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3v6a3 3 0 0 0 6 0V3" /><path d="M8 9v12" /><path d="M16 3h2a3 3 0 0 1 0 6h-2" /><path d="M18 9v12" /></svg>
+          <span>Menu</span>
         </a>
         <a href="./cashier-reservations.html" title="Customer reservation requests">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="16" rx="2" /><path d="M4 10h16M8 3v4M16 3v4" /><path d="M9 15l2 2 4-4" /></svg>
@@ -75,7 +80,7 @@
           <div class="dash-msg" id="sessMsg" role="status">Loading…</div>
           <div class="dash-tablewrap">
             <table id="sessTbl">
-              <thead><tr><th>Table</th><th>Customer</th><th>Started</th><th>Ends</th><th>Time left</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Table</th><th>Customer</th><th>Started</th><th>Ends</th><th>Time left</th><th>F&amp;B</th><th>Actions</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -90,7 +95,7 @@
           <div class="dash-msg" id="billMsg" role="status">Loading…</div>
           <div class="dash-tablewrap">
             <table id="billTbl">
-              <thead><tr><th>Table</th><th>Customer</th><th>Est. total</th><th>Action</th></tr></thead>
+              <thead><tr><th>Table</th><th>Customer</th><th>F&amp;B</th><th>Est. total</th><th>Actions</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>

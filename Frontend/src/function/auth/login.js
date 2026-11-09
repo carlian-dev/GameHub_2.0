@@ -44,8 +44,19 @@ async function submitLogin() {
   msg.className = "";
   go.disabled = true;
   try {
-    welcomeAndGo(await login(emailEl.value.trim(), pwEl.value));
+    // reCAPTCHA is injected only when the admin enabled it; when off this
+    // resolves immediately and no token is sent.
+    const human = await GameHubRecaptcha.config();
+    const recaptchaToken = human.enabled ? await GameHubRecaptcha.token() : "";
+    if (human.enabled && !recaptchaToken) {
+      msg.textContent = "Please complete the reCAPTCHA check.";
+      msg.className = "err";
+      return;
+    }
+    welcomeAndGo(await login(emailEl.value.trim(), pwEl.value, recaptchaToken));
   } catch (e) {
+    // Tokens are single-use: let the guest retry after any rejected attempt.
+    GameHubRecaptcha.reset();
     msg.textContent = e.message;
     msg.className = "err";
   } finally {
@@ -144,3 +155,4 @@ async function initGoogleLogin() {
   } catch { /* Google unavailable/disabled — password form still works */ }
 }
 initGoogleLogin();
+GameHubRecaptcha.render(document.getElementById("recaptchaSlot"));

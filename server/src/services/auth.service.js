@@ -6,7 +6,13 @@ import bcrypt from "bcryptjs";
 import { invitationModel } from "../models/invitation.model.js";
 import { isValidGoogleClientId } from "../utils/google.js";
 
-export function authService({ userModel, settingsModel, db, googleClientIdFromEnv = "" }) {
+export function authService({
+  userModel,
+  settingsModel,
+  db,
+  googleClientIdFromEnv = "",
+  recaptchaService = null,
+}) {
   const usersColl = db.collection("users");
   const activityLogsColl = db.collection("activityLogs");
 
@@ -32,13 +38,40 @@ export function authService({ userModel, settingsModel, db, googleClientIdFromEn
     }
   }
 
+  /** Audit sign-in/sign-out events for the admin activity viewer. */
+  async function logAuth(action, user, provider = "") {
+    const id = user && (user._id ?? user.id);
+    if (!id) return;
+    try {
+      await activityLogsColl.insertOne({
+        actorId: String(id),
+        action,
+        target: String(id),
+        meta: {
+          role: user.role ?? null,
+          ...(provider ? { provider } : {}),
+          username: user.username ?? null,
+          email: user.email ?? null,
+        },
+        at: new Date(),
+      });
+    } catch {
+      // Audit is best-effort: a log write must never block sign-in/sign-out.
+    }
+  }
+
   return {
     /** Dual identifier login: email if contains @, else username (cashier only). */
-    async login({ identifier, password }, req) {
+    async login({ identifier, password, recaptchaToken }, req) {
       if (!identifier || !password) {
         const err = new Error("login and password are required");
         err.status = 422;
         throw err;
+      }
+
+      // Bot protection (no-op unless the admin enabled reCAPTCHA).
+      if (recaptchaService && typeof recaptchaService.verify === "function") {
+        await recaptchaService.verify(recaptchaToken, req && req.ip);
       }
 
       let user;
@@ -83,11 +116,14 @@ export function authService({ userModel, settingsModel, db, googleClientIdFromEn
       }
       req.session.user = payload;
       await req.session.save();
+      await logAuth("login", user, "password");
 
       return { username: user.username ?? null, email: user.email ?? null, role: user.role };
     },
 
     async logout(req) {
+      // Capture before destroy: the session store is gone afterwards.
+      const user = req.session && req.session.user;
       if (req.session.destroy) {
         await new Promise((resolve, reject) => {
           req.session.destroy((err) => {
@@ -96,6 +132,7 @@ export function authService({ userModel, settingsModel, db, googleClientIdFromEn
           });
         });
       }
+      await logAuth("logout", user);
       return { ok: true };
     },
 
@@ -139,7 +176,21 @@ export function authService({ userModel, settingsModel, db, googleClientIdFromEn
     },
 
     /** Invitation-only registration. Role forced to cashier, status active. */
-    async register({ token, firstName, lastName, email, password, username }) {
+    async register({
+      token,
+      firstName,
+      lastName,
+      email,
+      password,
+      username,
+      recaptchaToken,
+      remoteIp,
+    }) {
+      // Bot protection (no-op unless the admin enabled reCAPTCHA).
+      if (recaptchaService && typeof recaptchaService.verify === "function") {
+        await recaptchaService.verify(recaptchaToken, remoteIp);
+      }
+
       if (firstName.length < 2 || lastName.length < 2) {
         const err = new Error("first name and last name are required");
         err.status = 422;
@@ -361,6 +412,7 @@ export function authService({ userModel, settingsModel, db, googleClientIdFromEn
       }
       req.session.user = payload;
       await req.session.save();
+      await logAuth("login", user, "google");
 
       return { username: user.username ?? null, email: user.email ?? null, role: user.role };
     },

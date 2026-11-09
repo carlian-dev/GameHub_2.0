@@ -15,6 +15,13 @@ export function authService({
 }) {
   const usersColl = db.collection("users");
   const activityLogsColl = db.collection("activityLogs");
+  const invitations = invitationModel({ db });
+
+  // Request bodies are untrusted JSON: only strings reach bcrypt/hash/`.length`.
+  function asText(value, { trim = true } = {}) {
+    if (typeof value !== "string") return "";
+    return trim ? value.trim() : value;
+  }
 
   // Status gates in order (migration.md §13.1).
   const STATUS_GATES = [
@@ -63,7 +70,9 @@ export function authService({
   return {
     /** Dual identifier login: email if contains @, else username (cashier only). */
     async login({ identifier, password, recaptchaToken }, req) {
-      if (!identifier || !password) {
+      const loginId = asText(identifier);
+      const loginPassword = asText(password, { trim: false });
+      if (!loginId || !loginPassword) {
         const err = new Error("login and password are required");
         err.status = 422;
         throw err;
@@ -75,10 +84,10 @@ export function authService({
       }
 
       let user;
-      if (String(identifier).includes("@")) {
-        user = await userModel.findByEmail(identifier);
+      if (loginId.includes("@")) {
+        user = await userModel.findByEmail(loginId);
       } else {
-        user = await userModel.findByUsername(identifier);
+        user = await userModel.findByUsername(loginId);
       }
 
       if (!user) {
@@ -88,7 +97,7 @@ export function authService({
       }
 
       const passwordHash = user.passwordHash || "";
-      const valid = await bcrypt.compare(password, passwordHash);
+      const valid = await bcrypt.compare(loginPassword, passwordHash);
       if (!valid) {
         const err = new Error("invalid credentials");
         err.status = 401;
@@ -191,20 +200,32 @@ export function authService({
         await recaptchaService.verify(recaptchaToken, remoteIp);
       }
 
-      if (firstName.length < 2 || lastName.length < 2) {
+      const inviteToken = asText(token);
+      const first = asText(firstName);
+      const last = asText(lastName);
+      const signupEmail = asText(email);
+      const signupPassword = asText(password, { trim: false });
+      const signupUsername = asText(username);
+
+      if (!inviteToken) {
+        const err = new Error("invitation token is required");
+        err.status = 422;
+        throw err;
+      }
+      if (first.length < 2 || last.length < 2) {
         const err = new Error("first name and last name are required");
         err.status = 422;
         throw err;
       }
-      if (password.length < 8) {
+      if (signupPassword.length < 8) {
         const err = new Error("password must be at least 8 characters");
         err.status = 422;
         throw err;
       }
-      const lowerEmail = String(email).toLowerCase().trim();
+      const lowerEmail = signupEmail.toLowerCase();
 
-      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-      const invitation = await invitationModel.findByTokenHashAny(tokenHash);
+      const tokenHash = crypto.createHash("sha256").update(inviteToken).digest("hex");
+      const invitation = await invitations.findByTokenHashAny(tokenHash);
       if (!invitation) {
         const err = new Error("invitation invalid — ask your administrator for a new link");
         err.status = 404;
@@ -227,7 +248,7 @@ export function authService({
         throw err;
       }
 
-      const usernameLower = String(username).toLowerCase().trim();
+      const usernameLower = signupUsername.toLowerCase();
       if (!/^[a-z0-9._-]{3,30}$/.test(usernameLower)) {
         const err = new Error("username must be 3-30 chars: letters, numbers, . _ -");
         err.status = 422;
@@ -245,8 +266,8 @@ export function authService({
         throw err;
       }
 
-      const passwordHash = await bcrypt.hash(password, 10);
-      const displayName = `${firstName} ${lastName}`;
+      const passwordHash = await bcrypt.hash(signupPassword, 10);
+      const displayName = `${first} ${last}`;
       const now = new Date();
 
       const res = await usersColl.insertOne({
@@ -254,8 +275,8 @@ export function authService({
         email: lowerEmail,
         passwordHash,
         authProvider: "password",
-        firstName,
-        lastName,
+        firstName: first,
+        lastName: last,
         displayName,
         role: "cashier",
         status: "active",
@@ -264,7 +285,7 @@ export function authService({
       });
 
       // Mark invite used atomically (single-use).
-      await invitationModel.markUsed(String(invitation._id), now);
+      await invitations.markUsed(String(invitation._id), now);
 
       // Invite IS the approval: log with inviter as actor.
       await activityLogsColl.insertOne({

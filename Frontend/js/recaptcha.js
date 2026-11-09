@@ -27,7 +27,12 @@
     if (!configPromise) {
       configPromise = getAppConfig()
         .then(normalize)
-        .catch(() => ({ enabled: false, siteKey: "" }));
+        .catch(() => {
+          // Transient failures must not pin the page to "disabled": the next
+          // call retries instead of hiding the widget forever.
+          configPromise = null;
+          return { enabled: false, siteKey: "" };
+        });
     }
     return configPromise;
   }
@@ -37,21 +42,38 @@
       return Promise.resolve();
     }
     if (scriptPromise) return scriptPromise;
+
+    // A tag left behind by an earlier attempt tells us nothing: its load/error
+    // event may already have fired before we attach listeners, which would
+    // leave the promise pending forever. Replace it with a fresh load instead.
+    const existing = document.getElementById(SCRIPT_ID);
+    if (existing) existing.remove();
+
     scriptPromise = new Promise((resolve, reject) => {
-      const existing = document.getElementById(SCRIPT_ID);
-      if (existing) {
-        existing.addEventListener("load", () => resolve(), { once: true });
-        existing.addEventListener("error", () => reject(new Error("reCAPTCHA is unavailable")), { once: true });
-        return;
-      }
       const script = document.createElement("script");
       script.id = SCRIPT_ID;
       script.src = "https://www.google.com/recaptcha/api.js?render=explicit";
       script.async = true;
       script.defer = true;
-      script.onload = () => resolve();
-      script.onerror = () => reject(new Error("reCAPTCHA is unavailable"));
+
+      function fail() {
+        script.remove();
+        reject(new Error("reCAPTCHA is unavailable"));
+      }
+
+      script.onload = () => {
+        if (window.grecaptcha && typeof window.grecaptcha.render === "function") {
+          resolve();
+        } else {
+          fail();
+        }
+      };
+      script.onerror = fail;
       document.head.appendChild(script);
+    }).catch((err) => {
+      // Never cache a failure: the next render() may retry the load.
+      scriptPromise = null;
+      throw err;
     });
     return scriptPromise;
   }

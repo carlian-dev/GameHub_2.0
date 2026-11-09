@@ -135,6 +135,16 @@ async function main() {
         updatedAt: null,
         updatedBy: null,
       },
+      {
+        key: "paymongo",
+        enabled: false,
+        credentials: {
+          secretKey: { value: "", last4: "", updatedAt: null },
+          webhookSecret: { value: "", last4: "", updatedAt: null },
+        },
+        updatedAt: null,
+        updatedBy: null,
+      },
     ]);
 
     // eslint-disable-next-line no-console

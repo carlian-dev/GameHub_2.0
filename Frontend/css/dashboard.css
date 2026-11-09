@@ -1621,7 +1621,7 @@ a.dash-stat:hover {
 .bi-meta { color: var(--d-muted); font-size: 12px; white-space: nowrap; }
 .bi-total { color: var(--d-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bill-state { display: grid; gap: 10px; }
-.bill-state .modal-actions { margin-top: 0; }
+.bill-state .modal-actions { margin-top: 0; flex-wrap: wrap; }
 
 /* Itemized receipt (page + PDF preview). */
 .receipt-fnb { margin-top: 18px; }

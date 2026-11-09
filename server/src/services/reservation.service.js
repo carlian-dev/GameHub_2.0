@@ -44,7 +44,14 @@ function genRef(start) {
   return `RS-${y}${m}${day}-${suffix}`;
 }
 
-export function reservationService({ reservationModel, tableModel, db, calendarService, mailer }) {
+export function reservationService({
+  reservationModel,
+  tableModel,
+  db,
+  calendarService,
+  mailer,
+  recaptchaService = null,
+}) {
   const activityLogs = db.collection("activityLogs");
 
   // Best-effort Google Calendar sync: a calendar outage must never fail a
@@ -96,7 +103,12 @@ export function reservationService({ reservationModel, tableModel, db, calendarS
     }
   }
 
-  async function createReservation(input) {
+  async function createReservation(input, remoteIp = "") {
+    // Bot protection (no-op unless the admin enabled reCAPTCHA).
+    if (recaptchaService && typeof recaptchaService.verify === "function") {
+      await recaptchaService.verify(input?.recaptchaToken, remoteIp);
+    }
+
     const tableId = String(input?.tableId || "").trim();
     if (!/^[0-9a-fA-F]{24}$/.test(tableId)) throwErr(422, "invalid table id");
 

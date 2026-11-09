@@ -45,10 +45,26 @@
         {
           "key": "recaptcha",
           "name": "reCAPTCHA",
-          "description": "Bot protection (planned)",
-          "available": false,
+          "description": "Bot protection for public forms (staff login, cashier signup, reservations)",
+          "available": true,
           "enabled": false,
-          "credentials": [],
+          "credentials": [
+            { "name": "siteKey", "label": "Site key (v2 checkbox)", "required": true, "configured": false, "masked": "" },
+            { "name": "secretKey", "label": "Secret key", "required": true, "configured": false, "masked": "" }
+          ],
+          "updatedAt": null,
+          "updatedBy": null
+        },
+        {
+          "key": "paymongo",
+          "name": "PayMongo",
+          "description": "GCash checkout for closed session bills",
+          "available": true,
+          "enabled": false,
+          "credentials": [
+            { "name": "secretKey", "label": "Secret key", "required": true, "configured": false, "masked": "" },
+            { "name": "webhookSecret", "label": "Webhook signing secret (optional)", "required": false, "configured": false, "masked": "" }
+          ],
           "updatedAt": null,
           "updatedBy": null
         },

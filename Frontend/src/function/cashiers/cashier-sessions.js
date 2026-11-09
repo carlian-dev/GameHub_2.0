@@ -679,6 +679,7 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
     let closeValue = false;
     let total = 0;
     let paying = false;
+    let pollTimer = null;
 
     const overlay = document.createElement("div");
     overlay.className = "dash-modal open bill-modal";
@@ -705,6 +706,7 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       '<div class="bill-methods" role="group" aria-label="Payment method">' +
       '<button type="button" class="chip on" data-m="cash" aria-pressed="true">Cash</button>' +
       '<button type="button" class="chip" data-m="gcash" aria-pressed="false">GCash</button>' +
+      '<button type="button" class="chip" data-m="paymongo" aria-pressed="false" hidden>GCash online</button>' +
       "</div>" +
       '<label class="field" for="billAmount"><span class="field-label">Amount received (₱)</span>' +
       '<input id="billAmount" name="amount" type="text" inputmode="decimal" autocomplete="off" /></label>' +
@@ -718,6 +720,7 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       '<div class="modal-actions">' +
       '<button type="button" class="btn btn-ghost" id="billStateRetry" hidden>Retry</button>' +
       '<a class="btn btn-solid" id="billStateReceipt" target="_blank" rel="noopener" hidden>Open receipt</a>' +
+      '<button type="button" class="btn btn-ghost" id="billStateCancel" hidden>Cancel link</button>' +
       '<button type="button" class="btn btn-ghost" id="billStateClose">Close</button>' +
       "</div></div>" +
       "</div></div>";
@@ -745,13 +748,23 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
     const state = overlay.querySelector("#billState");
     const stateRetry = overlay.querySelector("#billStateRetry");
     const stateReceipt = overlay.querySelector("#billStateReceipt");
+    const stateCancel = overlay.querySelector("#billStateCancel");
     const stateClose = overlay.querySelector("#billStateClose");
+    const paymongoChip = overlay.querySelector('[data-m="paymongo"]');
+    const amountField = input.closest(".field");
     sub.textContent = `${tableName || "Session"} · ${customerName || "Customer"}`;
 
     const lastFocus = document.activeElement;
+    function stopPolling() {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
     function finalize(value) {
       if (closed) return;
       closed = true;
+      stopPolling();
       document.removeEventListener("keydown", onKey, true);
       overlay.remove();
       restoreBodyScroll();
@@ -768,14 +781,23 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       finalize(value);
     }
     function showState(message, kind = "err", { retry = false, receiptRef = null, title = "Collect payment" } = {}) {
+      stopPolling();
       titleEl.textContent = title;
       pay.hidden = true;
       state.hidden = false;
+      state.dataset.mode = "";
+      state.dataset.checkout = "";
+      stateCancel.hidden = true;
+      stateCancel.disabled = false;
+      stateRetry.disabled = false;
+      stateClose.disabled = false;
       loadMsg.hidden = false;
       loadMsg.textContent = message;
       loadMsg.className = `dash-msg ${kind}`.trim();
       stateRetry.hidden = !retry;
+      stateRetry.textContent = "Retry";
       stateReceipt.hidden = !receiptRef;
+      stateReceipt.textContent = "Open receipt";
       if (receiptRef) {
         stateReceipt.href = `../shared/receipt.html?ref=${encodeURIComponent(receiptRef)}`;
       }
@@ -811,6 +833,16 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
         confirmBtn.disabled = true;
         return;
       }
+      if (method === "paymongo") {
+        rTotal.textContent = peso2(total);
+        rMethod.textContent = "GCash (PayMongo)";
+        rReceived.textContent = "—";
+        rChange.textContent = "—";
+        changeLine.textContent = "The customer pays the exact total on the PayMongo page.";
+        changeLine.classList.remove("short");
+        confirmBtn.disabled = !(total > 0);
+        return;
+      }
       const received = Number(String(input.value).replace(/[^0-9.]/g, ""));
       rTotal.textContent = peso2(total);
       rMethod.textContent = method === "gcash" ? "GCash" : "Cash";
@@ -835,11 +867,45 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       }
     }
 
+    function syncMethod() {
+      const online = method === "paymongo";
+      amountField.hidden = online;
+      changeLine.hidden = online;
+      confirmBtn.textContent = online ? "Create payment link" : "Confirm payment";
+      refresh();
+    }
+
+    function setMethod(next) {
+      method =
+        next === "gcash" || next === "paymongo" ? next : "cash";
+      overlay.querySelectorAll(".bill-methods .chip").forEach((c) => {
+        const on = c.dataset.m === method;
+        c.classList.toggle("on", on);
+        c.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+
+    function resetMethod() {
+      setMethod("cash");
+    }
+
     function renderPayable() {
       const items = Array.isArray(bill.items) ? bill.items : [];
       total = Number(bill.total);
       if (!Number.isFinite(total) || total <= 0) {
         showState("The server returned an invalid bill total. Close and retry from To bill.", "err", { retry: true });
+        return;
+      }
+      if (
+        bill.session.paymongoStatus === "pending" &&
+        bill.session.paymongoCheckoutId &&
+        bill.session.paymongoCheckoutUrl
+      ) {
+        paymongoPendingView({
+          id: bill.session.paymongoCheckoutId,
+          url: bill.session.paymongoCheckoutUrl,
+          amount: Number(bill.session.paymongoAmount) || total,
+        });
         return;
       }
       loadMsg.hidden = true;
@@ -854,15 +920,102 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       const full = `${tableName || bill.session.tableName || "Session"} · ${customerName || bill.session.customerName || "Customer"}`;
       sub.textContent = full;
       input.value = total.toFixed(2);
-      refresh();
-      input.focus();
-      input.select();
+      syncMethod();
+      if (method !== "paymongo") {
+        input.focus();
+        input.select();
+      }
+    }
+
+    function paymongoPendingView(checkout) {
+      stopPolling();
+      const amount = Number(checkout.amount) > 0 ? Number(checkout.amount) : total;
+      titleEl.textContent = "Waiting for GCash payment";
+      pay.hidden = true;
+      state.hidden = false;
+      state.dataset.mode = "paymongo";
+      state.dataset.checkout = checkout.id || "";
+      loadMsg.hidden = false;
+      loadMsg.className = "dash-msg loading";
+      loadMsg.textContent = `Ask the customer to pay ${peso2(amount)} on the PayMongo page. The bill stays locked until the payment is confirmed or the link is cancelled.`;
+      stateRetry.hidden = false;
+      stateRetry.textContent = "Check payment";
+      stateReceipt.hidden = false;
+      stateReceipt.textContent = "Open payment page";
+      stateReceipt.href = checkout.url || "#";
+      stateCancel.hidden = false;
+      stateCancel.disabled = false;
+      stateClose.hidden = false;
+      stateClose.disabled = false;
+      stateRetry.disabled = false;
+      stateRetry.focus();
+      pollTimer = setInterval(() => {
+        checkPaymongo(checkout.id, { quiet: true });
+      }, 5000);
+    }
+
+    async function checkPaymongo(checkoutId, { quiet = false } = {}) {
+      if (closed || !checkoutId) return;
+      try {
+        const data = await getPaymongoCheckout(checkoutId);
+        if (closed) return;
+        if (data.status === "paid" && data.transaction) {
+          stopPolling();
+          successView(data.transaction);
+          return;
+        }
+        if (data.status === "expired" || data.status === "cancelled") {
+          stopPolling();
+          showState(
+            "This PayMongo link is no longer active. The bill is unlocked; collect payment again.",
+            "err",
+            { retry: true, title: "Payment link closed" }
+          );
+          return;
+        }
+        if (!quiet) dashToast("Payment is still pending on PayMongo.", "info");
+      } catch (e) {
+        if (!quiet && !closed) dashToast(e.message, "err");
+      }
+    }
+
+    async function cancelPaymongoLink() {
+      const checkoutId = state.dataset.checkout;
+      if (!checkoutId) return;
+      const ok = await dashConfirm(
+        "Cancel the PayMongo link? The bill will unlock so you can collect cash or GCash at the counter.",
+        "Cancel payment link"
+      );
+      if (!ok) return;
+      stateClose.disabled = true;
+      stateCancel.disabled = true;
+      stateRetry.disabled = true;
+      try {
+        const data = await cancelPaymongoCheckout(sessionId);
+        stopPolling();
+        if (settled) return;
+        if (data.status === "paid" && data.transaction) {
+          successView(data.transaction);
+          return;
+        }
+        dashToast("Payment link cancelled. The bill is unlocked.", "ok");
+        loadBill();
+      } catch (e) {
+        stateClose.disabled = false;
+        stateCancel.disabled = false;
+        stateRetry.disabled = false;
+        dashToast(e.message, "err");
+      }
     }
 
     async function loadBill() {
+      stopPolling();
+      resetMethod();
       bill = null;
       pay.hidden = true;
       state.hidden = true;
+      state.dataset.mode = "";
+      state.dataset.checkout = "";
       loadMsg.hidden = false;
       loadMsg.textContent = "Loading bill…";
       loadMsg.className = "dash-msg loading";
@@ -897,6 +1050,8 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
     }
 
     function successView(t) {
+      // A polling tick and a manual "Check payment" can complete together.
+      if (settled) return;
       const paidTotal = Number(t.total != null ? t.total : total);
       const sessionPaid = Number(t.sessionTotal != null ? t.sessionTotal : paidTotal);
       const fnbPaid = Number(t.fnbTotal != null ? t.fnbTotal : 0);
@@ -927,7 +1082,14 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       };
       set("ref", t.ref || "—");
       set("table", tableName || "—");
-      set("method", (t.method || method) === "gcash" ? "GCash" : "Cash");
+      set(
+        "method",
+        (t.method || method) === "gcash"
+          ? t.provider === "paymongo"
+            ? "GCash (PayMongo)"
+            : "GCash"
+          : "Cash"
+      );
       set("session", peso2(sessionPaid));
       set("fnb", peso2(fnbPaid));
       set("total", peso2(paidTotal));
@@ -961,26 +1123,81 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
 
     overlay.querySelectorAll(".bill-methods .chip").forEach((chip) =>
       chip.addEventListener("click", () => {
-        method = chip.dataset.m;
-        overlay.querySelectorAll(".bill-methods .chip").forEach((c) => {
-          const on = c === chip;
-          c.classList.toggle("on", on);
-          c.setAttribute("aria-pressed", on ? "true" : "false");
-        });
-        refresh();
+        setMethod(chip.dataset.m);
+        syncMethod();
       }));
 
     input.addEventListener("input", () => { err.hidden = true; refresh(); });
     cancelBtn.addEventListener("click", () => requestClose(false));
     stateClose.addEventListener("click", () => requestClose(settled));
-    stateRetry.addEventListener("click", loadBill);
+    stateRetry.addEventListener("click", () => {
+      if (state.dataset.mode === "paymongo" && state.dataset.checkout) {
+        checkPaymongo(state.dataset.checkout);
+      } else {
+        loadBill();
+      }
+    });
+    stateCancel.addEventListener("click", cancelPaymongoLink);
     overlay.addEventListener("click", (e) => {
       if (e.target !== overlay || paying) return;
       requestClose(settled);
     });
-    stateReceipt.addEventListener("click", () => requestClose(true));
+    stateReceipt.addEventListener("click", (e) => {
+      if (state.dataset.mode === "paymongo") return; // let the link open
+      requestClose(true);
+    });
 
     confirmBtn.addEventListener("click", async () => {
+      if (method === "paymongo") {
+        err.hidden = true;
+        confirmBtn.disabled = true;
+        cancelBtn.disabled = true;
+        confirmBtn.classList.add("busy");
+        paying = true;
+        pending += 1;
+        let tab = null;
+        try {
+          // Open synchronously so browsers allow the popup; navigate it once
+          // the server returns the hosted checkout URL.
+          tab = window.open("about:blank", "_blank");
+          if (tab) { try { tab.opener = null; } catch { /* cross-origin later */ } }
+          const data = await createPaymongoCheckout(sessionId);
+          if (closed) {
+            if (tab) { try { tab.close(); } catch { /* gone */ } }
+            return;
+          }
+          const checkout = data.checkout || {};
+          if (!checkout.url) throw new Error("PayMongo did not return a checkout link.");
+          if (tab) {
+            try { tab.location.href = checkout.url; } catch { /* popup closed */ }
+          }
+          paymongoPendingView({
+            id: checkout.id,
+            url: checkout.url,
+            amount: checkout.amount != null ? checkout.amount : total,
+          });
+          if (!tab) {
+            dashToast(
+              "Pop-up blocked. Use “Open payment page” in this window to show the PayMongo link.",
+              "info"
+            );
+          }
+        } catch (e2) {
+          if (tab) { try { tab.close(); } catch { /* gone */ } }
+          if (closed) return;
+          err.textContent = e2.message;
+          err.hidden = false;
+        } finally {
+          paying = false;
+          pending = Math.max(0, pending - 1);
+          confirmBtn.classList.remove("busy");
+          confirmBtn.disabled = false;
+          cancelBtn.disabled = false;
+          if (pending === 0 && closeRequested) finalize(closeValue);
+        }
+        return;
+      }
+
       const received = Number(String(input.value).replace(/[^0-9.]/g, ""));
       if (!(received > 0) || received > 1000000) {
         err.textContent = `Enter an amount between ₱0.01 and ₱1,000,000.00 (got "${input.value}").`;
@@ -1020,6 +1237,19 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
 
     document.addEventListener("keydown", onKey, true);
     document.body.style.overflow = "hidden";
+    getAppConfig()
+      .then((data) => {
+        if (closed) return;
+        const online =
+          data &&
+          data.integrations &&
+          data.integrations.paymongo &&
+          data.integrations.paymongo.enabled === true;
+        paymongoChip.hidden = !online;
+      })
+      .catch(() => {
+        paymongoChip.hidden = true;
+      });
     loadBill();
   });
 }

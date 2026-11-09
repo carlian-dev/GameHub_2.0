@@ -46,7 +46,11 @@ function renderPage() {
     const badge = document.createElement("span");
     const m = String(t.method || "").toLowerCase();
     badge.className = `badge method-${m === "gcash" ? "gcash" : "cash"}`;
-    badge.textContent = t.method || "—";
+    badge.textContent =
+      t.provider === "paymongo"
+        ? "GCash · PayMongo"
+        : t.method || "—";
+    if (t.provider === "paymongo") badge.title = "Paid online via PayMongo";
     tr.children[6].appendChild(badge);
     tr.children[7].textContent = fmtPeso(t.change);
     const link = document.createElement("a");

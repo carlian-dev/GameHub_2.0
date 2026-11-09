@@ -66,7 +66,7 @@ function buildPdf(t, ref) {
     ["Time played", `${t.minutes || 0} min`],
     ["Billed", `${billedHrs} hr`],
     ["Rate", rateLabel],
-    ["Method", String(t.method || "-")],
+    ["Method", t.provider === "paymongo" ? "GCash (PayMongo)" : String(t.method || "-")],
     ["Received", php(t.received)],
   ];
 
@@ -223,7 +223,8 @@ function showPreview() {
     document.getElementById("rRate").textContent = t.rateType
       ? `${peso(t.pricePerHour)}/hr (${t.rateType})`
       : `${peso(t.pricePerHour)}/hr`;
-    document.getElementById("rMethod").textContent = t.method || "—";
+    document.getElementById("rMethod").textContent =
+      t.provider === "paymongo" ? "GCash (PayMongo)" : t.method || "—";
     document.getElementById("rReceived").textContent = peso(t.received);
 
     const items = Array.isArray(t.items) ? t.items : [];

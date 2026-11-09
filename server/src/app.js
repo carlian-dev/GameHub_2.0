@@ -28,7 +28,15 @@ app.use(
 );
 
 // JSON only: the frontend always sends application/json.
-app.use(express.json());
+// Keep the raw bytes too: PayMongo webhook signatures cover the exact body,
+// and re-serializing the parsed object would change whitespace/key order.
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      if (buf && buf.length) req.rawBody = Buffer.from(buf);
+    },
+  })
+);
 // Normalize missing bodies to {} so handlers can destructure safely.
 app.use((req, res, next) => {
   if (req.body == null) req.body = {};

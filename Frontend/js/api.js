@@ -73,10 +73,10 @@ async function listInvites() {
 async function revokeInvite(id) {
   return api(`/api/admin/invitations/${id}/revoke`, { method: "POST" });
 }
-async function login(email, password) {
+async function login(email, password, recaptchaToken = "") {
   return api("/api/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, recaptchaToken }),
   });
 }
 async function loginWithGoogle(idToken) {
@@ -120,6 +120,16 @@ async function updateCashier(id, fields) {
 }
 async function unarchiveCashier(id) {
   return api(`/api/admin/cashiers/${id}/unarchive`, { method: "POST" });
+}
+
+// --- Admin activity log (AD-026): sign-ins, cashier/session/payment actions ---
+async function listActivityLogs({ actorId = "", action = "", from = "", to = "", limit = 200 } = {}) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (actorId) q.set("actorId", actorId);
+  if (action) q.set("action", action);
+  if (from) q.set("from", from);
+  if (to) q.set("to", to);
+  return api(`/api/admin/activity-logs?${q.toString()}`);
 }
 
 // --- Sprint 02: tables (AD-008..AD-013) + rates (AD-016/017) + sessions view (AD-014) ---
@@ -231,6 +241,22 @@ async function listMenuProducts({ category = "", q = "" } = {}) {
 // --- Sprint 5: session bill + F&B order lines (CA-020/027/028) ---
 async function getBill(sessionId) {
   return api(`/api/cashier/sessions/${encodeURIComponent(sessionId)}/bill`);
+}
+// --- PayMongo hosted checkout for a closed session bill ---
+async function createPaymongoCheckout(sessionId) {
+  return api(`/api/cashier/sessions/${encodeURIComponent(sessionId)}/paymongo`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+async function getPaymongoCheckout(checkoutId) {
+  return api(`/api/cashier/paymongo/checkouts/${encodeURIComponent(checkoutId)}`);
+}
+async function cancelPaymongoCheckout(sessionId) {
+  return api(
+    `/api/cashier/sessions/${encodeURIComponent(sessionId)}/paymongo/cancel`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
 }
 async function addOrderLine(sessionId, productId, qty) {
   return api(`/api/cashier/sessions/${encodeURIComponent(sessionId)}/orders`, {

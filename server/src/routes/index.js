@@ -13,6 +13,7 @@ import { registerTransactionRoutes } from "./transaction.routes.js";
 import { registerReportRoutes } from "./report.routes.js";
 import { registerProductRoutes } from "./products.routes.js";
 import { registerOrderRoutes } from "./orders.routes.js";
+import { registerPaymongoRoutes } from "./paymongo.routes.js";
 
 export default function apiRoutes({ controllers }) {
   const router = Router();
@@ -38,6 +39,7 @@ export default function apiRoutes({ controllers }) {
     invitationController: controllers.invitation,
     settingsController: controllers.settings,
     cashierController: controllers.cashier,
+    activityController: controllers.activity,
   });
 
   // Table routes (admin + public availability).
@@ -54,6 +56,9 @@ export default function apiRoutes({ controllers }) {
 
   // Transaction routes (auth required).
   registerTransactionRoutes(router, { transactionController: controllers.transaction });
+
+  // PayMongo hosted checkout + signed webhook.
+  registerPaymongoRoutes(router, { transactionController: controllers.transaction });
 
   // Report routes (admin only).
   registerReportRoutes(router, { reportController: controllers.report });

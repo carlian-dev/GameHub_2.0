@@ -26,6 +26,7 @@
         "total": 140,
         "items": [],
         "method": "cash",
+        "provider": null,
         "received": 200,
         "change": 60,
         "paidAt": "<dyn>",

@@ -67,6 +67,11 @@ function sessionShape(doc, { finalized = false, paidRef = null } = {}) {
     fnbTotal: fnbTotalOf(doc),
     finalized: !!finalized,
     paidRef: paidRef ?? null,
+    // The cashier UI resumes or cancels a hosted checkout after reload.
+    paymongoStatus: doc.paymongoStatus ?? null,
+    paymongoCheckoutId: doc.paymongoCheckoutId ?? null,
+    paymongoCheckoutUrl: doc.paymongoCheckoutUrl ?? "",
+    paymongoAmount: doc.paymongoAmount != null ? doc.paymongoAmount : null,
   };
 }
 

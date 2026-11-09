@@ -801,6 +801,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .reserve-field select:disabled,
 .reserve-field input:disabled { opacity: 0.6; cursor: not-allowed; }
+/* reCAPTCHA widget slot (js/recaptcha.js). Hidden unless Settings > API
+   enables the integration with a site key. */
+.recaptcha-slot { margin: 0 0 16px; }
+.recaptcha-slot:not([hidden]) { display: flex; align-items: center; min-height: 78px; }
+.staff-card .recaptcha-slot:not([hidden]) { justify-content: center; }
+.reserve-form .recaptcha-slot:not([hidden]) { margin: 2px 0 14px; }
 .reserve-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .reserve-actions .btn { margin-top: 0; }
 .reserve-actions .btn:disabled {

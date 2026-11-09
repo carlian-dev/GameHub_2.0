@@ -9,6 +9,7 @@ import {
   publicConfigView,
   adminIntegrationsView,
   invitationCheckView,
+  activityView,
 } from "../views/index.js";
 
 // -------- Tables --------
@@ -214,6 +215,59 @@ export function transactionController({ transactionService }) {
       res.status(200).json(result);
     }),
 
+    /** POST /api/cashier/sessions/{id}/paymongo */
+    paymongoCheckout: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user) {
+        throw new HttpError(401, "not logged in");
+      }
+      const { id } = req.params || {};
+      const result = await transactionService.startPaymongo(
+        { sessionId: id },
+        user
+      );
+      res.status(200).json(result);
+    }),
+
+    /** GET /api/cashier/paymongo/checkouts/{id} */
+    paymongoStatus: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user) {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await transactionService.paymongoStatus(req.params?.id);
+      res.status(200).json(result);
+    }),
+
+    /** POST /api/cashier/sessions/{id}/paymongo/cancel */
+    paymongoCancel: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user) {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await transactionService.cancelPaymongo(
+        req.params?.id,
+        user
+      );
+      res.status(200).json(result);
+    }),
+
+    /** POST /api/paymongo/webhook — public; the signature is the auth. */
+    paymongoWebhook: asyncHandler(async (req, res) => {
+      const raw = req.rawBody ? req.rawBody.toString("utf8") : "";
+      const signature =
+        req.get("paymongo-signature") ||
+        req.get("x-paymongo-signature") ||
+        req.get("paymongo_signature") ||
+        "";
+      const result = await transactionService.handlePaymongoWebhook(
+        raw,
+        signature,
+        req.body
+      );
+      res.status(200).json(result);
+    }),
+
     list: asyncHandler(async (req, res) => {
       const user = req.session && req.session.user;
       if (!user) {
@@ -321,8 +375,13 @@ export function settingsController({ settingsService }) {
       const { key } = req.params || {};
       if (!key) throw new HttpError(422, "unknown integration");
       const user = req.session && req.session.user;
-      const adminEmail = user ? user.email : null;
-      const shaped = await settingsService.update(key, req.body || {}, adminEmail);
+      if (!user || user.role !== "admin") {
+        throw new HttpError(401, "not logged in");
+      }
+      const shaped = await settingsService.update(key, req.body || {}, {
+        id: user.id,
+        email: user.email ?? null,
+      });
       res.status(200).json({ ok: true, integration: shaped });
     }),
   };
@@ -332,9 +391,12 @@ export function settingsController({ settingsService }) {
 export function authController({ authService }) {
   return {
     login: asyncHandler(async (req, res) => {
-      const { email, username, password } = req.body || {};
+      const { email, username, password, recaptchaToken } = req.body || {};
       const identifier = email || username || "";
-      const result = await authService.login({ identifier, password }, req);
+      const result = await authService.login(
+        { identifier, password, recaptchaToken },
+        req
+      );
       res.status(200).json(loginView(result));
     }),
 
@@ -361,7 +423,7 @@ export function authController({ authService }) {
 
     register: asyncHandler(async (req, res) => {
       const {
-        token, firstName, lastName, email, password, username, idToken,
+        token, firstName, lastName, email, password, username, idToken, recaptchaToken,
       } = req.body || {};
 
       if (idToken) {
@@ -369,7 +431,8 @@ export function authController({ authService }) {
       }
 
       const result = await authService.register({
-        token, firstName, lastName, email, password, username,
+        token, firstName, lastName, email, password, username, recaptchaToken,
+        remoteIp: req.ip,
       });
       res.status(200).json(loginView(result));
     }),
@@ -471,6 +534,26 @@ export function cashierController({ cashierService }) {
       }
       const result = await cashierService.unarchive(id, user.id);
       res.status(200).json(result);
+    }),
+  };
+}
+
+// -------- Activity log (admin only, AD-026) --------
+export function activityController({ activityService }) {
+  return {
+    list: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user || user.role !== "admin") {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await activityService.list({
+        action: req.query.action,
+        actorId: req.query.actorId,
+        from: req.query.from,
+        to: req.query.to,
+        limit: req.query.limit,
+      });
+      res.status(200).json(activityView(result));
     }),
   };
 }
@@ -589,7 +672,10 @@ export function orderController({ orderService }) {
 export function reservationController({ reservationService }) {
   return {
     create: asyncHandler(async (req, res) => {
-      const result = await reservationService.createReservation(req.body || {});
+      const result = await reservationService.createReservation(
+        req.body || {},
+        req.ip
+      );
       res.status(200).json(result);
     }),
 

@@ -9,7 +9,7 @@
 async function cashierGuard() {
   const me = await getMe();
   if (me.role !== "cashier") {
-    location.href = me.role === "admin" ? "../admin/admin-dashboard.html" : "../auth/login.html";
+    location.href = staffHome(me.role);
     throw new Error("redirect");
   }
   const name = me.email || me.username || "cashier";

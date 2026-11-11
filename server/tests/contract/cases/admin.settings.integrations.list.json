@@ -69,6 +69,18 @@
           "updatedBy": null
         },
         {
+          "key": "gemini",
+          "name": "Google Gemini AI",
+          "description": "AI assistance and intelligent automation services",
+          "available": true,
+          "enabled": false,
+          "credentials": [
+            { "name": "apiKey", "label": "Gemini API key", "required": true, "configured": false, "masked": "" }
+          ],
+          "updatedAt": null,
+          "updatedBy": null
+        },
+        {
           "key": "otp",
           "name": "OTP / email codes",
           "description": "Email verification codes (planned)",

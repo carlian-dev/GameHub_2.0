@@ -15,7 +15,8 @@
     "setup:indexes": "cd server && npm run setup:indexes",
     "verify:indexes": "cd server && npm run verify:indexes",
     "test:unit": "cd server && npm run test:unit",
-    "test:contract": "cd server && npm run test:contract"
+    "test:contract": "cd server && npm run test:contract",
+    "check:gemini": "cd server && npm run check:gemini"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

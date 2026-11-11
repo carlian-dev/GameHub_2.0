@@ -1,7 +1,7 @@
 // Dependency wiring: DB → models → services → controllers → routes.
 // Shared by server.js (HTTP listener) and the contract runner (in-process),
 // so both exercise the exact same app.
-import { env } from "./config/env.js";
+import { env, persistEnvValue } from "./config/env.js";
 import { getDb, getMongoClient } from "./config/db.js";
 import { setupRoutes } from "./app.js";
 
@@ -33,6 +33,7 @@ import { googleCalendarService } from "./services/googleCalendar.service.js";
 import { mailService } from "./services/mail.service.js";
 import { recaptchaService } from "./services/recaptcha.service.js";
 import { paymongoService } from "./services/paymongo.service.js";
+import { geminiService } from "./services/gemini.service.js";
 import { transactionService } from "./services/transaction.service.js";
 import { reportService } from "./services/report.service.js";
 import { productService } from "./services/product.service.js";
@@ -111,6 +112,7 @@ export async function wireApp() {
     db,
     mongoClient,
     googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
+    googleMapsApiKeyFromEnv: env.GOOGLE_MAPS_API_KEY,
     googleCalendarFromEnv: {
       calendarId: env.GOOGLE_CALENDAR_ID,
       clientEmail: env.GOOGLE_CALENDAR_CLIENT_EMAIL,
@@ -121,15 +123,27 @@ export async function wireApp() {
       siteKey: env.RECAPTCHA_SITE_KEY,
       secretKey: env.RECAPTCHA_SECRET_KEY,
     },
+    paymongoFromEnv: {
+      secretKey: env.PAYMONGO_SECRET_KEY,
+      webhookSecret: env.PAYMONGO_WEBHOOK_SECRET,
+    },
+    geminiApiKeyFromEnv: env.GEMINI_API_KEY,
+    // Settings > API mirrors admin credentials into server/.env *_OVERRIDE
+    // fields; an empty field falls back to the base env value.
+    persistEnvValue,
   });
   const paymongo = paymongoService({
     configProvider: () => settingsSvc.paymongoConfig(),
     frontendUrl: env.FRONTEND_URL,
   });
+  const gemini = geminiService({
+    configProvider: () => settingsSvc.geminiConfig(),
+  });
   const services = {
     health: healthService({ healthModel: models.health, dbName: env.MONGODB_DB }),
     settings: settingsSvc,
     paymongo,
+    gemini,
     invitation: invitationService({
       invitationModel: models.invitation,
       db,
@@ -165,6 +179,7 @@ export async function wireApp() {
     settingsModel: models.settings,
     db,
     googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
+    googleAuthConfigProvider: () => settingsSvc.googleAuthConfig(),
     recaptchaService: recaptcha,
   });
 

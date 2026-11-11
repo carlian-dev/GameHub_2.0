@@ -61,6 +61,15 @@ const REGISTRY = [
     ],
   },
   {
+    key: "gemini",
+    name: "Google Gemini AI",
+    description: "AI assistance and intelligent automation services",
+    available: true,
+    credentials: [
+      { name: "apiKey", label: "Gemini API key", required: true, secret: true },
+    ],
+  },
+  {
     key: "otp",
     name: "OTP / email codes",
     description: "Email verification codes (planned)",
@@ -69,12 +78,100 @@ const REGISTRY = [
   },
 ];
 
+// Credential -> .env field mapping. `override` is written by Settings > API;
+// `base` is the existing/default env value. Resolution order per credential:
+//   1. override field (non-empty)
+//   2. base env field
+//   3. stored settings document value (legacy/backup)
+// This is what makes "empty override -> use RECAPTCHA_SECRET_KEY" work even
+// when an older settings document still has a credential.
+const ENV_CREDENTIALS = {
+  googleAuth: {
+    clientId: {
+      override: "GOOGLE_AUTH_CLIENT_ID_OVERRIDE",
+      base: "GOOGLE_CLIENT_ID",
+    },
+  },
+  googleMaps: {
+    apiKey: {
+      override: "GOOGLE_MAPS_API_KEY_OVERRIDE",
+      base: "GOOGLE_MAPS_API_KEY",
+    },
+  },
+  googleCalendar: {
+    calendarId: {
+      override: "GOOGLE_CALENDAR_ID_OVERRIDE",
+      base: "GOOGLE_CALENDAR_ID",
+    },
+    clientEmail: {
+      override: "GOOGLE_CALENDAR_CLIENT_EMAIL_OVERRIDE",
+      base: "GOOGLE_CALENDAR_CLIENT_EMAIL",
+    },
+    privateKey: {
+      override: "GOOGLE_CALENDAR_PRIVATE_KEY_OVERRIDE",
+      base: "GOOGLE_CALENDAR_PRIVATE_KEY",
+    },
+  },
+  recaptcha: {
+    siteKey: {
+      override: "RECAPTCHA_SITE_KEY_OVERRIDE",
+      base: "RECAPTCHA_SITE_KEY",
+    },
+    secretKey: {
+      override: "RECAPTCHA_SECRET_KEY_OVERRIDE",
+      base: "RECAPTCHA_SECRET_KEY",
+    },
+  },
+  paymongo: {
+    secretKey: {
+      override: "PAYMONGO_SECRET_KEY_OVERRIDE",
+      base: "PAYMONGO_SECRET_KEY",
+    },
+    webhookSecret: {
+      override: "PAYMONGO_WEBHOOK_SECRET_OVERRIDE",
+      base: "PAYMONGO_WEBHOOK_SECRET",
+    },
+  },
+  gemini: {
+    apiKey: {
+      override: "GEMINI_API_KEY_OVERRIDE",
+      base: "GEMINI_API_KEY",
+    },
+  },
+};
+
 // Secret credentials (`secret: true`) are stored encrypted with AES-256-GCM.
 // The box is created once per service factory call; a bad key fails startup
 // loudly instead of silently storing plaintext.
 let secretBox = createSecretBox("");
-// Env defaults captured from the factory (only used when a document is absent).
-let recaptchaEnv = {};
+// Env defaults captured from the factory. Used by unit tests and as a last
+// resort when process.env has not been populated.
+let capturedEnv = {};
+
+function envFieldValue(key, name, field) {
+  const fields = ENV_CREDENTIALS[key]?.[name];
+  if (!fields || !field) return "";
+  const fromProcess = String(process.env[fields[field]] || "").trim();
+  if (fromProcess) return fromProcess;
+  if (field === "base") {
+    const fromFactory = capturedEnv[key]?.[name];
+    return String(fromFactory || "").trim();
+  }
+  return "";
+}
+
+function overrideEnvValue(key, name) {
+  return envFieldValue(key, name, "override");
+}
+
+function baseEnvValue(key, name) {
+  return envFieldValue(key, name, "base");
+}
+
+/** Env value used to decide whether an absent settings document is enabled. */
+function resolvedEnvValue(key, name) {
+  return overrideEnvValue(key, name) || baseEnvValue(key, name);
+}
 
 function credentialShape(name, def, raw) {
   const value = raw && raw.value != null ? String(raw.value) : "";
@@ -85,6 +182,9 @@ function credentialShape(name, def, raw) {
     required: !!def.required,
     configured: value !== "",
     masked: maskValue(value, hint),
+    // "override" = saved to .env by Settings > API, "db" = settings document,
+    // "env" = base .env default, "" = not configured. Values are never exposed.
+    source: raw && raw.source ? String(raw.source) : "",
   };
 }
 
@@ -118,10 +218,34 @@ function effectiveDoc(key, doc) {
   const credentials = {};
   for (const cred of reg.credentials) {
     const raw = stored[cred.name] || {};
-    credentials[cred.name] = {
-      value: storedCredentialValue(raw),
-      last4: String(raw.last4 || ""),
-    };
+    const override = overrideEnvValue(key, cred.name);
+    let value = "";
+    let last4 = "";
+    let source = "";
+
+    if (override) {
+      value = override;
+      last4 = credentialHint(key, cred.name, override);
+      source = "override";
+    } else {
+      const base = baseEnvValue(key, cred.name);
+      if (base) {
+        value = base;
+        last4 = credentialHint(key, cred.name, base);
+        source = "env";
+      } else {
+        const storedValue = storedCredentialValue(raw);
+        if (storedValue) {
+          value = storedValue;
+          last4 =
+            String(raw.last4 || "") ||
+            credentialHint(key, cred.name, storedValue);
+          source = "db";
+        }
+      }
+    }
+
+    credentials[cred.name] = { value, last4, source };
   }
   let enabled = !!basis.enabled;
   for (const cred of reg.credentials) {
@@ -138,74 +262,41 @@ function effectiveDoc(key, doc) {
   };
 }
 
-// Env fallbacks captured from the service factory (DB authoritative once a
-// document exists; these only apply when the document is positively absent).
-let googleAuthEnvClientId = "";
-let googleCalendarEnv = {};
-
 function defaultDoc(key) {
   const reg = REGISTRY.find((r) => r.key === key);
   if (!reg) return { enabled: false, credentials: {} };
   const credentials = {};
   for (const cred of reg.credentials) {
-    credentials[cred.name] = { value: "", last4: "" };
+    credentials[cred.name] = { value: "", last4: "", source: "" };
   }
   let enabled = false;
   if (key === "googleMaps") enabled = true;
   if (key === "googleAuth") {
-    // GOOGLE_CLIENT_ID is the default client ID (parity with the archived PHP
-    // settings_default()). Without this the login page never shows the Google
-    // button on a fresh database. Only a well-formed client ID is published.
-    const cid = String(googleAuthEnvClientId || "").trim();
-    if (isValidGoogleClientId(cid)) {
-      enabled = true;
-      credentials.clientId = {
-        value: cid,
-        last4: credentialHint("googleAuth", "clientId", cid),
-        updatedAt: null,
-      };
-    }
+    // GOOGLE_CLIENT_ID (or its admin override) is the default client ID
+    // (parity with the archived PHP settings_default()). Without this the
+    // login page never shows the Google button on a fresh database. Only a
+    // well-formed client ID is published.
+    const cid = resolvedEnvValue("googleAuth", "clientId");
+    if (isValidGoogleClientId(cid)) enabled = true;
   }
   if (key === "googleCalendar") {
-    const calendarId = String((googleCalendarEnv && googleCalendarEnv.calendarId) || "").trim();
-    const clientEmail = String((googleCalendarEnv && googleCalendarEnv.clientEmail) || "").trim();
-    const privateKey = String((googleCalendarEnv && googleCalendarEnv.privateKey) || "").trim();
-    if (calendarId && clientEmail && privateKey) {
-      enabled = true;
-      credentials.calendarId = {
-        value: calendarId,
-        last4: credentialHint("googleCalendar", "calendarId", calendarId),
-        updatedAt: null,
-      };
-      credentials.clientEmail = {
-        value: clientEmail,
-        last4: clientEmail.slice(-4),
-        updatedAt: null,
-      };
-      credentials.privateKey = {
-        value: privateKey,
-        last4: privateKey.slice(-4),
-        updatedAt: null,
-      };
-    }
+    const calendarId = resolvedEnvValue("googleCalendar", "calendarId");
+    const clientEmail = resolvedEnvValue("googleCalendar", "clientEmail");
+    const privateKey = resolvedEnvValue("googleCalendar", "privateKey");
+    if (calendarId && clientEmail && privateKey) enabled = true;
   }
   if (key === "recaptcha") {
-    // Env defaults only apply while no `settings.recaptcha` document exists.
-    const siteKey = String((recaptchaEnv && recaptchaEnv.siteKey) || "").trim();
-    const secretKey = String((recaptchaEnv && recaptchaEnv.secretKey) || "").trim();
-    if (siteKey && secretKey) {
-      enabled = true;
-      credentials.siteKey = {
-        value: siteKey,
-        last4: siteKey.slice(-4),
-        updatedAt: null,
-      };
-      credentials.secretKey = {
-        value: secretKey,
-        last4: secretKey.slice(-4),
-        updatedAt: null,
-      };
-    }
+    const siteKey = resolvedEnvValue("recaptcha", "siteKey");
+    const secretKey = resolvedEnvValue("recaptcha", "secretKey");
+    if (siteKey && secretKey) enabled = true;
+  }
+  if (key === "paymongo") {
+    // A secret key in .env is enough to make a fresh database usable; an
+    // existing settings document still owns the on/off switch.
+    if (resolvedEnvValue("paymongo", "secretKey")) enabled = true;
+  }
+  if (key === "gemini") {
+    if (resolvedEnvValue("gemini", "apiKey")) enabled = true;
   }
   return { enabled, credentials };
 }
@@ -240,13 +331,22 @@ export function settingsService({
   db,
   mongoClient,
   googleClientIdFromEnv,
+  googleMapsApiKeyFromEnv,
   googleCalendarFromEnv,
   settingsEncryptionKey,
   recaptchaFromEnv,
+  paymongoFromEnv,
+  geminiApiKeyFromEnv = "",
+  persistEnvValue = null,
 }) {
-  googleAuthEnvClientId = String(googleClientIdFromEnv || "");
-  googleCalendarEnv = googleCalendarFromEnv || {};
-  recaptchaEnv = recaptchaFromEnv || {};
+  capturedEnv = {
+    googleAuth: { clientId: String(googleClientIdFromEnv || "") },
+    googleMaps: { apiKey: String(googleMapsApiKeyFromEnv || "") },
+    googleCalendar: googleCalendarFromEnv || {},
+    recaptcha: recaptchaFromEnv || {},
+    paymongo: paymongoFromEnv || {},
+    gemini: { apiKey: String(geminiApiKeyFromEnv || "") },
+  };
   secretBox = createSecretBox(settingsEncryptionKey);
   return {
     registry() {
@@ -310,6 +410,19 @@ export function settingsService({
       });
       return { integrations };
     },
+    /**
+     * Super admin view: activation state only. Credentials are deliberately
+     * excluded so this role cannot read or change integration configuration.
+     */
+    async superAdminIntegrations() {
+      const keys = REGISTRY.map((r) => r.key);
+      const docs = await settingsModel.findMany(keys);
+      return {
+        integrations: REGISTRY.map((reg) =>
+          this.toggleShape(reg.key, effectiveDoc(reg.key, docs[reg.key] || null))
+        ),
+      };
+    },
     async calendarConfig() {
       try {
         const docs = await settingsModel.findMany(["googleCalendar"]);
@@ -323,6 +436,19 @@ export function settingsService({
       } catch {
         return { enabled: false, calendarId: "", clientEmail: "", privateKey: "" };
       }
+    },
+    /**
+     * Server-only Google sign-in config. Uses the same effective-document
+     * resolution as GET /api/config so the audience check and the rendered
+     * button always agree, including .env overrides.
+     */
+    async googleAuthConfig() {
+      const docs = await settingsModel.findMany(["googleAuth"]);
+      const effective = effectiveDoc("googleAuth", docs.googleAuth || null);
+      return {
+        enabled: !!effective.enabled,
+        clientId: String(effective.credentials.clientId?.value || ""),
+      };
     },
     /**
      * Server-only reCAPTCHA config (includes the decrypted secret).
@@ -355,6 +481,17 @@ export function settingsService({
       };
     },
     /**
+     * Server-only Google Gemini AI config (includes decrypted API key).
+     */
+    async geminiConfig() {
+      const docs = await settingsModel.findMany(["gemini"]);
+      const effective = effectiveDoc("gemini", docs.gemini || null);
+      return {
+        enabled: !!effective.enabled,
+        apiKey: String(effective.credentials.apiKey?.value || ""),
+      };
+    },
+    /**
      * settings_plan_update port: build field-level update plan.
      * Validation and required-credential rules here (testable without DB).
      */
@@ -370,8 +507,8 @@ export function settingsService({
       let enabledChanged = false;
       const changed = [];
       const credentialWrites = {};
-      // Plaintext values used only for the required-credential check below.
-      // Never written to Mongo: secret credentials are encrypted first.
+      // Plaintext values used for the required-credential check and for the
+      // .env override write after the DB commit. Never serialized.
       const credentialValues = {};
 
       if (Object.prototype.hasOwnProperty.call(data, "enabled")) {
@@ -469,41 +606,29 @@ export function settingsService({
       }
 
       for (const cred of reg.credentials) {
-        if (Object.prototype.hasOwnProperty.call(credentialWrites, cred.name)) {
-          const cw = credentialWrites[cred.name];
-          if (cw === null) {
-            unset[`credentials.${cred.name}`] = "";
-          } else {
-            set[`credentials.${cred.name}`] = cw;
-          }
+        if (!Object.prototype.hasOwnProperty.call(credentialWrites, cred.name)) {
+          // Leave untouched credentials alone. In particular, do not copy an
+          // env fallback into a new settings document: the env layer must stay
+          // authoritative for as long as the admin has not saved a value.
           continue;
         }
-        const current = effective.credentials && effective.credentials[cred.name] ? effective.credentials[cred.name] : {};
-        const currentValue = String(current.value || "");
-        if (cred.secret && currentValue !== "") {
-          // Env fallbacks are plaintext; never copy them into Mongo as-is.
-          if (!secretBox.configured) {
-            const err = new Error(
-              "SETTINGS_ENCRYPTION_KEY is not configured; secret credentials cannot be saved"
-            );
-            err.status = 422;
-            throw err;
-          }
-          setOnInsert[`credentials.${cred.name}`] = {
-            ...secretBox.encrypt(currentValue),
-            last4: String(current.last4 || ""),
-            updatedAt: current.updatedAt || null,
-          };
+        const cw = credentialWrites[cred.name];
+        if (cw === null) {
+          unset[`credentials.${cred.name}`] = "";
         } else {
-          setOnInsert[`credentials.${cred.name}`] = {
-            value: currentValue,
-            last4: String(current.last4 || ""),
-            updatedAt: current.updatedAt || null,
-          };
+          set[`credentials.${cred.name}`] = cw;
         }
       }
 
-      return { enabled, changed, set, unset, set_on_insert: setOnInsert };
+      return {
+        enabled,
+        changed,
+        set,
+        unset,
+        set_on_insert: setOnInsert,
+        // Internal only: used to mirror explicit admin values into .env.
+        values: credentialValues,
+      };
     },
 
     validateCredential(key, name, value) {
@@ -534,13 +659,54 @@ export function settingsService({
         err.status = 422;
         throw err;
       }
+      if (key === "gemini" && name === "apiKey" && value !== "") {
+        if (/\s/.test(value) || value.length < 20) {
+          const err = new Error("Gemini API key must not contain whitespace and must be at least 20 characters");
+          err.status = 422;
+          throw err;
+        }
+      }
     },
 
     /**
-     * settings_update: toggle integration and/or replace/clear credentials.
-     * Settings write + integration_settings_update audit log in one transaction.
+     * settings_update with role-separated writes:
+     *   admin       -> replace/clear credentials (enabled is rejected)
+     *   super_admin -> flip enabled only (credentials are rejected)
+     * The settings write and its audit log commit in one transaction.
      */
     async update(key, data, actor = {}) {
+      // Role enforcement lives here as well as in the route guards: admins
+      // configure credentials, super admins only flip activation.
+      const actorRole = actor && actor.role;
+      if (actorRole !== "admin" && actorRole !== "super_admin") {
+        const err = new Error("admin only");
+        err.status = 403;
+        throw err;
+      }
+      const payload = data && typeof data === "object" && !Array.isArray(data) ? data : {};
+      if (actorRole === "super_admin") {
+        const fields = Object.keys(payload);
+        if (fields.length === 0) {
+          const err = new Error("enabled is required");
+          err.status = 422;
+          throw err;
+        }
+        if (fields.some((field) => field !== "enabled")) {
+          const err = new Error("super administrators can only turn integrations on or off");
+          err.status = 403;
+          throw err;
+        }
+        if (typeof payload.enabled !== "boolean") {
+          const err = new Error("enabled must be a boolean");
+          err.status = 422;
+          throw err;
+        }
+      } else if (Object.prototype.hasOwnProperty.call(payload, "enabled")) {
+        const err = new Error("only a super administrator can turn integrations on or off");
+        err.status = 403;
+        throw err;
+      }
+
       const adminEmail = actor && actor.email ? actor.email : null;
       const actorId = actor && actor.id ? String(actor.id) : null;
       const reg = REGISTRY.find((r) => r.key === key);
@@ -560,7 +726,7 @@ export function settingsService({
 
       const existingDoc = await settingsColl.findOne({ key });
       const effective = effectiveDoc(key, existingDoc || null);
-      const plan = this.planUpdate(key, effective, data);
+      const plan = this.planUpdate(key, effective, payload);
 
       const set = { ...plan.set, updatedAt: new Date(), updatedBy: adminEmail };
       const unset = { ...plan.unset };
@@ -607,31 +773,78 @@ export function settingsService({
         if (!updated) {
           throw new Error("settings update returned no document");
         }
-        const shaped = this.shape(key, effectiveDoc(key, updated));
         await activityLogs.insertOne(
           {
             actorId,
-            action: "integration_settings_update",
+            action:
+              actorRole === "super_admin"
+                ? "integration_toggle"
+                : "integration_settings_update",
             target: key,
-            meta: { enabled: plan.enabled, changed: plan.changed },
+            meta: { enabled: plan.enabled, changed: plan.changed, role: actorRole },
             at: new Date(),
           },
           { session }
         );
-        return shaped;
+        return updated;
+      };
+
+      // Write the admin values to their *_OVERRIDE .env keys only after the
+      // settings document + audit log committed. A failed disk write is logged
+      // but does not roll back the DB save; process.env is already updated by
+      // the env-file store so this process keeps using the new value.
+      const persistCredentialOverrides = async () => {
+        if (typeof persistEnvValue !== "function") return;
+        for (const [name, value] of Object.entries(plan.values || {})) {
+          const fields = ENV_CREDENTIALS[key]?.[name];
+          if (!fields) continue;
+          try {
+            await persistEnvValue(fields.override, String(value ?? ""));
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[gamehub] could not write ${fields.override} to .env: ${
+                err && err.message ? err.message : err
+              }`
+            );
+          }
+        }
       };
 
       // Transactions require a replica set (Atlas / local replSet). A standalone
       // mongod rejects them outright, so fall back to the two plain writes.
+      let updatedDoc;
       if (await hasTransactionSupport(mongoClient)) {
         const session = mongoClient.startSession();
         try {
-          return await session.withTransaction(() => apply(session));
+          updatedDoc = await session.withTransaction(() => apply(session));
         } finally {
           await session.endSession();
         }
+      } else {
+        updatedDoc = await apply(null);
       }
-      return await apply(null);
+
+      await persistCredentialOverrides();
+      const fresh = effectiveDoc(key, updatedDoc);
+      return actorRole === "super_admin"
+        ? this.toggleShape(key, fresh)
+        : this.shape(key, fresh);
+    },
+
+    /** Shape for super admins: activation state, never credentials. */
+    toggleShape(key, effective) {
+      const reg = REGISTRY.find((r) => r.key === key);
+      if (!reg) return null;
+      return {
+        key: reg.key,
+        name: reg.name,
+        description: reg.description,
+        available: reg.available,
+        enabled: effective.enabled,
+        updatedAt: effective.updatedAt,
+        updatedBy: effective.updatedBy,
+      };
     },
 
     shape(key, effective) {

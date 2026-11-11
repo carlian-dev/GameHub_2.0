@@ -59,9 +59,7 @@ async function guard() {
   try {
     const me = await getMe();
     if (me.role !== "admin") {
-      location.href = me.role === "cashier"
-        ? "../cashiers/cashier-dashboard.html"
-        : "../auth/login.html";
+      location.href = staffHome(me.role);
       return null;
     }
     const name = me.email || "admin";

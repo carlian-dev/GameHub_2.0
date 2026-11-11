@@ -11,6 +11,7 @@ export function authService({
   settingsModel,
   db,
   googleClientIdFromEnv = "",
+  googleAuthConfigProvider = null,
   recaptchaService = null,
 }) {
   const usersColl = db.collection("users");
@@ -283,25 +284,33 @@ export function authService({
 
     /** Google admin-only login. */
     async google({ idToken, email }, req) {
-      // Read googleAuth settings; DB authoritative; read failure → 503.
-      let authDoc;
+      // Resolve the same effective client ID GET /api/config publishes:
+      // Settings > API override (.env) -> settings document -> env default.
+      // A read failure must fail closed.
+      let clientId = "";
       try {
-        authDoc = await settingsModel.findOne("googleAuth");
+        if (typeof googleAuthConfigProvider === "function") {
+          const cfg = await googleAuthConfigProvider();
+          if (cfg && cfg.enabled) {
+            clientId = String(cfg.clientId || "").trim();
+          }
+        } else {
+          // Fallback for callers that only provide the settings model.
+          const authDoc = await settingsModel.findOne("googleAuth");
+          if (authDoc) {
+            if (authDoc.enabled) {
+              clientId = String(authDoc.credentials?.clientId?.value || "").trim();
+            }
+          } else {
+            clientId = String(googleClientIdFromEnv || "").trim();
+          }
+        }
       } catch {
         const err = new Error("Google sign-in is temporarily unavailable");
         err.status = 503;
         throw err;
       }
-      // Google Auth settings: DB authoritative, but while no document exists
-      // GOOGLE_CLIENT_ID is the default — the same rule GET /api/config uses
-      // (architecture.md §2.1). A document that exists always wins.
-      let clientId = "";
-      if (authDoc) {
-        if (authDoc.enabled) clientId = authDoc.credentials?.clientId?.value || "";
-      } else {
-        clientId = String(googleClientIdFromEnv || "").trim();
-        if (!isValidGoogleClientId(clientId)) clientId = "";
-      }
+      if (!isValidGoogleClientId(clientId)) clientId = "";
       if (!clientId) {
         const err = new Error("Google sign-in is not configured");
         err.status = 503;
@@ -363,8 +372,8 @@ export function authService({
         throw err;
       }
 
-      // Only admin can use Google login.
-      if (user.role !== "admin") {
+      // Only staff administrators (admin or super admin) can use Google login.
+      if (user.role !== "admin" && user.role !== "super_admin") {
         const err = new Error("invalid Google sign-in");
         err.status = 403;
         throw err;

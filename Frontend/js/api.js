@@ -94,6 +94,17 @@ async function logout() {
 async function getMe() {
   return api("/api/me");
 }
+
+// Landing page for a staff role. Every protected page sits one directory under
+// src/function/, so this relative path works from admin/, cashiers/, tables/,
+// auth/, and super-admin/ pages alike.
+function staffHome(role) {
+  if (role === "super_admin") return "../super-admin/integrations.html";
+  if (role === "admin") return "../admin/admin-dashboard.html";
+  if (role === "cashier") return "../cashiers/cashier-dashboard.html";
+  return "../auth/login.html";
+}
+
 // --- Admin settings (masked credentials; server is authoritative) ---
 async function getAdminIntegrations() {
   return api("/api/admin/settings/integrations");
@@ -102,6 +113,17 @@ async function updateAdminIntegration(key, fields) {
   return api(`/api/admin/settings/integrations/${encodeURIComponent(key)}`, {
     method: "PUT",
     body: JSON.stringify(fields),
+  });
+}
+
+// --- Super admin settings (integration on/off only; no credentials) ---
+async function getSuperAdminIntegrations() {
+  return api("/api/super-admin/settings/integrations");
+}
+async function updateSuperAdminIntegration(key, enabled) {
+  return api(`/api/super-admin/settings/integrations/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
   });
 }
 

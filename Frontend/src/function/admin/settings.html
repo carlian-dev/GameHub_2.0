@@ -128,7 +128,7 @@
           </div>
 
           <div id="apiView" hidden>
-            <p class="settings-note">Public identifiers (client ID, site key) are published to the browser. Secret keys are encrypted at rest and only a masked hint is shown here.</p>
+            <p class="settings-note">Public identifiers (client ID, site key) are published to the browser. Secret keys are encrypted at rest and only a masked hint is shown here. Saving a credential also writes it to the matching <code>*_OVERRIDE</code> field in <code>server/.env</code>; clearing an admin value falls back to the default <code>.env</code> key. Only a super administrator can turn integrations on or off.</p>
             <p class="dash-msg" id="apiStatus">Loading integrations…</p>
             <div class="api-grid" id="apiList"></div>
           </div>

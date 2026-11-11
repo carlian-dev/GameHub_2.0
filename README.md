@@ -4,7 +4,10 @@ Billiard-hall management system for GameHub (Rooftop, Paz Building,
 San Isidro St, Malaybalay City, Bukidnon). It covers staff identity and
 access, cashier account administration, billiard-table and rate management,
 customer sessions, reservations, billing and payments, reporting, and audit
-logging across three roles: Administrator, Cashier, and walk-in Customer.
+logging across four roles: Super Administrator, Administrator, Cashier, and
+walk-in Customer. The super administrator is intentionally limited to turning
+API integrations on and off; administrators configure credentials and run the
+hall.
 
 The system is intentionally built with a small, explainable stack: a
 Node/Express JSON API backed by MongoDB Atlas, and a dependency-free
@@ -21,6 +24,9 @@ backend was archived under `archive/Backend/` and is not used at runtime.
   add/rename/archive/maintenance/status views, regular (₱120/h) and special
   (₱180/h) hourly rates, and an active-sessions view (session lifecycle
   operations follow in a later sprint).
+* **Super administrator — API integration control.** A least-privilege account
+  that can only turn the configured API integrations on or off. Integration
+  credentials stay with the administrator.
 * **Planned next.** Session start/extend/end with per-minute billing,
   reservations with overlap protection, accepted-reservation email alerts, food & beverage ordering, cash/GCash
   payments with receipts, daily/monthly/usage reports with export.
@@ -58,7 +64,9 @@ backend was archived under `archive/Backend/` and is not used at runtime.
    After filling them, run `cd server && npm run check:calendar` to verify the
    service-account key, Calendar API enablement, and calendar sharing.
    Optional reCAPTCHA uses `RECAPTCHA_SITE_KEY`/`RECAPTCHA_SECRET_KEY`, or the
-   admin Settings > API page (recommended). Set `SETTINGS_ENCRYPTION_KEY` before
+   admin Settings > API page (recommended). Saving a credential there writes it
+   to the matching `*_OVERRIDE` key in `server/.env`; when an override is empty,
+   the normal env key above is used. Set `SETTINGS_ENCRYPTION_KEY` before
    saving any secret key; generate one with
    `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
    PayMongo is configured in Admin > Settings > API too: add the secret key
@@ -71,9 +79,12 @@ backend was archived under `archive/Backend/` and is not used at runtime.
 3. Create the first administrator directly in the `users` collection
    (MongoDB Compass): `{ email, passwordHash (bcrypt), role: "admin",
    status: "active" }`. The system is single-administrator by design; no
-   endpoint creates administrators. If you used archive/Backend/scripts/seed_local.php,
-   the seeded admin signs in with email jamespepito833@gmail.com and password
-   AdminPass123!.
+   endpoint creates administrators. To use the integration on/off controls,
+   create a second account the same way with `role: "super_admin"`. Generate a
+   bcrypt hash from `server/` with:
+   `node -e "console.log(require('bcryptjs').hashSync('YourPassword',10))"`.
+   If you used archive/Backend/scripts/seed_local.php, the seeded admin signs
+   in with email jamespepito833@gmail.com and password AdminPass123!.
 
 4. Run everything with one command (from the repository root):
    ```
@@ -126,7 +137,8 @@ GameHub_2.0/
     index.html              Customer landing (hero, location map)
     login/index.html        Redirect so bare /login resolves
     src/function/auth/      Login, registration pages + logic
-    src/function/admin/     Admin dashboard, applicants/staff table
+    src/function/admin/     Admin dashboard, staff, credentials, operations
+    src/function/super-admin/ Integration on/off control (no credentials)
     src/function/cashiers/  Cashier dashboard
     src/function/tables/    Tables, sessions pages
     src/function/shared/    Landing status logic
@@ -140,7 +152,12 @@ GameHub_2.0/
 * Accounts are `pending` at creation, then `active`, `archived`, or
   `declined` by administrator action. Only `active` accounts can log in.
 * Cashiers register with a chosen username and password (no email required).
-  The single administrator signs in with email + password or Google.
+  The single administrator and the super administrator sign in with
+  email + password or Google.
+* The super administrator's only feature is turning API integrations on or
+  off at `/src/function/super-admin/integrations.html`. Administrators manage
+  the credentials on Admin > Settings > API but cannot send the on/off flag;
+  the server rejects it.
 * One-time email codes protect account creation verification and
   destructive approvals (archiving). Day-to-day login is direct session
   authentication after the status gates.
@@ -160,9 +177,12 @@ GameHub_2.0/
 | `MONGODB_DNS_SERVERS` | Optional resolver(s) for Atlas SRV lookups, e.g. `8.8.8.8,1.1.1.1` (only if startup says `querySrv ECONNREFUSED`) |
 | `FRONTEND_URL` | Allowed CORS origin for the Frontend |
 | `PORT` | Backend listen port (`8000`) |
-| `GOOGLE_CLIENT_ID` | Google OAuth web client (public identifier) |
-| `GOOGLE_CALENDAR_ID` / `GOOGLE_CALENDAR_CLIENT_EMAIL` / `GOOGLE_CALENDAR_PRIVATE_KEY` | Optional service-account sync: accepted reservations become events on this shared calendar (blank = disabled) |
-| `RECAPTCHA_SITE_KEY` / `RECAPTCHA_SECRET_KEY` | Optional reCAPTCHA v2 defaults, used only while no `settings.recaptcha` document exists (the admin Settings page wins after first save) |
+| `GOOGLE_CLIENT_ID` | Google OAuth web client (public identifier); the admin value is mirrored to `GOOGLE_AUTH_CLIENT_ID_OVERRIDE` |
+| `GOOGLE_MAPS_API_KEY` | Optional Google Maps key for the landing page; the admin value is mirrored to `GOOGLE_MAPS_API_KEY_OVERRIDE` |
+| `GOOGLE_CALENDAR_ID` / `GOOGLE_CALENDAR_CLIENT_EMAIL` / `GOOGLE_CALENDAR_PRIVATE_KEY` | Optional service-account sync: accepted reservations become events on this shared calendar (blank = disabled); admin values use the matching `*_OVERRIDE` keys |
+| `RECAPTCHA_SITE_KEY` / `RECAPTCHA_SECRET_KEY` | Optional reCAPTCHA v2 defaults, used whenever the matching admin value is empty; admin values use `RECAPTCHA_SITE_KEY_OVERRIDE` / `RECAPTCHA_SECRET_KEY_OVERRIDE` |
+| `PAYMONGO_SECRET_KEY` / `PAYMONGO_WEBHOOK_SECRET` | Optional PayMongo defaults; admin values use `PAYMONGO_SECRET_KEY_OVERRIDE` / `PAYMONGO_WEBHOOK_SECRET_OVERRIDE` |
+| `*_OVERRIDE` (all integrations) | Filled automatically by Admin > Settings > API. Precedence: override, then the normal env key, then the settings document. Clearing an admin value falls back to the normal env key |
 | `SETTINGS_ENCRYPTION_KEY` | 32 random bytes as 64 hex chars; required before saving secret credentials (reCAPTCHA secret key, Calendar private key, PayMongo keys). Stored secrets use AES-256-GCM |
 | `MAIL_USER` / `MAIL_PASS` | Gmail sender + app password (cashier invitations and accepted-reservation emails) |
 | `MAIL_FROM` | Display name on outgoing mail |
@@ -240,4 +260,5 @@ never started by any npm script.
 
 * Cashier login is password-only (cashier accounts carry no email for codes).
 * Exactly one administrator account exists; none can be created or archived
-  through the application.
+  through the application. A super administrator account is also created
+  directly in the database and is limited to integration on/off.

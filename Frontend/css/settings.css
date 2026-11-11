@@ -313,6 +313,13 @@
   color: var(--d-body);
   overflow-wrap: anywhere;
 }
+.api-cred-source {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--d-muted);
+  white-space: nowrap;
+}
 .api-actions {
   display: flex;
   grid-column: 3;

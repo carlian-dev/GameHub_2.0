@@ -1,6 +1,8 @@
 // src/function/admin/settings.js - admin settings page logic.
-// Guard: only role=admin stays (cashiers go to their dashboard, guests to
-// login). Renders the read-only profile tab and the API integration cards.
+// Guard: only role=admin stays (super admins go to integration toggles,
+// cashiers to their dashboard, guests to login). Renders the read-only profile
+// tab and the API integration credential cards. Turning an integration on or
+// off belongs to the super-admin role, so this page never sends `enabled`.
 // Shell (menu/theme/date) lives in js/dash.js. Credentials arrive masked and
 // are never written into the DOM in full.
 (function () {
@@ -106,25 +108,6 @@
     return make("span", `api-status is-${kind}`, label);
   }
 
-  function saveEnabled(card, integration, next) {
-    const sw = card.querySelector(".dash-switch");
-    if (sw) sw.disabled = true;
-    cardError(card, "");
-    return updateAdminIntegration(integration.key, { enabled: next })
-      .then(async (res) => {
-        const now = res && res.integration ? res.integration.enabled : next;
-        dashToast(`${integration.name} is now ${now ? "on" : "off"}.`, "ok");
-        await applySaveResult(card, res);
-      })
-      .catch((e) => {
-        cardError(card, e.message);
-        dashToast(e.message, "err");
-      })
-      .finally(() => {
-        if (sw) sw.disabled = false;
-      });
-  }
-
   function closeEditor(row) {
     const editor = row.querySelector(".api-edit");
     const actions = row.querySelector(".api-actions");
@@ -194,11 +177,11 @@
 
   async function clearCredential(card, integration, cred) {
     const extra = cred.required
-      ? ` Clearing the required credential will turn off ${integration.name}.`
+      ? ` If no .env default exists, ${integration.name} will turn off.`
       : "";
     const ok = await dashConfirm(
-      `Clear the ${cred.label} for ${integration.name}?${extra}`,
-      "Clear credential"
+      `Clear the admin value for ${cred.label} on ${integration.name}? The .env default will be used again if one is set.${extra}`,
+      "Clear admin value"
     );
     if (!ok) return;
     cardError(card, "");
@@ -206,8 +189,20 @@
       const res = await updateAdminIntegration(integration.key, {
         credentials: { [cred.name]: "" },
       });
+      const updated =
+        res && res.integration && Array.isArray(res.integration.credentials)
+          ? res.integration.credentials.find((c) => c.name === cred.name)
+          : null;
       const disabled = res && res.integration && res.integration.enabled === false;
-      dashToast(disabled ? `Credential cleared. ${integration.name} is now off.` : "Credential cleared.", "ok");
+      const fallback = updated && updated.configured && updated.source === "env";
+      dashToast(
+        disabled
+          ? `Admin value cleared. ${integration.name} is now off.`
+          : fallback
+            ? `Admin value cleared. ${integration.name} is now using the .env default.`
+            : "Admin value cleared.",
+        "ok"
+      );
       await applySaveResult(card, res);
     } catch (e) {
       cardError(card, e.message);
@@ -223,6 +218,19 @@
 
     const value = make("div", "api-cred-value");
     value.appendChild(make("code", "api-mask", cred.configured ? cred.masked : "Not set"));
+    if (cred.configured) {
+      const sourceLabel =
+        cred.source === "env"
+          ? "from .env"
+          : cred.source === "override"
+            ? "admin override"
+            : cred.source === "db"
+              ? "saved"
+              : "";
+      if (sourceLabel) {
+        value.appendChild(make("span", "api-cred-source", sourceLabel));
+      }
+    }
 
     const actions = make("div", "api-actions");
     const editor = make("div", "api-edit");
@@ -233,9 +241,14 @@
         actions.appendChild(makeButton("Replace", "btn btn-ghost api-btn", () => {
           openEditor(row, integration, cred);
         }));
-        actions.appendChild(makeButton("Clear", "btn btn-ghost api-btn api-btn-danger", () => {
-          clearCredential(card, integration, cred);
-        }));
+        // A base .env value is not an admin value, so there is nothing to
+        // clear. Replacing it creates an override; the super admin owns the
+        // integration on/off switch.
+        if (cred.source !== "env") {
+          actions.appendChild(makeButton("Clear", "btn btn-ghost api-btn api-btn-danger", () => {
+            clearCredential(card, integration, cred);
+          }));
+        }
       } else {
         actions.appendChild(makeButton("Add", "btn btn-ghost api-btn", () => {
           openEditor(row, integration, cred);
@@ -261,36 +274,6 @@
 
     const state = make("div", "api-card-state");
     state.appendChild(statusPill(integration));
-    const sw = make("button", "dash-switch");
-    sw.type = "button";
-    sw.setAttribute("role", "switch");
-    sw.setAttribute("aria-checked", integration.enabled ? "true" : "false");
-    sw.setAttribute("aria-label", `Toggle ${integration.name}`);
-    if (!integration.available) {
-      sw.disabled = true;
-    } else {
-      sw.addEventListener("click", async () => {
-        const next = !integration.enabled;
-        if (!next) {
-          let message = `Turn off ${integration.name}?`;
-          if (integration.key === "googleAuth") {
-            message += " Admin Google sign-in will stop working. Password sign-in must remain available for the admin account.";
-          } else if (integration.key === "googleMaps") {
-            message += " The landing page will stop showing the map.";
-          } else if (integration.key === "googleCalendar") {
-            message += " Accepted reservations will no longer create calendar events.";
-          } else if (integration.key === "recaptcha") {
-            message += " Staff login, cashier signup and reservations will stop showing the bot check.";
-          } else if (integration.key === "paymongo") {
-            message += " Cashiers will no longer be able to create GCash online payment links for session bills.";
-          }
-          const ok = await dashConfirm(message, `Turn off ${integration.name}?`);
-          if (!ok) return;
-        }
-        saveEnabled(card, integration, next);
-      });
-    }
-    state.appendChild(sw);
     head.append(title, state);
     card.appendChild(head);
 
@@ -361,9 +344,7 @@
     try {
       const me = await getMe();
       if (me.role !== "admin") {
-        location.href = me.role === "cashier"
-          ? "../cashiers/cashier-dashboard.html"
-          : "../auth/login.html";
+        location.href = staffHome(me.role);
         return;
       }
 
@@ -378,7 +359,14 @@
       setText("profileEmail", me.email || "");
       setText("pfEmail", me.email || "—");
       setText("pfUsername", me.username || "—");
-      setText("pfRole", me.role === "admin" ? "Administrator" : (me.role || "—"));
+      setText(
+        "pfRole",
+        me.role === "admin"
+          ? "Administrator"
+          : me.role === "super_admin"
+            ? "Super administrator"
+            : (me.role || "—")
+      );
       setText("pfProvider", signedIn);
       setText("pfGoogle", me.googleLinked ? "Linked" : "Not linked");
       setText("pfCreated", formatDate(me.createdAt));

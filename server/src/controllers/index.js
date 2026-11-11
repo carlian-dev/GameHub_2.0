@@ -381,6 +381,31 @@ export function settingsController({ settingsService }) {
       const shaped = await settingsService.update(key, req.body || {}, {
         id: user.id,
         email: user.email ?? null,
+        role: user.role,
+      });
+      res.status(200).json({ ok: true, integration: shaped });
+    }),
+    /** Super admin: activation state only (credentials are omitted). */
+    superAdminIntegrations: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const data = await settingsService.superAdminIntegrations();
+      res.status(200).json(adminIntegrationsView(data));
+    }),
+    /** Super admin: flip one integration; any other field is rejected. */
+    superAdminUpdate: asyncHandler(async (req, res) => {
+      const { key } = req.params || {};
+      if (!key) throw new HttpError(422, "unknown integration");
+      const user = req.session && req.session.user;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const shaped = await settingsService.update(key, req.body || {}, {
+        id: user.id,
+        email: user.email ?? null,
+        role: user.role,
       });
       res.status(200).json({ ok: true, integration: shaped });
     }),

@@ -2,13 +2,24 @@
 // one shot: service-account JWT, Calendar API enablement, and calendar sharing.
 // Creates a throwaway event and deletes it again (no residue). Never prints the
 // private key. Run from server/: `npm run check:calendar`.
+// Settings > API values live in the matching *_OVERRIDE keys, so prefer those.
 import { env } from "../src/config/env.js";
 import { googleCalendarService } from "../src/services/googleCalendar.service.js";
 
+const CALENDAR = {
+  calendarId: env.GOOGLE_CALENDAR_ID_OVERRIDE || env.GOOGLE_CALENDAR_ID,
+  clientEmail:
+    env.GOOGLE_CALENDAR_CLIENT_EMAIL_OVERRIDE ||
+    env.GOOGLE_CALENDAR_CLIENT_EMAIL,
+  privateKey:
+    env.GOOGLE_CALENDAR_PRIVATE_KEY_OVERRIDE ||
+    env.GOOGLE_CALENDAR_PRIVATE_KEY,
+};
+
 const MISSING = [
-  ["GOOGLE_CALENDAR_ID", env.GOOGLE_CALENDAR_ID],
-  ["GOOGLE_CALENDAR_CLIENT_EMAIL", env.GOOGLE_CALENDAR_CLIENT_EMAIL],
-  ["GOOGLE_CALENDAR_PRIVATE_KEY", env.GOOGLE_CALENDAR_PRIVATE_KEY],
+  ["GOOGLE_CALENDAR_ID", CALENDAR.calendarId],
+  ["GOOGLE_CALENDAR_CLIENT_EMAIL", CALENDAR.clientEmail],
+  ["GOOGLE_CALENDAR_PRIVATE_KEY", CALENDAR.privateKey],
 ]
   .filter(([, value]) => !value)
   .map(([key]) => key);
@@ -19,14 +30,10 @@ async function main() {
     process.exit(1);
   }
 
-  const svc = googleCalendarService({
-    calendarId: env.GOOGLE_CALENDAR_ID,
-    clientEmail: env.GOOGLE_CALENDAR_CLIENT_EMAIL,
-    privateKey: env.GOOGLE_CALENDAR_PRIVATE_KEY,
-  });
+  const svc = googleCalendarService(CALENDAR);
 
-  console.log(`[checkCalendar] calendar: ${env.GOOGLE_CALENDAR_ID}`);
-  console.log(`[checkCalendar] service account: ${env.GOOGLE_CALENDAR_CLIENT_EMAIL}`);
+  console.log(`[checkCalendar] calendar: ${CALENDAR.calendarId}`);
+  console.log(`[checkCalendar] service account: ${CALENDAR.clientEmail}`);
 
   const start = new Date(Date.now() + 60 * 60 * 1000);
   const end = new Date(start.getTime() + 60 * 60 * 1000);
@@ -53,7 +60,7 @@ async function main() {
       console.error("[checkCalendar] After enabling, wait a few minutes and re-run this check.");
     } else if (err && err.status === 404) {
       console.error(
-        `[checkCalendar] Fix: share the calendar with ${env.GOOGLE_CALENDAR_CLIENT_EMAIL} ` +
+        `[checkCalendar] Fix: share the calendar with ${CALENDAR.clientEmail} ` +
           'and grant "Make changes to events".'
       );
     } else if (err && err.status === 401) {

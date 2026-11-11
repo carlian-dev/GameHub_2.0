@@ -85,26 +85,43 @@ per-request queries.
   `{"ok":true,"integrations":{"googleAuth":{"enabled":true,"clientId":"..."},"googleMaps":{"enabled":false,"apiKey":""}}}`.
   Both settings documents are read in one query; disabled integrations expose
   empty credential strings, never stored values. A settings read failure fails
-  closed for both integrations (HTTP 200 with both disabled). Environment
-  defaults apply only when the relevant document is positively absent.
+  closed for both integrations (HTTP 200 with both disabled). Each credential
+  resolves in this order: matching `*_OVERRIDE` env field (written by the admin
+  Settings page), the normal env key, then the settings document. This means a
+  seeded settings document no longer hides `RECAPTCHA_*`, `GOOGLE_CLIENT_ID`,
+  `GEMINI_API_KEY`, or the Calendar defaults.
 - `GET /api/admin/settings/integrations` requires an admin session and returns
   the integration cards with `available`, `enabled`, `updatedAt`, `updatedBy`,
-  and credentials reduced to `{name,label,required,configured,masked}`. Google
-  client-ID masks use the last four identifying characters before
+  and credentials reduced to `{name,label,required,configured,masked,source}`.
+  `source` is `override`, `db`, `env`, or empty and never exposes a value.
+  Google client-ID masks use the last four identifying characters before
   `.apps.googleusercontent.com`, not the constant suffix.
 - `PUT /api/admin/settings/integrations/{key}` accepts
-  `{enabled?: bool, credentials?: {name: string}}`. An empty string clears a
-  credential; clearing a required credential auto-disables the integration.
-  The handler writes only changed fields and commits the settings update plus
-  its `integration_settings_update` audit log entry in one MongoDB
-  transaction.
-- The `settings` collection is authoritative (`unique key`). Environment
-  `GOOGLE_CLIENT_ID` is only the default when no `googleAuth` document exists;
-  `npm run setup:settings` creates the documents once (idempotent upsert).
+  `{credentials?: {name: string}}`. An empty string clears the admin value and
+  falls back to the normal env key; the integration auto-disables only when no
+  required value remains. Sending `enabled` is rejected with 403 — activation
+  belongs to the super admin. The handler writes only changed fields, commits
+  the settings update plus its `integration_settings_update` audit log entry
+  in one MongoDB transaction, then mirrors explicit values to the matching
+  `*_OVERRIDE` keys in `server/.env`.
+- `GET /api/super-admin/settings/integrations` requires a `super_admin`
+  session and returns the same cards without credentials: `key`, `name`,
+  `description`, `available`, `enabled`, `updatedAt`, `updatedBy`.
+  `PUT /api/super-admin/settings/integrations/{key}` accepts exactly
+  `{enabled: bool}` and writes an `integration_toggle` audit entry. Any other
+  field (including `credentials`) is rejected, so the role cannot read or
+  change integration configuration.
+- The `settings` collection owns activation state (`unique key`) and stores the
+  encrypted copy of admin credentials. Credential resolution additionally
+  consults the `*_OVERRIDE` env fields and the normal env defaults as described
+  above. `npm run setup:settings` creates the documents once (idempotent
+  upsert); the seed's empty credential fields deliberately fall through to
+  `.env`.
 
 ## 3. Authentication and authorization model
 
-Account lifecycle (single administrator by design):
+Account lifecycle (single administrator plus a least-privilege super
+administrator, both created directly in the database):
 
 ```
   registration (cashier) / Google (admin)
@@ -125,7 +142,15 @@ Account lifecycle (single administrator by design):
 * The single administrator signs in with email + password or Google
   (verified server-side against the `googleAuth` setting, falling back to
   `GOOGLE_CLIENT_ID` only while no settings document exists; unknown emails
-  404, non-admin emails 403). No endpoint creates administrators.
+  404, non-staff emails 403). No endpoint creates administrators.
+* The super administrator signs in with email + password or Google. Its only
+  data access is `/api/super-admin/settings/integrations`: list activation
+  state and send `{enabled}` for one integration. Every regular `/api/admin/`
+  endpoint treats it as unauthorized, and its own endpoints omit credentials.
+  A global `superAdminScope` middleware additionally rejects `/api/admin/*`,
+  `/api/cashier/*`, and the full reservation list for this role, so endpoints
+  that only check for a login cannot be reached either. The service layer
+  enforces the split even if a route guard is bypassed.
 * Sessions are server-side `express-session` stored in MongoDB
   `authSessions` collection (not `sessions`, to avoid collision with
   billing sessions). Cookie `gh_session` is `httpOnly`, `sameSite=lax`,
@@ -137,7 +162,7 @@ Account lifecycle (single administrator by design):
 
 | Collection | Key fields | Indexes |
 |---|---|---|
-| `users` | email (admins/legacy) / username (cashiers), passwordHash (bcrypt), googleSub, role, status, names, schedule, authProvider | unique partial `email`, unique sparse `username` |
+| `users` | email (admins/legacy) / username (cashiers), passwordHash (bcrypt), googleSub, role (`admin`, `super_admin`, `cashier`), status, names, schedule, authProvider | unique partial `email`, unique sparse `username` |
 | `tables` | name (unique), status (available/occupied/reserved/maintenance), archived flag | unique `name` |
 | `rates` | type (regular/special), pricePerHour, active | (tiny; type lookup) |
 | `sessions` | tableId, tableName, customerName, cashierId, cashierName, startTime, endTime, plannedMinutes, status, pricePerHour, rateType, closedAt, createdAt, updatedAt | unique partial `tableId` where `status="active"` |
@@ -159,7 +184,8 @@ Frontend/
   index.html               Customer landing (hero, location, map)
   login/index.html         Redirect so bare /login resolves
   src/function/auth/       Login (single step + Google), cashier signup form
-  src/function/admin/      Admin dashboard (live stat cards), applicants/staff table
+  src/function/admin/      Admin dashboard, staff, credentials, operations
+  src/function/super-admin/ Integration on/off control (no credentials)
   src/function/cashiers/   Cashier dashboard
   src/function/tables/     Tables, rates page, sessions view
   src/function/shared/     Landing status logic
@@ -189,6 +215,8 @@ Frontend/
    never see connection strings, mail passwords, or hashes.
 2. Every state-changing and every listing endpoint re-checks the session
    server-side; role is taken from the session, never from request data.
+   Integration credentials are admin-only and activation is super-admin-only;
+   neither role can exercise the other's capability.
 3. Passwords are bcrypt-hashed and invite tokens are SHA-256-hashed; plain
    values never touch the database, logs, or responses. List endpoints
    project hashes out.

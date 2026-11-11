@@ -66,6 +66,15 @@ const SETTINGS = [
     updatedBy: null,
   },
   {
+    key: "gemini",
+    enabled: false,
+    credentials: {
+      apiKey: { value: "", last4: "", updatedAt: null },
+    },
+    updatedAt: null,
+    updatedBy: null,
+  },
+  {
     key: "otp",
     enabled: false,
     credentials: {},

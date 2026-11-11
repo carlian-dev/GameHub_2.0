@@ -259,7 +259,7 @@ document.getElementById("export").addEventListener("click", () => {
   const msg = document.getElementById("msg");
   try {
     const me = await getMe();
-    if (me.role !== "admin") { location.href = "../auth/login.html"; return; }
+    if (me.role !== "admin") { location.href = staffHome(me.role); return; }
     const name = me.email || "admin";
     document.getElementById("who").textContent = name;
     document.getElementById("avatar").textContent = name.charAt(0).toUpperCase();

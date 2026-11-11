@@ -34,6 +34,7 @@ const ACTION_LABELS = {
   fnb_order_update: "F&B quantity changed",
   fnb_order_remove: "F&B removed",
   integration_settings_update: "API settings updated",
+  integration_toggle: "API integration toggled",
 };
 
 const ACTION_TONES = {
@@ -64,6 +65,7 @@ const ACTION_TONES = {
   fnb_order_update: "pending",
   fnb_order_remove: "declined",
   integration_settings_update: "pending",
+  integration_toggle: "pending",
 };
 
 let allRows = [];
@@ -187,6 +189,11 @@ function detailsOf(log) {
     const changed = Array.isArray(m.changed) ? m.changed.join(", ") : "";
     const state = m.enabled === true ? "enabled" : m.enabled === false ? "disabled" : "";
     return [log.target, changed ? `changed ${changed}` : "", state].filter(Boolean).join(" · ") || "—";
+  }
+
+  if (action === "integration_toggle") {
+    const state = m.enabled === true ? "enabled" : m.enabled === false ? "disabled" : "";
+    return [log.target, state].filter(Boolean).join(" · ") || "—";
   }
 
   const extra = Object.entries(m)
@@ -328,7 +335,12 @@ async function populateStaff() {
     for (const c of cashiers || []) {
       const name = c.displayName || c.username || c.email || c.id;
       const uname = c.username && c.username !== name ? ` (${c.username})` : "";
-      const role = c.role === "admin" ? " · admin" : "";
+      const role =
+        c.role === "admin"
+          ? " · admin"
+          : c.role === "super_admin"
+            ? " · super admin"
+            : "";
       addOption(sel, c.id, `${name}${uname}${role}`);
     }
   } catch {
@@ -340,7 +352,7 @@ async function guard() {
   try {
     const me = await getMe();
     if (me.role !== "admin") {
-      location.href = "../auth/login.html";
+      location.href = staffHome(me.role);
       return null;
     }
     const name = me.email || me.username || "admin";

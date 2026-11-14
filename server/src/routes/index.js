@@ -51,8 +51,11 @@ export default function apiRoutes({ controllers }) {
     activityController: controllers.activity,
   });
 
-  // Super-admin routes (requireSuperAdmin): integration on/off only.
-  registerSuperAdminRoutes(router, { settingsController: controllers.settings });
+  // Super-admin routes (requireSuperAdmin): integration on/off + own 2FA.
+  registerSuperAdminRoutes(router, {
+    settingsController: controllers.settings,
+    twoFactorController: controllers.twoFactor,
+  });
 
   // Table routes (admin + public availability).
   registerTableRoutes(router, { tableController: controllers.table, rateController: controllers.rate });

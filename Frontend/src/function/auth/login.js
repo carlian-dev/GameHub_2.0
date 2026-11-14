@@ -1,11 +1,14 @@
 // src/function/auth/login.js - single-step login logic.
 // Pair: src/function/auth/login.html <-> server/src/routes/auth.routes.js
-// (POST /api/login, POST /api/auth/google).
+// (POST /api/login, POST /api/auth/google, POST /api/login/2fa...).
 // Valid ACTIVE accounts log straight in (email/username + password, or Google)
 // and redirect by role (staffHome): super_admin -> integration toggles,
 // admin -> admin dashboard, cashier -> cashier dashboard. Pending/archived/
 // declined show the Backend message verbatim. Enter submits via the real
 // <form>; per-field validation marks aria-invalid + red border until fixed.
+// Super admins must pass a second step: an authenticator-app code, or a
+// one-time QR enrollment when no app is paired yet. No session is created
+// until that code is verified.
 
 function setFieldError(input, hasError) {
   input.setAttribute("aria-invalid", hasError ? "true" : "false");
@@ -23,6 +26,119 @@ function welcomeAndGo(data) {
   msg.textContent = `Welcome ${who} (${data.role}).`;
   msg.className = "ok";
   location.href = staffHome(data.role);
+}
+
+// --- Super-admin second step: authenticator app (TOTP) ---
+let tfaMode = "challenge";
+
+const TFA_COPY = {
+  challenge: {
+    title: "Check your authenticator app",
+    text: "Enter the 6-digit code from your authenticator app to finish signing in.",
+  },
+  enroll: {
+    title: "Secure your super admin account",
+    text: "Super admin sign-ins require an authenticator app. Scan the QR code, then enter the 6-digit code it shows.",
+  },
+};
+
+function tfaMsg(text, kind = "") {
+  const msg = document.getElementById("tfaMsg");
+  if (!msg) return;
+  msg.textContent = text || "";
+  msg.className = kind;
+}
+
+function setTfaMode(mode) {
+  tfaMode = mode === "enroll" ? "enroll" : "challenge";
+  const copy = TFA_COPY[tfaMode];
+  document.getElementById("tfaTitle").textContent = copy.title;
+  document.getElementById("tfaText").textContent = copy.text;
+  document.getElementById("tfaQrWrap").hidden = tfaMode !== "enroll";
+  document.getElementById("tfaGo").textContent =
+    tfaMode === "enroll" ? "Confirm and sign in" : "Verify and continue";
+}
+
+async function loadEnrollmentQr() {
+  const wrap = document.getElementById("tfaQrWrap");
+  tfaMsg("Preparing your QR code…");
+  try {
+    const data = await getTwoFactorSetup();
+    document.getElementById("tfaQr").src = data.qrDataUrl;
+    document.getElementById("tfaSecret").textContent =
+      String(data.secret || "").match(/.{1,4}/g)?.join(" ") || data.secret;
+    wrap.hidden = false;
+    tfaMsg("");
+    document.getElementById("tfaCode").focus();
+  } catch (e) {
+    // Another tab may have completed enrollment; fall back to the code step.
+    if (/already enabled/i.test(e.message)) {
+      setTfaMode("challenge");
+      tfaMsg("This account already has an authenticator. Enter its 6-digit code.");
+      document.getElementById("tfaCode").focus();
+      return;
+    }
+    tfaMsg(e.message, "err");
+  }
+}
+
+function showTwoFactor(resp) {
+  document.getElementById("step1").hidden = true;
+  const step2 = document.getElementById("step2fa");
+  step2.hidden = false;
+  document.getElementById("tfaCode").value = "";
+  document.getElementById("tfaCode").setAttribute("aria-invalid", "false");
+  tfaMsg("");
+  setTfaMode(resp && resp.enrollmentRequired ? "enroll" : "challenge");
+  if (tfaMode === "enroll") loadEnrollmentQr();
+  else document.getElementById("tfaCode").focus();
+}
+
+function showPasswordStep() {
+  document.getElementById("step2fa").hidden = true;
+  document.getElementById("step1").hidden = false;
+  document.getElementById("tfaCode").value = "";
+  tfaMsg("");
+  const msg = document.getElementById("msg");
+  msg.textContent = "";
+  msg.className = "";
+  document.getElementById("email").focus();
+}
+
+async function submitTwoFactor() {
+  const input = document.getElementById("tfaCode");
+  const code = input.value.replace(/\D/g, "");
+  if (code.length !== 6) {
+    input.setAttribute("aria-invalid", "true");
+    tfaMsg("Enter the 6-digit code from your authenticator app.", "err");
+    input.focus();
+    return;
+  }
+  const go = document.getElementById("tfaGo");
+  go.disabled = true;
+  tfaMsg("Verifying…");
+  try {
+    const data = await verifyTwoFactorLogin(code);
+    welcomeAndGo(data);
+  } catch (e) {
+    tfaMsg(e.message, "err");
+    input.value = "";
+    input.setAttribute("aria-invalid", "false");
+    input.focus();
+    // Expired/too many attempts: the pending session is gone; start over.
+    if (/sign in again/i.test(e.message)) setTimeout(showPasswordStep, 1600);
+  } finally {
+    go.disabled = false;
+  }
+}
+
+async function backToPassword() {
+  try {
+    await cancelTwoFactorLogin();
+  } catch {
+    // The pending session may already have expired; still return to step 1.
+  }
+  showPasswordStep();
 }
 
 async function submitLogin() {
@@ -53,7 +169,12 @@ async function submitLogin() {
       msg.className = "err";
       return;
     }
-    welcomeAndGo(await login(emailEl.value.trim(), pwEl.value, recaptchaToken));
+    const resp = await login(emailEl.value.trim(), pwEl.value, recaptchaToken);
+    if (resp.twoFactorRequired) {
+      showTwoFactor(resp);
+      return;
+    }
+    welcomeAndGo(resp);
   } catch (e) {
     // Tokens are single-use: let the guest retry after any rejected attempt.
     GameHubRecaptcha.reset();
@@ -72,6 +193,19 @@ document.getElementById("go").addEventListener("click", (e) => {
   // Backstop for browsers without form support; submit handler does the work.
   if (e.currentTarget.form) return;
   submitLogin();
+});
+
+// Authenticator step listeners.
+document.getElementById("tfaForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  submitTwoFactor();
+});
+document.getElementById("tfaBack").addEventListener("click", backToPassword);
+document.getElementById("tfaCode").addEventListener("input", (e) => {
+  // Keep only digits: authenticator apps sometimes show "123 456".
+  const digits = e.currentTarget.value.replace(/\D/g, "").slice(0, 6);
+  if (e.currentTarget.value !== digits) e.currentTarget.value = digits;
+  e.currentTarget.setAttribute("aria-invalid", "false");
 });
 
 // Password visibility toggle (reference: eye icon inside the field).
@@ -125,7 +259,9 @@ async function initGoogleLogin() {
         const msg = document.getElementById("msg");
         try {
           const resp = await loginWithGoogle(credential);
-          if (resp.step === "approval") {
+          if (resp.twoFactorRequired) {
+            showTwoFactor(resp);
+          } else if (resp.step === "approval") {
             msg.textContent = "Google account created! Status: pending — awaiting admin approval.";
             msg.className = "ok";
           } else welcomeAndGo(resp);

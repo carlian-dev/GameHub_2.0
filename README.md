@@ -6,8 +6,8 @@ access, cashier account administration, billiard-table and rate management,
 customer sessions, reservations, billing and payments, reporting, and audit
 logging across four roles: Super Administrator, Administrator, Cashier, and
 walk-in Customer. The super administrator is intentionally limited to turning
-API integrations on and off; administrators configure credentials and run the
-hall.
+API integrations on and off (plus managing their own authenticator-app 2FA);
+administrators configure credentials and run the hall.
 
 The system is intentionally built with a small, explainable stack: a
 Node/Express JSON API backed by MongoDB Atlas, and a dependency-free
@@ -157,7 +157,10 @@ GameHub_2.0/
 * The super administrator's only feature is turning API integrations on or
   off at `/src/function/super-admin/integrations.html`. Administrators manage
   the credentials on Admin > Settings > API but cannot send the on/off flag;
-  the server rejects it.
+  the server rejects it. Super-admin sign-in always requires an authenticator
+  app (TOTP): the first login forces QR enrollment, later logins ask for a
+  6-digit code. A lost phone is recovered by clearing the account's
+  `twoFactor` fields in Atlas (see AGENTS.md).
 * One-time email codes protect account creation verification and
   destructive approvals (archiving). Day-to-day login is direct session
   authentication after the status gates.

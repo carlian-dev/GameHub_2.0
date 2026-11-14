@@ -143,9 +143,12 @@ administrator, both created directly in the database):
   (verified server-side against the `googleAuth` setting, falling back to
   `GOOGLE_CLIENT_ID` only while no settings document exists; unknown emails
   404, non-staff emails 403). No endpoint creates administrators.
-* The super administrator signs in with email + password or Google. Its only
-  data access is `/api/super-admin/settings/integrations`: list activation
-  state and send `{enabled}` for one integration. Every regular `/api/admin/`
+* The super administrator signs in with email + password or Google, then always
+  passes a second factor: an authenticator-app TOTP code (first sign-in forces
+  QR enrollment). Its only data access is
+  `/api/super-admin/settings/integrations`: list activation
+  state and send `{enabled}` for one integration, plus its own
+  `/api/super-admin/2fa` endpoints. Every regular `/api/admin/`
   endpoint treats it as unauthorized, and its own endpoints omit credentials.
   A global `superAdminScope` middleware additionally rejects `/api/admin/*`,
   `/api/cashier/*`, and the full reservation list for this role, so endpoints

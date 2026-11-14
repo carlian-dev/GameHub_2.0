@@ -51,7 +51,7 @@ export function superAdminScope(req, res, next) {
     path.startsWith("/cashier/") ||
     (path === "/reservations" && req.method === "GET");
   if (blocked) {
-    return next(new HttpError(403, "super admin can only manage integrations"));
+    return next(new HttpError(403, "super admin can only manage integrations and security"));
   }
   return next();
 }

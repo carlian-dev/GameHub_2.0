@@ -13,6 +13,7 @@ export function authService({
   googleClientIdFromEnv = "",
   googleAuthConfigProvider = null,
   recaptchaService = null,
+  twoFactorService = null,
 }) {
   const usersColl = db.collection("users");
   const activityLogsColl = db.collection("activityLogs");
@@ -23,6 +24,19 @@ export function authService({
     ["archived", "account archived"],
     ["declined", "application was declined"],
   ];
+
+  // Super-admin 2FA: the challenge lives in the session until a code is
+  // verified, so no authenticated `user` exists in the meantime.
+  const TWO_FACTOR_KEY = "twoFactorChallenge";
+  const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+  const ENROLLMENT_TTL_MS = 10 * 60 * 1000;
+  const MAX_2FA_ATTEMPTS = 5;
+
+  function statusError(status, message) {
+    const err = new Error(message);
+    err.status = status;
+    return err;
+  }
 
   async function checkStatus(user) {
     for (const [status, message] of STATUS_GATES) {
@@ -59,6 +73,66 @@ export function authService({
     } catch {
       // Audit is best-effort: a log write must never block sign-in/sign-out.
     }
+  }
+
+  function sessionPayload(user) {
+    return {
+      id: String(user._id),
+      username: user.username ?? null,
+      email: user.email ?? null,
+      role: user.role,
+    };
+  }
+
+  async function regenerateSession(req) {
+    if (req.session && typeof req.session.regenerate === "function") {
+      await new Promise((resolve, reject) => {
+        req.session.regenerate((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }
+  }
+
+  async function destroySession(req) {
+    if (req.session && typeof req.session.destroy === "function") {
+      await new Promise((resolve, reject) => {
+        req.session.destroy((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }
+  }
+
+  /**
+   * Start a super-admin 2FA challenge. The session is regenerated first
+   * (fixation defence) and holds only a pending challenge — never `user` —
+   * until the authenticator code is verified.
+   */
+  async function startTwoFactor(req, user, mode, provider) {
+    await regenerateSession(req);
+    const now = Date.now();
+    req.session[TWO_FACTOR_KEY] = {
+      userId: String(user._id),
+      mode,
+      provider,
+      attempts: 0,
+      issuedAt: now,
+      expiresAt: now + (mode === "enroll" ? ENROLLMENT_TTL_MS : CHALLENGE_TTL_MS),
+    };
+    if (typeof req.session.save === "function") await req.session.save();
+  }
+
+  /** Create the real logged-in session after password/Google (+2FA) passes. */
+  async function completeLogin(req, user, provider) {
+    const payload = sessionPayload(user);
+    await regenerateSession(req);
+    req.session.user = payload;
+    if (typeof req.session.save === "function") await req.session.save();
+    await logAuth("login", user, provider);
+    return { username: user.username ?? null, email: user.email ?? null, role: user.role };
   }
 
   return {
@@ -98,28 +172,123 @@ export function authService({
 
       await checkStatus(user);
 
-      // Session payload exactly (migration.md §13.1).
-      const payload = {
-        id: String(user._id),
-        username: user.username ?? null,
-        email: user.email ?? null,
-        role: user.role,
-      };
-
-      // Regenerate + save to prevent session fixation (divergence #1).
-      if (req.session.regenerate) {
-        await new Promise((resolve, reject) => {
-          req.session.regenerate((err) => {
-            if (err) return reject(err);
-            resolve();
-          });
-        });
+      // Super admins always go through the authenticator app. No 2FA enrolled
+      // means the login session stays pending until setup is confirmed.
+      if (twoFactorService) {
+        const challenge = await twoFactorService.challengeState(user);
+        if (challenge.required) {
+          await startTwoFactor(req, user, challenge.mode, "password");
+          return {
+            twoFactorRequired: true,
+            enrollmentRequired: challenge.mode === "enroll",
+          };
+        }
       }
-      req.session.user = payload;
-      await req.session.save();
-      await logAuth("login", user, "password");
 
-      return { username: user.username ?? null, email: user.email ?? null, role: user.role };
+      return completeLogin(req, user, "password");
+    },
+
+    /** Finish a super-admin login with a 6-digit authenticator code. */
+    async verifyTwoFactor({ code } = {}, req) {
+      const pending = req.session && req.session[TWO_FACTOR_KEY];
+      if (!pending || !pending.userId) {
+        throw statusError(401, "sign in first");
+      }
+      if (!twoFactorService) {
+        throw statusError(503, "two-factor authentication is unavailable");
+      }
+      if (!pending.expiresAt || Date.now() > pending.expiresAt) {
+        await destroySession(req);
+        throw statusError(401, "two-factor verification expired — sign in again");
+      }
+      if ((pending.attempts || 0) >= MAX_2FA_ATTEMPTS) {
+        await destroySession(req);
+        throw statusError(429, "too many incorrect codes — sign in again");
+      }
+
+      const user = await userModel.findById(pending.userId);
+      if (!user || user.role !== "super_admin") {
+        await destroySession(req);
+        throw statusError(401, "sign in first");
+      }
+      if (user.status !== "active") {
+        await destroySession(req);
+        throw statusError(403, "account is not active");
+      }
+
+      // Never let a stale enrollment challenge replace an app that was paired
+      // in another tab/session after this login started.
+      if (pending.mode === "enroll" && user.twoFactor?.enabled === true) {
+        pending.mode = "challenge";
+        if (typeof req.session.save === "function") await req.session.save();
+        throw statusError(
+          409,
+          "two-factor authentication is already enabled — enter a code from your app"
+        );
+      }
+
+      try {
+        if (pending.mode === "enroll") {
+          await twoFactorService.completeEnrollment(pending.userId, code);
+        } else {
+          await twoFactorService.verifyLogin(pending.userId, code);
+        }
+      } catch (err) {
+        if (err && err.status === 422) {
+          pending.attempts = (pending.attempts || 0) + 1;
+          if (pending.attempts >= MAX_2FA_ATTEMPTS) {
+            await destroySession(req);
+            throw statusError(429, "too many incorrect codes — sign in again");
+          }
+          if (typeof req.session.save === "function") await req.session.save();
+          const left = MAX_2FA_ATTEMPTS - pending.attempts;
+          throw statusError(
+            422,
+            `invalid authenticator code — ${left} ${left === 1 ? "attempt" : "attempts"} left`
+          );
+        }
+        throw err;
+      }
+
+      const provider = pending.provider || "password";
+      return await completeLogin(req, user, `${provider}+totp`);
+    },
+
+    /** Pending-enrollment only: return the QR/manual key for the app. */
+    async setupPendingEnrollment(req) {
+      const pending = req.session && req.session[TWO_FACTOR_KEY];
+      if (!pending || !pending.userId) {
+        throw statusError(401, "sign in first");
+      }
+      if (pending.mode !== "enroll") {
+        throw statusError(409, "an authenticator is already paired — enter its 6-digit code");
+      }
+      if (!pending.expiresAt || Date.now() > pending.expiresAt) {
+        await destroySession(req);
+        throw statusError(401, "two-factor verification expired — sign in again");
+      }
+      if (!twoFactorService) {
+        throw statusError(503, "two-factor authentication is unavailable");
+      }
+
+      const user = await userModel.findById(pending.userId);
+      if (!user || user.role !== "super_admin") {
+        await destroySession(req);
+        throw statusError(401, "sign in first");
+      }
+      if (user.twoFactor?.enabled === true) {
+        // Another tab finished enrollment: require the existing app's code.
+        pending.mode = "challenge";
+        if (typeof req.session.save === "function") await req.session.save();
+        throw statusError(409, "two-factor authentication is already enabled — enter a code from your app");
+      }
+      return await twoFactorService.beginEnrollment(pending.userId);
+    },
+
+    /** Abandon a pending 2FA login and drop the pre-auth session. */
+    async cancelTwoFactor(req) {
+      await destroySession(req);
+      return { ok: true };
     },
 
     async logout(req) {
@@ -159,6 +328,14 @@ export function authService({
         throw err;
       }
 
+      // A super-admin session is only valid with an authenticator paired.
+      // This also invalidates sessions that pre-date the 2FA rollout and
+      // forces re-enrollment after the app is turned off.
+      if (user.role === "super_admin" && user.twoFactor?.enabled !== true) {
+        await destroySession(req);
+        throw statusError(401, "two-factor enrollment required — sign in again");
+      }
+
       const googleSub = String(user.googleSub || "");
       const createdAt = user.createdAt;
       const createdAtIso = createdAt instanceof Date ? createdAt.toISOString() : null;
@@ -173,6 +350,8 @@ export function authService({
         authProvider: provider,
         createdAt: createdAtIso,
         googleLinked: googleSub !== "",
+        twoFactorEnabled:
+          user.role === "super_admin" && user.twoFactor?.enabled === true,
       };
     },
 
@@ -402,28 +581,20 @@ export function authService({
         );
       }
 
-      // Session payload exactly (migration.md §13.1).
-      const payload = {
-        id: String(user._id),
-        username: user.username ?? null,
-        email: user.email ?? null,
-        role: user.role,
-      };
-
-      // Regenerate + save to prevent session fixation (divergence #1).
-      if (req.session.regenerate) {
-        await new Promise((resolve, reject) => {
-          req.session.regenerate((err) => {
-            if (err) return reject(err);
-            resolve();
-          });
-        });
+      // Super admins always go through the authenticator app, including
+      // Google sign-in. No 2FA enrolled means pending enrollment.
+      if (twoFactorService) {
+        const challenge = await twoFactorService.challengeState(user);
+        if (challenge.required) {
+          await startTwoFactor(req, user, challenge.mode, "google");
+          return {
+            twoFactorRequired: true,
+            enrollmentRequired: challenge.mode === "enroll",
+          };
+        }
       }
-      req.session.user = payload;
-      await req.session.save();
-      await logAuth("login", user, "google");
 
-      return { username: user.username ?? null, email: user.email ?? null, role: user.role };
+      return completeLogin(req, user, "google");
     },
   };
 }

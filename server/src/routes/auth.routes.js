@@ -12,6 +12,11 @@ export function registerAuthRoutes(router, { authController, invitationControlle
   router.post("/cashiers/register", authController.register);
   router.get("/invitations/:token", invitationController.check);
   router.post("/login", authController.login);
+  // Super-admin authenticator step: guarded by the pending session inside the
+  // controller/service, not by requireLogin (there is no `user` yet).
+  router.post("/login/2fa", authController.twoFactorVerify);
+  router.post("/login/2fa/setup", authController.twoFactorSetup);
+  router.post("/login/2fa/cancel", authController.twoFactorCancel);
   router.post("/auth/google", authController.google);
 
   // Authenticated (session required — requireLogin applied inside controllers)

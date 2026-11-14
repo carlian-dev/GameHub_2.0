@@ -79,6 +79,20 @@ async function login(email, password, recaptchaToken = "") {
     body: JSON.stringify({ email, password, recaptchaToken }),
   });
 }
+// Super-admin two-factor (authenticator app, TOTP). Login returns
+// twoFactorRequired before a session exists; these finish that pending login.
+async function verifyTwoFactorLogin(code) {
+  return api("/api/login/2fa", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+async function getTwoFactorSetup() {
+  return api("/api/login/2fa/setup", { method: "POST" });
+}
+async function cancelTwoFactorLogin() {
+  return api("/api/login/2fa/cancel", { method: "POST" });
+}
 async function loginWithGoogle(idToken) {
   return api("/api/auth/google", {
     method: "POST",
@@ -124,6 +138,26 @@ async function updateSuperAdminIntegration(key, enabled) {
   return api(`/api/super-admin/settings/integrations/${encodeURIComponent(key)}`, {
     method: "PUT",
     body: JSON.stringify({ enabled }),
+  });
+}
+
+// --- Super admin authenticator app (TOTP) ---
+async function getSuperAdminTwoFactor() {
+  return api("/api/super-admin/2fa");
+}
+async function setupSuperAdminTwoFactor() {
+  return api("/api/super-admin/2fa/setup", { method: "POST" });
+}
+async function enableSuperAdminTwoFactor(code) {
+  return api("/api/super-admin/2fa/enable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+async function disableSuperAdminTwoFactor(code) {
+  return api("/api/super-admin/2fa/disable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
   });
 }
 

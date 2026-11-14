@@ -152,6 +152,155 @@
     }
   }
 
+  // --- Authenticator app (2FA) ---
+  const tfaStatus = document.getElementById("tfaStatus");
+  const tfaNote = document.getElementById("tfaNote");
+  const tfaActions = document.getElementById("tfaActions");
+  const tfaSetup = document.getElementById("tfaSetup");
+  const tfaSetupCode = document.getElementById("tfaSetupCode");
+  const tfaMsgEl = document.getElementById("tfaSecurityMsg");
+
+  function tfaSetMsg(text, kind = "") {
+    if (!tfaMsgEl) return;
+    tfaMsgEl.textContent = text || "";
+    tfaMsgEl.className = `security-msg${kind ? ` is-${kind}` : ""}`;
+  }
+
+  function renderSecurity(status) {
+    const enabled = !!(status && status.enabled);
+    if (tfaStatus) {
+      tfaStatus.textContent = enabled ? "Enabled" : "Off";
+      tfaStatus.className = `settings-badge ${enabled ? "is-active" : "is-declined"}`;
+    }
+    if (tfaNote) {
+      if (enabled) {
+        const enrolled = status.enrolledAt
+          ? ` Enrolled ${formatDate(status.enrolledAt)}.`
+          : "";
+        const used = status.lastUsedAt
+          ? ` Last used ${formatDate(status.lastUsedAt)}.`
+          : "";
+        tfaNote.textContent =
+          `An authenticator app is paired. Every super admin sign-in asks for a fresh 6-digit code.${enrolled}${used}`;
+      } else {
+        tfaNote.textContent =
+          "2FA is off. The next super admin sign-in will require pairing an authenticator app before the dashboard opens.";
+      }
+    }
+    if (tfaActions) tfaActions.hidden = false;
+    if (tfaSetup) tfaSetup.hidden = true;
+    const reenroll = document.getElementById("tfaReenroll");
+    const disable = document.getElementById("tfaDisable");
+    if (reenroll) reenroll.textContent = enabled ? "Set up a new device" : "Set up authenticator";
+    if (disable) disable.hidden = !enabled;
+  }
+
+  async function loadSecurity() {
+    try {
+      const status = await getSuperAdminTwoFactor();
+      renderSecurity(status);
+    } catch (e) {
+      if (tfaStatus) {
+        tfaStatus.textContent = "Unavailable";
+        tfaStatus.className = "settings-badge is-declined";
+      }
+      tfaSetMsg(e.message, "err");
+    }
+  }
+
+  async function beginSecuritySetup() {
+    const btn = document.getElementById("tfaReenroll");
+    if (btn) btn.disabled = true;
+    tfaSetMsg("Preparing your QR code…");
+    try {
+      const data = await setupSuperAdminTwoFactor();
+      document.getElementById("tfaSetupQr").src = data.qrDataUrl;
+      document.getElementById("tfaSetupSecret").textContent =
+        String(data.secret || "").match(/.{1,4}/g)?.join(" ") || data.secret;
+      tfaSetup.hidden = false;
+      tfaActions.hidden = true;
+      tfaSetupCode.value = "";
+      tfaSetMsg("Scan the QR code, then enter the 6-digit code to confirm.", "ok");
+      document.getElementById("tfaSetup").scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+      tfaSetupCode.focus();
+    } catch (e) {
+      tfaSetMsg(e.message, "err");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function cancelSecuritySetup() {
+    if (tfaSetup) tfaSetup.hidden = true;
+    if (tfaActions) tfaActions.hidden = false;
+    tfaSetMsg("");
+  }
+
+  async function enableSecurity(event) {
+    event.preventDefault();
+    const code = tfaSetupCode.value.replace(/\D/g, "");
+    if (code.length !== 6) {
+      tfaSetMsg("Enter the 6-digit code from your authenticator app.", "err");
+      tfaSetupCode.focus();
+      return;
+    }
+    const btn = document.getElementById("tfaEnable");
+    if (btn) btn.disabled = true;
+    tfaSetMsg("Verifying…");
+    try {
+      const status = await enableSuperAdminTwoFactor(code);
+      renderSecurity(status);
+      tfaSetMsg("Authenticator app confirmed. You’ll use it at every sign-in.", "ok");
+      dashToast("Two-factor authentication is on.", "ok");
+    } catch (e) {
+      tfaSetMsg(e.message, "err");
+      tfaSetupCode.value = "";
+      tfaSetupCode.focus();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function disableSecurity() {
+    const entered = await dashPrompt(
+      "Enter the current 6-digit code from your authenticator app. Turning 2FA off means the next sign-in must pair the app again.",
+      "6-digit code",
+      "",
+      "Turn off two-factor authentication"
+    );
+    if (entered === null) return;
+    const code = String(entered).replace(/\D/g, "");
+    if (code.length !== 6) {
+      tfaSetMsg("Enter the current 6-digit code to turn 2FA off.", "err");
+      return;
+    }
+    const btn = document.getElementById("tfaDisable");
+    if (btn) btn.disabled = true;
+    tfaSetMsg("Turning off 2FA…");
+    try {
+      const status = await disableSuperAdminTwoFactor(code);
+      renderSecurity(status);
+      tfaSetMsg("2FA is off. Pair an authenticator before your next sign-in.", "ok");
+      dashToast("Two-factor authentication is off.", "ok");
+    } catch (e) {
+      tfaSetMsg(e.message, "err");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  document.getElementById("tfaReenroll")?.addEventListener("click", beginSecuritySetup);
+  document.getElementById("tfaCancelSetup")?.addEventListener("click", cancelSecuritySetup);
+  document.getElementById("tfaDisable")?.addEventListener("click", disableSecurity);
+  document.getElementById("tfaEnableForm")?.addEventListener("submit", enableSecurity);
+  tfaSetupCode?.addEventListener("input", (e) => {
+    const digits = e.currentTarget.value.replace(/\D/g, "").slice(0, 6);
+    if (e.currentTarget.value !== digits) e.currentTarget.value = digits;
+  });
+
   (async () => {
     try {
       const me = await getMe();
@@ -165,6 +314,7 @@
         String(displayName).trim().charAt(0).toUpperCase() || "S";
       setMsg("");
       await load();
+      await loadSecurity();
     } catch (e) {
       setMsg(`${e.message} - redirecting to login.`, "err");
       setTimeout(() => { location.href = "../auth/login.html"; }, 1400);

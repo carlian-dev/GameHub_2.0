@@ -35,6 +35,8 @@ const ACTION_LABELS = {
   fnb_order_remove: "F&B removed",
   integration_settings_update: "API settings updated",
   integration_toggle: "API integration toggled",
+  two_factor_enabled: "2FA enabled",
+  two_factor_disabled: "2FA disabled",
 };
 
 const ACTION_TONES = {
@@ -66,6 +68,8 @@ const ACTION_TONES = {
   fnb_order_remove: "declined",
   integration_settings_update: "pending",
   integration_toggle: "pending",
+  two_factor_enabled: "active",
+  two_factor_disabled: "pending",
 };
 
 let allRows = [];
@@ -118,6 +122,8 @@ function shortId(id) {
 function providerText(provider) {
   if (provider === "google") return "Google sign-in";
   if (provider === "password") return "Password sign-in";
+  if (provider === "google+totp") return "Google + authenticator";
+  if (provider === "password+totp") return "Password + authenticator";
   return "";
 }
 
@@ -194,6 +200,10 @@ function detailsOf(log) {
   if (action === "integration_toggle") {
     const state = m.enabled === true ? "enabled" : m.enabled === false ? "disabled" : "";
     return [log.target, state].filter(Boolean).join(" · ") || "—";
+  }
+
+  if (action === "two_factor_enabled" || action === "two_factor_disabled") {
+    return m.reenrolled === true ? "Authenticator re-enrolled" : "Authenticator app";
   }
 
   const extra = Object.entries(m)

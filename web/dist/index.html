@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!--
+  GameHub web - Vite + React SPA (migration in progress per docs/Frontend Conversion.md).
+  Legacy frontend stays at Frontend/ until cutover.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#08111F" />
+    <title>GameHub — Billiard Hall and Sport Bar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
+    <link rel="preload" as="image" href="/assets/hero-billiards.jpg" fetchpriority="high" />
+    <!--
+      Pre-paint theme script: apply saved theme before first paint so dark mode
+      never flashes ivory. public pages -> data-theme on document.documentElement.
+    -->
+    <script>
+      try {
+        document.documentElement.setAttribute(
+          "data-theme",
+          localStorage.getItem("gh-theme") || "light"
+        );
+      } catch (e) { /* private mode */ }
+    </script>
+    <script type="module" crossorigin src="/assets/index-MSblL20O.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-HkMOvi8_.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

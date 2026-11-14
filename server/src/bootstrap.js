@@ -1,6 +1,7 @@
 // Dependency wiring: DB → models → services → controllers → routes.
 // Shared by server.js (HTTP listener) and the contract runner (in-process),
 // so both exercise the exact same app.
+import crypto from "node:crypto";
 import { env, persistEnvValue } from "./config/env.js";
 import { getDb, getMongoClient } from "./config/db.js";
 import { setupRoutes } from "./app.js";
@@ -23,6 +24,7 @@ import { activityModel } from "./models/activity.model.js";
 import { healthService } from "./services/health.service.js";
 import { settingsService } from "./services/settings.service.js";
 import { authService } from "./services/auth.service.js";
+import { twoFactorService } from "./services/twoFactor.service.js";
 import { invitationService } from "./services/invitation.service.js";
 import { cashierService } from "./services/cashier.service.js";
 import { tableService } from "./services/table.service.js";
@@ -45,6 +47,7 @@ import {
   healthController,
   settingsController,
   authController,
+  twoFactorController,
   invitationController,
   cashierController,
   tableController,
@@ -132,6 +135,18 @@ export async function wireApp() {
     // fields; an empty field falls back to the base env value.
     persistEnvValue,
   });
+  // Super-admin TOTP secrets are AES-256-GCM encrypted at rest. Reuse the
+  // settings key when configured; otherwise derive a dedicated key from
+  // SESSION_SECRET so 2FA needs no extra env value. Changing either key makes
+  // existing authenticators unreadable (reset via the users collection).
+  const twoFactorKey =
+    env.SETTINGS_ENCRYPTION_KEY ||
+    crypto.createHash("sha256").update(`gamehub-2fa:${env.SESSION_SECRET}`).digest("hex");
+  const twoFactorSvc = twoFactorService({
+    userModel: models.user,
+    db,
+    encryptionKey: twoFactorKey,
+  });
   const paymongo = paymongoService({
     configProvider: () => settingsSvc.paymongoConfig(),
     frontendUrl: env.FRONTEND_URL,
@@ -142,6 +157,7 @@ export async function wireApp() {
   const services = {
     health: healthService({ healthModel: models.health, dbName: env.MONGODB_DB }),
     settings: settingsSvc,
+    twoFactor: twoFactorSvc,
     paymongo,
     gemini,
     invitation: invitationService({
@@ -181,6 +197,7 @@ export async function wireApp() {
     googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
     googleAuthConfigProvider: () => settingsSvc.googleAuthConfig(),
     recaptchaService: recaptcha,
+    twoFactorService: services.twoFactor,
   });
 
   // Calendar sync is DB-backed (settings.googleCalendar), with env fallback
@@ -221,6 +238,7 @@ export async function wireApp() {
     health: healthController({ healthService: services.health }),
     settings: settingsController({ settingsService: services.settings }),
     auth: authController({ authService: services.auth }),
+    twoFactor: twoFactorController({ twoFactorService: services.twoFactor }),
     invitation: invitationController({ invitationService: services.invitation }),
     cashier: cashierController({ cashierService: services.cashier }),
     table: tableController({ tableService: services.table }),

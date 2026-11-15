@@ -37,10 +37,11 @@ export default function apiRoutes({ controllers }) {
     reservationController: controllers.reservation,
   });
 
-  // Auth routes (session-based): login, logout, me, google, register, invite token.
+  // Auth routes (session-based): login, logout, me, google, register, invite token, own activity logs.
   registerAuthRoutes(router, {
     authController: controllers.auth,
     invitationController: controllers.invitation,
+    activityController: controllers.activity,
   });
 
   // Admin routes (requireAdmin).

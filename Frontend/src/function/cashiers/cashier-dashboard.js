@@ -121,23 +121,34 @@ function renderActiveList(sessions) {
   for (const s of rows) {
     const row = document.createElement("div");
     row.className = "sl-row";
-    const left = document.createElement("span");
-    left.className = "sl-name";
-    // Table number stands out; customer name sits muted beside it.
+
+    const left = document.createElement("div");
+    left.className = "sl-name-group";
+
+    const nameRow = document.createElement("div");
+    nameRow.className = "sl-name";
     const tbl = document.createElement("strong");
     tbl.textContent = s.tableName || "Table";
     const cust = document.createElement("span");
     cust.className = "sl-sub";
     cust.textContent = ` · ${s.customerName || "Customer"}`;
-    left.append(tbl, cust);
+    nameRow.append(tbl, cust);
+    left.appendChild(nameRow);
+
+    if (s.endTime) {
+      left.appendChild(createSessionBar(s.startTime, s.endTime, s.plannedMinutes));
+    }
+
     const timer = document.createElement("span");
     timer.className = "timer";
     timer.setAttribute("data-end", s.endTime || "");
     timer.textContent = s.endTime ? "…" : "—";
+
     const manage = document.createElement("a");
     manage.className = "rowbtn go";
     manage.href = "./cashier-sessions.html";
     manage.textContent = "Manage";
+
     row.append(left, timer, manage);
     box.appendChild(row);
   }

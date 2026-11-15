@@ -53,6 +53,10 @@ describe("superAdminScope", () => {
     );
     assert.strictEqual(scope({ role: "super_admin", path: "/me" }), null);
     assert.strictEqual(
+      scope({ role: "super_admin", path: "/me/activity-logs" }),
+      null
+    );
+    assert.strictEqual(
       scope({ role: "super_admin", method: "POST", path: "/logout" }),
       null
     );

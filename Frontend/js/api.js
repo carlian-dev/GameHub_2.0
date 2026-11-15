@@ -188,6 +188,15 @@ async function listActivityLogs({ actorId = "", action = "", from = "", to = "",
   return api(`/api/admin/activity-logs?${q.toString()}`);
 }
 
+// --- Personal activity log (all roles: cashier, super-admin, admin) ---
+async function listMyActivityLogs({ action = "", from = "", to = "", limit = 200 } = {}) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (action) q.set("action", action);
+  if (from) q.set("from", from);
+  if (to) q.set("to", to);
+  return api(`/api/me/activity-logs?${q.toString()}`);
+}
+
 // --- Sprint 02: tables (AD-008..AD-013) + rates (AD-016/017) + sessions view (AD-014) ---
 async function listTables(status = "all") {
   return api(`/api/admin/tables?status=${encodeURIComponent(status)}`);

@@ -335,14 +335,18 @@ function populateActions() {
   }
 }
 
-async function populateStaff() {
+async function populateStaff(me) {
   const sel = document.getElementById("fStaff");
   addOption(sel, "", "All staff");
+  if (me && me.id) {
+    addOption(sel, me.id, `My activity (${me.displayName || me.username || me.email || "Me"})`);
+  }
   addOption(sel, "system", "System");
   addOption(sel, "guest", "Guest / public");
   try {
     const { cashiers } = await listCashiers("all", "all");
     for (const c of cashiers || []) {
+      if (me && me.id && String(c.id) === String(me.id)) continue;
       const name = c.displayName || c.username || c.email || c.id;
       const uname = c.username && c.username !== name ? ` (${c.username})` : "";
       const role =
@@ -354,7 +358,7 @@ async function populateStaff() {
       addOption(sel, c.id, `${name}${uname}${role}`);
     }
   } catch {
-    // Filters degrade to the three default options; the table still works.
+    // Filters degrade to the default options; the table still works.
   }
 }
 
@@ -391,7 +395,7 @@ document.getElementById("reset").addEventListener("click", () => {
 populateActions();
 guard().then((me) => {
   if (!me) return;
-  populateStaff().then(load);
+  populateStaff(me).then(load);
 });
 
 // Quiet background refresh while looking at the newest page.

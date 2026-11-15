@@ -7,7 +7,8 @@
 //   POST /api/auth/google              (6)
 //   POST /api/logout                   (7)   Auth
 //   GET  /api/me                       (8)    Auth
-export function registerAuthRoutes(router, { authController, invitationController }) {
+//   GET  /api/me/activity-logs                Self activity audit (any role)
+export function registerAuthRoutes(router, { authController, invitationController, activityController }) {
   // Public (no login)
   router.post("/cashiers/register", authController.register);
   router.get("/invitations/:token", invitationController.check);
@@ -22,4 +23,7 @@ export function registerAuthRoutes(router, { authController, invitationControlle
   // Authenticated (session required — requireLogin applied inside controllers)
   router.post("/logout", authController.logout);
   router.get("/me", authController.me);
+  if (activityController && activityController.myList) {
+    router.get("/me/activity-logs", activityController.myList);
+  }
 }

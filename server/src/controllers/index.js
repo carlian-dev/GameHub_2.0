@@ -643,7 +643,7 @@ export function cashierController({ cashierService }) {
   };
 }
 
-// -------- Activity log (admin only, AD-026) --------
+// -------- Activity log (admin full audit + user self audit) --------
 export function activityController({ activityService }) {
   return {
     list: asyncHandler(async (req, res) => {
@@ -654,6 +654,21 @@ export function activityController({ activityService }) {
       const result = await activityService.list({
         action: req.query.action,
         actorId: req.query.actorId,
+        from: req.query.from,
+        to: req.query.to,
+        limit: req.query.limit,
+      });
+      res.status(200).json(activityView(result));
+    }),
+
+    myList: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user || !user.id) {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await activityService.list({
+        action: req.query.action,
+        actorId: String(user.id),
         from: req.query.from,
         to: req.query.to,
         limit: req.query.limit,

@@ -1260,16 +1260,29 @@ function paintSessions(list) {
   tb.innerHTML = "";
   for (const s of list) {
     const tr = document.createElement("tr");
+    tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
+
+    const tblWrap = document.createElement("div");
+    tblWrap.className = "session-table-cell";
+    const tblName = document.createElement("strong");
+    tblName.className = "session-table-name";
+    tblName.textContent = s.tableName || "—";
+    tblWrap.appendChild(tblName);
+    if (s.endTime) {
+      tblWrap.appendChild(createSessionBar(s.startTime, s.endTime, s.plannedMinutes));
+    }
+    tr.children[0].appendChild(tblWrap);
+
+    tr.children[1].textContent = s.customerName || "—";
+    tr.children[2].textContent = fmtClock(s.startTime);
+    tr.children[3].textContent = fmtClock(s.endTime);
+
     const timer = document.createElement("span");
     timer.className = "timer";
     timer.setAttribute("data-end", s.endTime || "");
     timer.textContent = s.endTime ? "…" : "—";
-    tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
-    tr.children[0].textContent = s.tableName || "—";
-    tr.children[1].textContent = s.customerName || "—";
-    tr.children[2].textContent = fmtClock(s.startTime);
-    tr.children[3].textContent = fmtClock(s.endTime);
     tr.children[4].appendChild(timer);
+
     fnbCell(tr.children[5], s);
     const act = tr.children[6];
     act.classList.add("actions-cell");

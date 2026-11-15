@@ -110,6 +110,18 @@ export async function wireApp() {
     rateModel: models.rate,
     db,
   });
+  // Super-admin TOTP secrets are AES-256-GCM encrypted at rest. Reuse the
+  // settings key when configured; otherwise derive a dedicated key from
+  // SESSION_SECRET so 2FA needs no extra env value. Changing either key makes
+  // existing authenticators unreadable (reset via the users collection).
+  const twoFactorKey =
+    env.SETTINGS_ENCRYPTION_KEY ||
+    crypto.createHash("sha256").update(`gamehub-2fa:${env.SESSION_SECRET}`).digest("hex");
+  const twoFactorSvc = twoFactorService({
+    userModel: models.user,
+    db,
+    encryptionKey: twoFactorKey,
+  });
   const settingsSvc = settingsService({
     settingsModel: models.settings,
     db,
@@ -131,21 +143,11 @@ export async function wireApp() {
       webhookSecret: env.PAYMONGO_WEBHOOK_SECRET,
     },
     geminiApiKeyFromEnv: env.GEMINI_API_KEY,
+    // Credential changes require a current authenticator code (step-up).
+    twoFactorService: twoFactorSvc,
     // Settings > API mirrors admin credentials into server/.env *_OVERRIDE
     // fields; an empty field falls back to the base env value.
     persistEnvValue,
-  });
-  // Super-admin TOTP secrets are AES-256-GCM encrypted at rest. Reuse the
-  // settings key when configured; otherwise derive a dedicated key from
-  // SESSION_SECRET so 2FA needs no extra env value. Changing either key makes
-  // existing authenticators unreadable (reset via the users collection).
-  const twoFactorKey =
-    env.SETTINGS_ENCRYPTION_KEY ||
-    crypto.createHash("sha256").update(`gamehub-2fa:${env.SESSION_SECRET}`).digest("hex");
-  const twoFactorSvc = twoFactorService({
-    userModel: models.user,
-    db,
-    encryptionKey: twoFactorKey,
   });
   const paymongo = paymongoService({
     configProvider: () => settingsSvc.paymongoConfig(),
@@ -246,7 +248,10 @@ export async function wireApp() {
     reservation: reservationController({ reservationService: services.reservation }),
     session: sessionController({ sessionService: services.session }),
     transaction: transactionController({ transactionService: services.transaction }),
-    report: reportController({ reportService: services.report }),
+    report: reportController({
+      reportService: services.report,
+      settingsService: services.settings,
+    }),
     product: productController({ productService: services.product }),
     order: orderController({ orderService: services.order }),
     activity: activityController({ activityService: services.activity }),

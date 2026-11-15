@@ -86,33 +86,32 @@ per-request queries.
   Both settings documents are read in one query; disabled integrations expose
   empty credential strings, never stored values. A settings read failure fails
   closed for both integrations (HTTP 200 with both disabled). Each credential
-  resolves in this order: matching `*_OVERRIDE` env field (written by the admin
-  Settings page), the normal env key, then the settings document. This means a
+  resolves in this order: matching `*_OVERRIDE` env field (written by the
+  super-admin Settings page), the normal env key, then the settings document. This means a
   seeded settings document no longer hides `RECAPTCHA_*`, `GOOGLE_CLIENT_ID`,
   `GEMINI_API_KEY`, or the Calendar defaults.
 - `GET /api/admin/settings/integrations` requires an admin session and returns
-  the integration cards with `available`, `enabled`, `updatedAt`, `updatedBy`,
-  and credentials reduced to `{name,label,required,configured,masked,source}`.
-  `source` is `override`, `db`, `env`, or empty and never exposes a value.
-  Google client-ID masks use the last four identifying characters before
-  `.apps.googleusercontent.com`, not the constant suffix.
-- `PUT /api/admin/settings/integrations/{key}` accepts
-  `{credentials?: {name: string}}`. An empty string clears the admin value and
-  falls back to the normal env key; the integration auto-disables only when no
-  required value remains. Sending `enabled` is rejected with 403 — activation
-  belongs to the super admin. The handler writes only changed fields, commits
-  the settings update plus its `integration_settings_update` audit log entry
-  in one MongoDB transaction, then mirrors explicit values to the matching
-  `*_OVERRIDE` keys in `server/.env`.
+  read-only cards: `key`, `name`, `description`, `available`, `enabled`,
+  `updatedAt`, `updatedBy`. Credentials are never included, so this role can
+  see whether a service is on without being able to view, add or replace keys.
+- The old `PUT /api/admin/settings/integrations/{key}` route was removed.
+  Administrators cannot change integrations; only the super administrator does.
 - `GET /api/super-admin/settings/integrations` requires a `super_admin`
-  session and returns the same cards without credentials: `key`, `name`,
-  `description`, `available`, `enabled`, `updatedAt`, `updatedBy`.
-  `PUT /api/super-admin/settings/integrations/{key}` accepts exactly
-  `{enabled: bool}` and writes an `integration_toggle` audit entry. Any other
-  field (including `credentials`) is rejected, so the role cannot read or
-  change integration configuration.
+  session and returns the same cards plus credentials reduced to
+  `{name,label,required,configured,masked,source}`. `source` is `override`,
+  `db`, `env`, or empty and never exposes a value. Google client-ID masks use
+  the last four identifying characters before
+  `.apps.googleusercontent.com`, not the constant suffix.
+- `PUT /api/super-admin/settings/integrations/{key}` accepts
+  `{enabled?: bool, credentials?: {name: string}}`. An empty string clears the
+  saved value and falls back to the normal env key; the integration
+  auto-disables only when no required value remains. The handler writes only
+  changed fields, commits the settings update plus its audit log entry
+  (`integration_settings_update` when credentials change, otherwise
+  `integration_toggle`) in one MongoDB transaction, then mirrors explicit
+  values to the matching `*_OVERRIDE` keys in `server/.env`.
 - The `settings` collection owns activation state (`unique key`) and stores the
-  encrypted copy of admin credentials. Credential resolution additionally
+  encrypted copy of super-admin credentials. Credential resolution additionally
   consults the `*_OVERRIDE` env fields and the normal env defaults as described
   above. `npm run setup:settings` creates the documents once (idempotent
   upsert); the seed's empty credential fields deliberately fall through to
@@ -146,14 +145,16 @@ administrator, both created directly in the database):
 * The super administrator signs in with email + password or Google, then always
   passes a second factor: an authenticator-app TOTP code (first sign-in forces
   QR enrollment). Its only data access is
-  `/api/super-admin/settings/integrations`: list activation
-  state and send `{enabled}` for one integration, plus its own
-  `/api/super-admin/2fa` endpoints. Every regular `/api/admin/`
-  endpoint treats it as unauthorized, and its own endpoints omit credentials.
-  A global `superAdminScope` middleware additionally rejects `/api/admin/*`,
-  `/api/cashier/*`, and the full reservation list for this role, so endpoints
-  that only check for a login cannot be reached either. The service layer
-  enforces the split even if a route guard is bypassed.
+  `/api/super-admin/settings/integrations`: list activation state and masked
+  credentials, and send `{enabled}` and/or `{credentials}` + `code` for one
+  integration (a current authenticator code is required for any credential
+  change; a toggle needs none),
+  plus its own `/api/super-admin/2fa` endpoints. Every regular `/api/admin/`
+  endpoint treats it as unauthorized. A global `superAdminScope` middleware
+  additionally rejects `/api/admin/*`, `/api/cashier/*`, and the full
+  reservation list for this role, so endpoints that only check for a login
+  cannot be reached either. The service layer enforces the split even if a
+  route guard is bypassed.
 * Sessions are server-side `express-session` stored in MongoDB
   `authSessions` collection (not `sessions`, to avoid collision with
   billing sessions). Cookie `gh_session` is `httpOnly`, `sameSite=lax`,

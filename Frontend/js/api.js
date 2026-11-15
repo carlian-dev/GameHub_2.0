@@ -119,25 +119,19 @@ function staffHome(role) {
   return "../auth/login.html";
 }
 
-// --- Admin settings (masked credentials; server is authoritative) ---
+// --- Admin settings (read-only: integration on/off state only) ---
 async function getAdminIntegrations() {
   return api("/api/admin/settings/integrations");
 }
-async function updateAdminIntegration(key, fields) {
-  return api(`/api/admin/settings/integrations/${encodeURIComponent(key)}`, {
-    method: "PUT",
-    body: JSON.stringify(fields),
-  });
-}
 
-// --- Super admin settings (integration on/off only; no credentials) ---
+// --- Super admin settings (activation + masked credentials) ---
 async function getSuperAdminIntegrations() {
   return api("/api/super-admin/settings/integrations");
 }
-async function updateSuperAdminIntegration(key, enabled) {
+async function updateSuperAdminIntegration(key, fields) {
   return api(`/api/super-admin/settings/integrations/${encodeURIComponent(key)}`, {
     method: "PUT",
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify(fields || {}),
   });
 }
 

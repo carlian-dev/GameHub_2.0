@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Super admin - API integration on/off control only. -->
+<!-- Super admin - API integration activation and credentials. -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -55,12 +55,12 @@
       <main class="dash-content">
         <div class="dash-pagehead">
           <h1>API Integrations</h1>
-          <span>Turn services on or off</span>
+          <span>Manage activation and credentials</span>
         </div>
 
         <p class="dash-msg" id="msg" role="status">Loading integrations…</p>
 
-        <p class="settings-note">You can turn each integration on or off. Credentials are configured by an administrator; an integration can only be turned on when its required credentials are present.</p>
+        <p class="settings-note">You own each integration’s on/off switch and its credentials. Secret values are encrypted at rest and only a masked hint is shown; saving a value also writes the matching <code>*_OVERRIDE</code> field in <code>server/.env</code>. An integration can only be turned on when its required credentials are present. Adding, replacing or clearing a credential also asks for the current 6-digit code from your authenticator app.</p>
 
         <div class="api-grid" id="apiList"></div>
 

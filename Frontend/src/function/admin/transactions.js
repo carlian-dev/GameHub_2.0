@@ -7,6 +7,7 @@
 // file saves instead of parsing as JSON.
 
 let allRows = [];
+let csvExportEnabled = true;
 let page = 0;
 const PER_PAGE = 10;
 
@@ -237,6 +238,10 @@ document.getElementById("filterForm").addEventListener("submit", (e) => {
 });
 
 document.getElementById("export").addEventListener("click", () => {
+  if (!csvExportEnabled) {
+    dashToast("CSV export is turned off by the super administrator.", "err");
+    return;
+  }
   // CSV download: anchor navigation keeps the session cookie (credentials),
   // while api() would try to parse the CSV as JSON and fail.
   const f = currentFilter();
@@ -255,6 +260,24 @@ document.getElementById("export").addEventListener("click", () => {
   );
 });
 
+// The super administrator can turn the CSV export off. The server rejects the
+// download either way; this only reflects the state on the button.
+async function applyExportAvailability() {
+  const btn = document.getElementById("export");
+  if (!btn) return;
+  try {
+    const cfg = await getAppConfig();
+    const flags = (cfg && cfg.exports) || {};
+    csvExportEnabled = flags.csvExport !== false;
+  } catch {
+    return;
+  }
+  btn.disabled = !csvExportEnabled;
+  btn.title = csvExportEnabled
+    ? "Download the selected period as CSV"
+    : "CSV export is turned off by the super administrator";
+}
+
 (async () => {
   const msg = document.getElementById("msg");
   try {
@@ -266,6 +289,7 @@ document.getElementById("export").addEventListener("click", () => {
     populateMonths();
     populateDays();
     populateYears();
+    applyExportAvailability();
     loadIncome();
     await loadTransactions();
   } catch (e) {

@@ -14,7 +14,6 @@
           "description": "Admin Google sign-in",
           "available": true,
           "enabled": false,
-          "credentials": [{ "name": "clientId", "label": "OAuth Client ID", "required": true, "configured": false, "masked": "" }],
           "updatedAt": null,
           "updatedBy": null
         },
@@ -24,7 +23,6 @@
           "description": "Location map on the public landing page",
           "available": true,
           "enabled": true,
-          "credentials": [{ "name": "apiKey", "label": "Maps API key (optional)", "required": false, "configured": false, "masked": "" }],
           "updatedAt": null,
           "updatedBy": null
         },
@@ -34,11 +32,6 @@
           "description": "Accepted reservations become calendar events",
           "available": true,
           "enabled": false,
-          "credentials": [
-            { "name": "calendarId", "label": "Calendar ID", "required": true, "configured": false, "masked": "" },
-            { "name": "clientEmail", "label": "Service account email", "required": true, "configured": false, "masked": "" },
-            { "name": "privateKey", "label": "Service account private key", "required": true, "configured": false, "masked": "" }
-          ],
           "updatedAt": null,
           "updatedBy": null
         },
@@ -48,10 +41,6 @@
           "description": "Bot protection for public forms (staff login, cashier signup, reservations)",
           "available": true,
           "enabled": false,
-          "credentials": [
-            { "name": "siteKey", "label": "Site key (v2 checkbox)", "required": true, "configured": false, "masked": "" },
-            { "name": "secretKey", "label": "Secret key", "required": true, "configured": false, "masked": "" }
-          ],
           "updatedAt": null,
           "updatedBy": null
         },
@@ -61,10 +50,6 @@
           "description": "GCash checkout for closed session bills",
           "available": true,
           "enabled": false,
-          "credentials": [
-            { "name": "secretKey", "label": "Secret key", "required": true, "configured": false, "masked": "" },
-            { "name": "webhookSecret", "label": "Webhook signing secret (optional)", "required": false, "configured": false, "masked": "" }
-          ],
           "updatedAt": null,
           "updatedBy": null
         },
@@ -74,9 +59,24 @@
           "description": "AI assistance and intelligent automation services",
           "available": true,
           "enabled": false,
-          "credentials": [
-            { "name": "apiKey", "label": "Gemini API key", "required": true, "configured": false, "masked": "" }
-          ],
+          "updatedAt": null,
+          "updatedBy": null
+        },
+        {
+          "key": "receiptPdf",
+          "name": "PDF Receipt Export",
+          "description": "Customer receipt PDF preview and download",
+          "available": true,
+          "enabled": true,
+          "updatedAt": null,
+          "updatedBy": null
+        },
+        {
+          "key": "csvExport",
+          "name": "CSV Report Export",
+          "description": "Income report CSV download on the Transactions page",
+          "available": true,
+          "enabled": true,
           "updatedAt": null,
           "updatedBy": null
         },
@@ -86,7 +86,6 @@
           "description": "Email verification codes (planned)",
           "available": false,
           "enabled": false,
-          "credentials": [],
           "updatedAt": null,
           "updatedBy": null
         }

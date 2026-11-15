@@ -129,6 +129,20 @@ async function main() {
         updatedBy: null,
       },
       {
+        key: "receiptPdf",
+        enabled: true,
+        credentials: {},
+        updatedAt: null,
+        updatedBy: null,
+      },
+      {
+        key: "csvExport",
+        enabled: true,
+        credentials: {},
+        updatedAt: null,
+        updatedBy: null,
+      },
+      {
         key: "otp",
         enabled: false,
         credentials: {},

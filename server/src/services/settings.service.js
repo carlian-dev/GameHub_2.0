@@ -70,6 +70,20 @@ const REGISTRY = [
     ],
   },
   {
+    key: "receiptPdf",
+    name: "PDF Receipt Export",
+    description: "Customer receipt PDF preview and download",
+    available: true,
+    credentials: [],
+  },
+  {
+    key: "csvExport",
+    name: "CSV Report Export",
+    description: "Income report CSV download on the Transactions page",
+    available: true,
+    credentials: [],
+  },
+  {
     key: "otp",
     name: "OTP / email codes",
     description: "Email verification codes (planned)",
@@ -271,6 +285,9 @@ function defaultDoc(key) {
   }
   let enabled = false;
   if (key === "googleMaps") enabled = true;
+  // The built-in exports need no credentials, so they ship on. Turning one off
+  // is an explicit super-admin decision stored in the settings document.
+  if (key === "receiptPdf" || key === "csvExport") enabled = true;
   if (key === "googleAuth") {
     // GOOGLE_CLIENT_ID (or its admin override) is the default client ID
     // (parity with the archived PHP settings_default()). Without this the
@@ -337,6 +354,7 @@ export function settingsService({
   recaptchaFromEnv,
   paymongoFromEnv,
   geminiApiKeyFromEnv = "",
+  twoFactorService = null,
   persistEnvValue = null,
 }) {
   capturedEnv = {
@@ -354,7 +372,14 @@ export function settingsService({
     },
     async publicConfig() {
       try {
-        const docs = await settingsModel.findMany(["googleAuth", "googleMaps", "recaptcha", "paymongo"]);
+        const docs = await settingsModel.findMany([
+          "googleAuth",
+          "googleMaps",
+          "recaptcha",
+          "paymongo",
+          "receiptPdf",
+          "csvExport",
+        ]);
         const auth = effectiveDoc("googleAuth", docs.googleAuth || null);
         const maps = effectiveDoc("googleMaps", docs.googleMaps || null);
         const recaptcha = effectiveDoc("recaptcha", docs.recaptcha || null);
@@ -376,6 +401,11 @@ export function settingsService({
           },
           // Cashier UI only needs the on/off flag; no PayMongo key is public.
           paymongo: { enabled: paymongo.enabled },
+          // On/off state for the built-in exports (no credentials, no secrets).
+          exports: {
+            receiptPdf: !!effectiveDoc("receiptPdf", docs.receiptPdf || null).enabled,
+            csvExport: !!effectiveDoc("csvExport", docs.csvExport || null).enabled,
+          },
         };
       } catch {
         // Fail closed (migration.md §13.6): all disabled/empty, HTTP 200.
@@ -384,42 +414,33 @@ export function settingsService({
           googleMaps: { enabled: false, apiKey: "" },
           recaptcha: { enabled: false, siteKey: "" },
           paymongo: { enabled: false },
+          exports: { receiptPdf: false, csvExport: false },
         };
       }
     },
+    /**
+     * Admin view: activation state only. Credentials belong to the super
+     * administrator, so this role never receives masked hints either.
+     */
     async adminIntegrations() {
       const keys = REGISTRY.map((r) => r.key);
       const docs = await settingsModel.findMany(keys);
-      const integrations = REGISTRY.map((reg) => {
-        const doc = docs[reg.key] || null;
-        const effective = effectiveDoc(reg.key, doc);
-        const credentials = reg.credentials.map((c) => {
-          const raw = effective && effective.credentials && effective.credentials[c.name] ? effective.credentials[c.name] : {};
-          return credentialShape(c.name, c, raw);
-        });
-        return {
-          key: reg.key,
-          name: reg.name,
-          description: reg.description,
-          available: reg.available,
-          enabled: effective.enabled,
-          credentials,
-          updatedAt: effective.updatedAt,
-          updatedBy: effective.updatedBy,
-        };
-      });
-      return { integrations };
+      return {
+        integrations: REGISTRY.map((reg) =>
+          this.toggleShape(reg.key, effectiveDoc(reg.key, docs[reg.key] || null))
+        ),
+      };
     },
     /**
-     * Super admin view: activation state only. Credentials are deliberately
-     * excluded so this role cannot read or change integration configuration.
+     * Super admin view: activation state plus masked credentials. This role
+     * owns both the on/off switch and the credential values.
      */
     async superAdminIntegrations() {
       const keys = REGISTRY.map((r) => r.key);
       const docs = await settingsModel.findMany(keys);
       return {
         integrations: REGISTRY.map((reg) =>
-          this.toggleShape(reg.key, effectiveDoc(reg.key, docs[reg.key] || null))
+          this.shape(reg.key, effectiveDoc(reg.key, docs[reg.key] || null))
         ),
       };
     },
@@ -483,6 +504,21 @@ export function settingsService({
     /**
      * Server-only Google Gemini AI config (includes decrypted API key).
      */
+    /**
+     * Server-only on/off state for the built-in export features (PDF receipt
+     * and CSV income report). No credentials are involved.
+     */
+    async exportConfig() {
+      try {
+        const docs = await settingsModel.findMany(["receiptPdf", "csvExport"]);
+        return {
+          receiptPdf: !!effectiveDoc("receiptPdf", docs.receiptPdf || null).enabled,
+          csvExport: !!effectiveDoc("csvExport", docs.csvExport || null).enabled,
+        };
+      } catch {
+        return { receiptPdf: false, csvExport: false };
+      }
+    },
     async geminiConfig() {
       const docs = await settingsModel.findMany(["gemini"]);
       const effective = effectiveDoc("gemini", docs.gemini || null);
@@ -669,43 +705,20 @@ export function settingsService({
     },
 
     /**
-     * settings_update with role-separated writes:
-     *   admin       -> replace/clear credentials (enabled is rejected)
-     *   super_admin -> flip enabled only (credentials are rejected)
+     * settings_update - super administrator only.
+     * The payload may flip `enabled`, replace/clear `credentials`, or both.
      * The settings write and its audit log commit in one transaction.
      */
     async update(key, data, actor = {}) {
-      // Role enforcement lives here as well as in the route guards: admins
-      // configure credentials, super admins only flip activation.
+      // Role enforcement lives here as well as in the route guards: only the
+      // super administrator changes activation or credentials.
       const actorRole = actor && actor.role;
-      if (actorRole !== "admin" && actorRole !== "super_admin") {
-        const err = new Error("admin only");
+      if (actorRole !== "super_admin") {
+        const err = new Error("super administrator only");
         err.status = 403;
         throw err;
       }
       const payload = data && typeof data === "object" && !Array.isArray(data) ? data : {};
-      if (actorRole === "super_admin") {
-        const fields = Object.keys(payload);
-        if (fields.length === 0) {
-          const err = new Error("enabled is required");
-          err.status = 422;
-          throw err;
-        }
-        if (fields.some((field) => field !== "enabled")) {
-          const err = new Error("super administrators can only turn integrations on or off");
-          err.status = 403;
-          throw err;
-        }
-        if (typeof payload.enabled !== "boolean") {
-          const err = new Error("enabled must be a boolean");
-          err.status = 422;
-          throw err;
-        }
-      } else if (Object.prototype.hasOwnProperty.call(payload, "enabled")) {
-        const err = new Error("only a super administrator can turn integrations on or off");
-        err.status = 403;
-        throw err;
-      }
 
       const adminEmail = actor && actor.email ? actor.email : null;
       const actorId = actor && actor.id ? String(actor.id) : null;
@@ -727,6 +740,34 @@ export function settingsService({
       const existingDoc = await settingsColl.findOne({ key });
       const effective = effectiveDoc(key, existingDoc || null);
       const plan = this.planUpdate(key, effective, payload);
+
+      // Credential changes are a step-up action: the super administrator must
+      // prove possession of the authenticator app in the same request. The
+      // payload is validated above first, so a rejected credential does not
+      // burn the code. Toggling `enabled` alone needs no code.
+      if (Object.prototype.hasOwnProperty.call(payload, "credentials")) {
+        if (!twoFactorService || typeof twoFactorService.verifyStepUp !== "function") {
+          const err = new Error(
+            "two-factor verification is unavailable; credential changes are blocked"
+          );
+          err.status = 503;
+          throw err;
+        }
+        if (!actorId) {
+          const err = new Error("super administrator only");
+          err.status = 403;
+          throw err;
+        }
+        const code = String(payload.code ?? "").replace(/\s+/g, "");
+        if (!/^\d{6}$/.test(code)) {
+          const err = new Error(
+            "enter the 6-digit code from your authenticator app to change credentials"
+          );
+          err.status = 422;
+          throw err;
+        }
+        await twoFactorService.verifyStepUp(actorId, code);
+      }
 
       const set = { ...plan.set, updatedAt: new Date(), updatedBy: adminEmail };
       const unset = { ...plan.unset };
@@ -776,10 +817,9 @@ export function settingsService({
         await activityLogs.insertOne(
           {
             actorId,
-            action:
-              actorRole === "super_admin"
-                ? "integration_toggle"
-                : "integration_settings_update",
+            action: Object.prototype.hasOwnProperty.call(payload, "credentials")
+              ? "integration_settings_update"
+              : "integration_toggle",
             target: key,
             meta: { enabled: plan.enabled, changed: plan.changed, role: actorRole },
             at: new Date(),
@@ -789,7 +829,7 @@ export function settingsService({
         return updated;
       };
 
-      // Write the admin values to their *_OVERRIDE .env keys only after the
+      // Write the super-admin values to their *_OVERRIDE .env keys only after the
       // settings document + audit log committed. A failed disk write is logged
       // but does not roll back the DB save; process.env is already updated by
       // the env-file store so this process keeps using the new value.
@@ -827,12 +867,10 @@ export function settingsService({
 
       await persistCredentialOverrides();
       const fresh = effectiveDoc(key, updatedDoc);
-      return actorRole === "super_admin"
-        ? this.toggleShape(key, fresh)
-        : this.shape(key, fresh);
+      return this.shape(key, fresh);
     },
 
-    /** Shape for super admins: activation state, never credentials. */
+    /** Shape for admins: activation state, never credentials. */
     toggleShape(key, effective) {
       const reg = REGISTRY.find((r) => r.key === key);
       if (!reg) return null;

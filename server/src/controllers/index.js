@@ -299,7 +299,7 @@ export function transactionController({ transactionService }) {
 }
 
 // -------- Reports --------
-export function reportController({ reportService }) {
+export function reportController({ reportService, settingsService }) {
   return {
     daily: asyncHandler(async (req, res) => {
       const user = req.session && req.session.user;
@@ -336,6 +336,12 @@ export function reportController({ reportService }) {
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
+      const exportsCfg = settingsService
+        ? await settingsService.exportConfig()
+        : { csvExport: true };
+      if (!exportsCfg.csvExport) {
+        throw new HttpError(403, "CSV export is turned off by the super administrator");
+      }
       const result = await reportService.export({
         from: req.query.from,
         to: req.query.to,
@@ -363,8 +369,8 @@ export function settingsController({ settingsService }) {
   return {
     publicConfig: asyncHandler(async (req, res) => {
       res.set("Cache-Control", "no-store");
-      const data = await settingsService.publicConfig();
-      res.status(200).json(publicConfigView(data));
+      const { exports, ...integrations } = await settingsService.publicConfig();
+      res.status(200).json({ ...publicConfigView(integrations), exports });
     }),
     adminIntegrations: asyncHandler(async (req, res) => {
       const user = req.session && req.session.user;
@@ -374,21 +380,7 @@ export function settingsController({ settingsService }) {
       const data = await settingsService.adminIntegrations();
       res.status(200).json(adminIntegrationsView(data));
     }),
-    settingsUpdate: asyncHandler(async (req, res) => {
-      const { key } = req.params || {};
-      if (!key) throw new HttpError(422, "unknown integration");
-      const user = req.session && req.session.user;
-      if (!user || user.role !== "admin") {
-        throw new HttpError(401, "not logged in");
-      }
-      const shaped = await settingsService.update(key, req.body || {}, {
-        id: user.id,
-        email: user.email ?? null,
-        role: user.role,
-      });
-      res.status(200).json({ ok: true, integration: shaped });
-    }),
-    /** Super admin: activation state only (credentials are omitted). */
+    /** Super admin: activation state plus masked credentials. */
     superAdminIntegrations: asyncHandler(async (req, res) => {
       const user = req.session && req.session.user;
       if (!user || user.role !== "super_admin") {
@@ -397,7 +389,11 @@ export function settingsController({ settingsService }) {
       const data = await settingsService.superAdminIntegrations();
       res.status(200).json(adminIntegrationsView(data));
     }),
-    /** Super admin: flip one integration; any other field is rejected. */
+    /**
+     * Super admin: flip one integration and/or change its credentials. A
+     * `credentials` payload must also carry the 6-digit authenticator `code`
+     * (step-up); the service verifies it before writing.
+     */
     superAdminUpdate: asyncHandler(async (req, res) => {
       const { key } = req.params || {};
       if (!key) throw new HttpError(422, "unknown integration");

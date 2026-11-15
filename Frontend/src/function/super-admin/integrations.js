@@ -1,8 +1,8 @@
-// src/function/super-admin/integrations.js - super admin integration toggles.
+// src/function/super-admin/integrations.js - super admin integration control.
 // Pair: integrations.html <-> /api/super-admin/settings/integrations.
 // Guard: role=super_admin stays; admin/cashier go to their dashboards and
-// guests go to login. This page never renders credentials: the super-admin
-// API intentionally returns activation state only.
+// guests go to login. This role owns both the on/off switch and the credentials.
+// Credential values are always replaced blind: the API only returns masked hints.
 (function () {
   const msg = document.getElementById("msg");
   const list = document.getElementById("apiList");
@@ -20,6 +20,13 @@
     if (className) el.className = className;
     if (text !== undefined && text !== null) el.textContent = text;
     return el;
+  }
+
+  function makeButton(label, className, onClick) {
+    const b = make("button", className, label);
+    b.type = "button";
+    if (onClick) b.addEventListener("click", onClick);
+    return b;
   }
 
   function formatDate(iso) {
@@ -45,6 +52,13 @@
     return make("span", `api-status is-${kind}`, label);
   }
 
+  function sourceLabel(source) {
+    if (source === "env") return "from .env";
+    if (source === "override") return "saved here";
+    if (source === "db") return "saved";
+    return "";
+  }
+
   function offMessage(integration) {
     let message = `Turn off ${integration.name}?`;
     if (integration.key === "googleAuth") {
@@ -57,6 +71,12 @@
       message += " Staff login, cashier signup and reservations will stop showing the bot check.";
     } else if (integration.key === "paymongo") {
       message += " Cashiers will no longer be able to create GCash online payment links for session bills.";
+    } else if (integration.key === "receiptPdf") {
+      message +=
+        " Cashiers and administrators will no longer be able to preview or download customer receipt PDFs.";
+    } else if (integration.key === "csvExport") {
+      message +=
+        " Administrators will no longer be able to export the income report as CSV.";
     } else if (integration.key === "gemini") {
       message += " Google Gemini AI features and assistant services will be disabled.";
     }
@@ -68,7 +88,9 @@
     if (sw) sw.disabled = true;
     setMsg("");
     try {
-      const res = await updateSuperAdminIntegration(integration.key, next);
+      const res = await updateSuperAdminIntegration(integration.key, {
+        enabled: next,
+      });
       const updated =
         res && res.integration ? res.integration : { ...integration, enabled: next };
       dashToast(`${integration.name} is now ${updated.enabled ? "on" : "off"}.`, "ok");
@@ -81,6 +103,174 @@
       setMsg(e.message, "err");
       dashToast(e.message, "err");
     }
+  }
+
+  /**
+   * Credential changes are step-up protected: the server also requires a
+   * current 6-digit authenticator code. Returns null when cancelled.
+   */
+  async function promptAuthenticatorCode(title) {
+    const entered = await dashPrompt(
+      "Enter the current 6-digit code from your authenticator app to confirm this credential change.",
+      "6-digit code",
+      "",
+      title
+    );
+    if (entered === null) return null;
+    const code = String(entered).replace(/\D/g, "");
+    if (code.length !== 6) {
+      dashToast("Enter the 6-digit code from your authenticator app.", "err");
+      return null;
+    }
+    return code;
+  }
+
+  // ---- Credential rows (add / replace / clear) ----
+  function credentialRow(card, integration, cred) {
+    const row = make("div", "api-credential");
+    const label = make("div", "api-cred-label");
+    label.appendChild(make("span", "", cred.label));
+    if (cred.required) label.appendChild(make("span", "api-required", "Required"));
+
+    const value = make("div", "api-cred-value");
+    value.appendChild(make("code", "api-mask", cred.configured ? cred.masked : "Not set"));
+    const source = sourceLabel(cred.source);
+    if (source) value.appendChild(make("span", "api-cred-source", source));
+
+    const actions = make("div", "api-actions");
+    const editor = make("div", "api-edit");
+    editor.hidden = true;
+
+    function closeEditor() {
+      editor.hidden = true;
+      editor.replaceChildren();
+      actions.hidden = false;
+    }
+
+    async function save(next, code) {
+      const res = await updateSuperAdminIntegration(integration.key, {
+        credentials: { [cred.name]: next },
+        code,
+      });
+      const updated = res && res.integration ? res.integration : null;
+      if (!updated) {
+        await load();
+        return;
+      }
+      const turnedOff = updated.enabled === false && integration.enabled === true;
+      dashToast(
+        turnedOff
+          ? `${cred.label} updated. ${updated.name} is now off because a required credential is missing.`
+          : `${cred.label} updated.`,
+        "ok"
+      );
+      card.replaceWith(cardFor(updated));
+    }
+
+    function openEditor() {
+      actions.hidden = true;
+      editor.hidden = false;
+      editor.replaceChildren();
+
+      const field = make("label", "api-edit-field");
+      field.appendChild(make("span", "api-edit-label", `New ${cred.label}`));
+      const input = document.createElement("input");
+      input.type = "password";
+      input.className = "api-input";
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      input.placeholder = "Enter a new value";
+      input.setAttribute("aria-label", `New ${cred.label}`);
+      field.appendChild(input);
+
+      const codeField = make("label", "api-edit-field");
+      codeField.appendChild(make("span", "api-edit-label", "Authenticator code"));
+      const codeInput = document.createElement("input");
+      codeInput.type = "text";
+      codeInput.className = "api-input";
+      codeInput.inputMode = "numeric";
+      codeInput.autocomplete = "one-time-code";
+      codeInput.maxLength = 6;
+      codeInput.placeholder = "123456";
+      codeInput.setAttribute("aria-label", "Authenticator code");
+      codeInput.addEventListener("input", (e) => {
+        const digits = e.currentTarget.value.replace(/\D/g, "").slice(0, 6);
+        if (e.currentTarget.value !== digits) e.currentTarget.value = digits;
+      });
+      codeField.appendChild(codeInput);
+
+      const fields = make("div", "api-edit-fields");
+      fields.append(field, codeField);
+
+      const error = make("p", "api-error");
+      error.hidden = true;
+      const buttons = make("div", "api-edit-actions");
+      const saveBtn = makeButton("Save", "btn btn-solid api-btn", async () => {
+        const next = input.value.trim();
+        const code = codeInput.value.replace(/\D/g, "");
+        if (!next) {
+          error.textContent = "Enter a new value, or Cancel.";
+          error.hidden = false;
+          input.focus();
+          return;
+        }
+        if (code.length !== 6) {
+          error.textContent = "Enter the 6-digit code from your authenticator app.";
+          error.hidden = false;
+          codeInput.focus();
+          return;
+        }
+        saveBtn.disabled = true;
+        cancelBtn.disabled = true;
+        error.hidden = true;
+        try {
+          await save(next, code);
+        } catch (e) {
+          error.textContent = e.message;
+          error.hidden = false;
+          dashToast(e.message, "err");
+        } finally {
+          saveBtn.disabled = false;
+          cancelBtn.disabled = false;
+        }
+      });
+      const cancelBtn = makeButton("Cancel", "btn btn-ghost api-btn", closeEditor);
+      buttons.append(saveBtn, cancelBtn);
+      editor.append(fields, error, buttons);
+      input.focus();
+    }
+
+    async function clear() {
+      const ok = await dashConfirm(
+        `Clear the saved value for ${cred.label} on ${integration.name}? The .env default will be used again if one is set.`,
+        "Clear credential"
+      );
+      if (!ok) return;
+      const code = await promptAuthenticatorCode(`Clear ${cred.label}`);
+      if (!code) return;
+      try {
+        await save("", code);
+      } catch (e) {
+        dashToast(e.message, "err");
+      }
+    }
+
+    if (integration.available) {
+      if (cred.configured) {
+        actions.appendChild(makeButton("Replace", "btn btn-ghost api-btn", openEditor));
+        // A base .env value is not a saved value, so there is nothing to clear.
+        if (cred.source !== "env") {
+          actions.appendChild(
+            makeButton("Clear", "btn btn-ghost api-btn api-btn-danger", clear)
+          );
+        }
+      } else {
+        actions.appendChild(makeButton("Add", "btn btn-ghost api-btn", openEditor));
+      }
+    }
+
+    row.append(label, value, actions, editor);
+    return row;
   }
 
   function cardFor(integration) {
@@ -120,6 +310,23 @@
     state.appendChild(sw);
     head.append(title, state);
     card.appendChild(head);
+
+    const creds = make("div", "api-credentials");
+    const credList = Array.isArray(integration.credentials) ? integration.credentials : [];
+    if (credList.length) {
+      credList.forEach((cred) => creds.appendChild(credentialRow(card, integration, cred)));
+    } else {
+      creds.appendChild(
+        make(
+          "p",
+          "api-readonly",
+          integration.available
+            ? "No credentials needed."
+            : "No credentials for this integration."
+        )
+      );
+    }
+    card.appendChild(creds);
 
     const meta = make("p", "api-meta");
     if (integration.updatedAt) {

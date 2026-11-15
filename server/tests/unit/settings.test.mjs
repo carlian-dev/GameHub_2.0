@@ -6,6 +6,20 @@ import assert from "node:assert/strict";
 import { maskValue, googleClientIdHint } from "../../src/utils/mask.js";
 import { settingsService } from "../../src/services/settings.service.js";
 
+/** Minimal stand-in for twoFactorService: accepts one known code. */
+function twoFactorStub(code = "123456") {
+  return {
+    async verifyStepUp(userId, submitted) {
+      if (String(submitted).replace(/\s+/g, "") !== code) {
+        const err = new Error("invalid authenticator code");
+        err.status = 422;
+        throw err;
+      }
+      return true;
+    },
+  };
+}
+
 describe("maskValue", () => {
   it("returns empty for empty value", () => {
     assert.strictEqual(maskValue(""), "");
@@ -57,7 +71,9 @@ describe("settings update role split", () => {
   // Role checks run before any DB access, so a null db is safe here.
   const svc = settingsService({
     settingsModel: { findMany: async () => ({}) },
-    db: null,
+    db: {
+      collection: () => ({ findOne: async () => null, insertOne: async () => {} }),
+    },
     mongoClient: null,
     googleClientIdFromEnv: "",
     googleCalendarFromEnv: {},
@@ -72,16 +88,36 @@ describe("settings update role split", () => {
     );
   });
 
-  it("rejects a super admin changing credentials", async () => {
+  it("rejects an admin changing credentials", async () => {
     await assert.rejects(
       () =>
         svc.update(
           "googleMaps",
           { credentials: { apiKey: "abc" } },
-          { role: "super_admin" }
+          { role: "admin" }
         ),
-      (err) =>
-        err.status === 403 && /only turn integrations on or off/i.test(err.message)
+      (err) => err.status === 403 && /super administrator/i.test(err.message)
+    );
+  });
+
+  it("hides credentials from the admin listing", async () => {
+    const data = await svc.adminIntegrations();
+    for (const integration of data.integrations) {
+      assert.ok(
+        !("credentials" in integration),
+        `${integration.key} must not expose credentials`
+      );
+    }
+  });
+
+  it("returns masked credentials to the super admin listing", async () => {
+    const data = await svc.superAdminIntegrations();
+    const maps = data.integrations.find((i) => i.key === "googleMaps");
+    assert.ok(Array.isArray(maps.credentials));
+    assert.ok(
+      maps.credentials.every(
+        (c) => typeof c.masked === "string" && c.value === undefined
+      )
     );
   });
 
@@ -96,6 +132,41 @@ describe("settings update role split", () => {
     await assert.rejects(
       () => svc.update("googleMaps", { enabled: "yes" }, { role: "super_admin" }),
       (err) => err.status === 422 && /boolean/i.test(err.message)
+    );
+  });
+
+  const guarded = settingsService({
+    settingsModel: { findMany: async () => ({}) },
+    db: {
+      collection: () => ({ findOne: async () => null, insertOne: async () => {} }),
+    },
+    mongoClient: null,
+    twoFactorService: twoFactorStub(),
+  });
+
+  it("requires an authenticator code when changing credentials", async () => {
+    await assert.rejects(
+      () =>
+        guarded.update(
+          "googleMaps",
+          { credentials: { apiKey: "abc" } },
+          { role: "super_admin", id: "super-1" }
+        ),
+      (err) =>
+        err.status === 422 &&
+        /6-digit code from your authenticator app/i.test(err.message)
+    );
+  });
+
+  it("rejects an invalid authenticator code before writing", async () => {
+    await assert.rejects(
+      () =>
+        guarded.update(
+          "googleMaps",
+          { credentials: { apiKey: "abc" }, code: "000000" },
+          { role: "super_admin", id: "super-1" }
+        ),
+      (err) => err.status === 422 && /invalid authenticator code/i.test(err.message)
     );
   });
 });
@@ -160,7 +231,7 @@ describe("settings env fallback", () => {
       })
     );
 
-    const data = await svc.adminIntegrations();
+    const data = await svc.superAdminIntegrations();
     const recaptcha = data.integrations.find((i) => i.key === "recaptcha");
     const site = recaptcha.credentials.find((c) => c.name === "siteKey");
     const secret = recaptcha.credentials.find((c) => c.name === "secretKey");
@@ -182,7 +253,7 @@ describe("settings env fallback", () => {
       })
     );
 
-    const data = await svc.adminIntegrations();
+    const data = await svc.superAdminIntegrations();
     const site = data.integrations
       .find((i) => i.key === "recaptcha")
       .credentials.find((c) => c.name === "siteKey");
@@ -204,7 +275,7 @@ describe("settings env fallback", () => {
       })
     );
 
-    const data = await svc.adminIntegrations();
+    const data = await svc.superAdminIntegrations();
     const site = data.integrations
       .find((i) => i.key === "recaptcha")
       .credentials.find((c) => c.name === "siteKey");
@@ -309,6 +380,7 @@ describe("settings update mirrors credentials to .env", () => {
       googleCalendarFromEnv: {},
       settingsEncryptionKey: "a".repeat(64),
       recaptchaFromEnv: {},
+      twoFactorService: twoFactorStub(),
       persistEnvValue: async (key, value) => {
         persisted.push([key, value]);
         process.env[key] = value;
@@ -318,8 +390,8 @@ describe("settings update mirrors credentials to .env", () => {
     try {
       const shaped = await svc.update(
         "recaptcha",
-        { credentials: { siteKey: "new-site-12345678901234567890" } },
-        { role: "admin", email: "admin@example.com" }
+        { credentials: { siteKey: "new-site-12345678901234567890" }, code: "123456" },
+        { role: "super_admin", id: "super-1", email: "superadmin@example.com" }
       );
       assert.deepStrictEqual(persisted, [
         ["RECAPTCHA_SITE_KEY_OVERRIDE", "new-site-12345678901234567890"],
@@ -332,7 +404,7 @@ describe("settings update mirrors credentials to .env", () => {
     }
   });
 
-  it("clears the override key when an admin clears a credential", async () => {
+  it("clears the override key when the super admin clears a credential", async () => {
     const { db } = makeDb({
       key: "recaptcha",
       enabled: true,
@@ -350,6 +422,7 @@ describe("settings update mirrors credentials to .env", () => {
       googleCalendarFromEnv: {},
       settingsEncryptionKey: "a".repeat(64),
       recaptchaFromEnv: {},
+      twoFactorService: twoFactorStub(),
       persistEnvValue: async (key, value) => {
         persisted.push([key, value]);
         process.env[key] = value;
@@ -363,8 +436,8 @@ describe("settings update mirrors credentials to .env", () => {
     try {
       const shaped = await svc.update(
         "recaptcha",
-        { credentials: { siteKey: "" } },
-        { role: "admin", email: "admin@example.com" }
+        { credentials: { siteKey: "" }, code: "123456" },
+        { role: "super_admin", id: "super-1", email: "superadmin@example.com" }
       );
       assert.deepStrictEqual(persisted, [["RECAPTCHA_SITE_KEY_OVERRIDE", ""]]);
       const site = shaped.credentials.find((c) => c.name === "siteKey");
@@ -379,6 +452,42 @@ describe("settings update mirrors credentials to .env", () => {
         process.env.RECAPTCHA_SITE_KEY_OVERRIDE = previousOverride;
       }
     }
+  });
+});
+
+describe("export integrations", () => {
+  function service(docs = {}) {
+    return settingsService({
+      settingsModel: { findMany: async () => docs },
+      db: null,
+      mongoClient: null,
+    });
+  }
+
+  it("lists the PDF receipt and CSV export integrations, on by default", async () => {
+    const data = await service({}).adminIntegrations();
+    const receipt = data.integrations.find((i) => i.key === "receiptPdf");
+    const csv = data.integrations.find((i) => i.key === "csvExport");
+
+    assert.ok(receipt, "receiptPdf must be present in registry");
+    assert.ok(csv, "csvExport must be present in registry");
+    assert.strictEqual(receipt.enabled, true);
+    assert.strictEqual(csv.enabled, true);
+    assert.ok(!("credentials" in receipt), "admin listing must not expose credentials");
+    assert.ok(!("credentials" in csv), "admin listing must not expose credentials");
+  });
+
+  it("reports the stored on/off state through exportConfig", async () => {
+    assert.deepStrictEqual(await service({}).exportConfig(), {
+      receiptPdf: true,
+      csvExport: true,
+    });
+
+    const off = await service({
+      receiptPdf: { key: "receiptPdf", enabled: false, credentials: {} },
+      csvExport: { key: "csvExport", enabled: false, credentials: {} },
+    }).exportConfig();
+    assert.deepStrictEqual(off, { receiptPdf: false, csvExport: false });
   });
 });
 
@@ -426,7 +535,7 @@ describe("gemini integration settings", () => {
     );
   });
 
-  it("exposes gemini in adminIntegrations and uses env fallback", async () => {
+  it("exposes gemini in superAdminIntegrations and uses env fallback", async () => {
     process.env.GEMINI_API_KEY = "AIzaSyBaseKey12345678901234567890";
     const svc = settingsService({
       settingsModel: { findMany: async () => ({}) },
@@ -434,7 +543,7 @@ describe("gemini integration settings", () => {
       mongoClient: null,
     });
 
-    const data = await svc.adminIntegrations();
+    const data = await svc.superAdminIntegrations();
     const gemini = data.integrations.find((i) => i.key === "gemini");
     assert.ok(gemini, "gemini must be present in registry");
     assert.strictEqual(gemini.name, "Google Gemini AI");

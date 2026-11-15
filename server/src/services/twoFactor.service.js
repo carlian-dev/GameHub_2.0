@@ -233,6 +233,51 @@ export function twoFactorService({ userModel, db, encryptionKey }) {
       return true;
     },
 
+    /**
+     * Step-up check for a sensitive in-session action (credential changes).
+     * Accepts any still-valid code — including the one used to sign in during
+     * the same 30-second window — but rejects a code older than the last one
+     * used, so a code captured from an earlier sign-in cannot be replayed.
+     */
+    async verifyStepUp(userId, code) {
+      const user = await findSuperAdmin(userId);
+      if (user.status !== "active") throw httpError(403, "account is not active");
+      const twoFactor = user.twoFactor || {};
+      if (twoFactor.enabled !== true) {
+        throw httpError(
+          409,
+          "two-factor authentication is not enabled — pair an authenticator app before changing credentials"
+        );
+      }
+      const secret = decryptSecret(
+        twoFactor.secretEnc,
+        "two-factor authentication is misconfigured; an operator must reset the authenticator for this account"
+      );
+      const result = verifyTotp(secret, code);
+      if (!result.valid) throw httpError(422, "invalid authenticator code");
+
+      const now = new Date();
+      const res = await usersColl.updateOne(
+        {
+          _id: user._id,
+          $or: [
+            { "twoFactor.lastUsedCounter": { $exists: false } },
+            { "twoFactor.lastUsedCounter": { $lte: result.counter } },
+          ],
+        },
+        {
+          $set: {
+            "twoFactor.lastUsedCounter": result.counter,
+            "twoFactor.lastUsedAt": now,
+          },
+        }
+      );
+      if (res.modifiedCount === 0) {
+        throw httpError(409, "this code is too old — wait for the next code and try again");
+      }
+      return true;
+    },
+
     /** Turn 2FA off. Requires a valid current code; the next login re-enrolls. */
     async disable(userId, code) {
       const user = await findSuperAdmin(userId);

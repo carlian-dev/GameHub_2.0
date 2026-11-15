@@ -1,7 +1,7 @@
 // Super-admin routes — requireSuperAdmin.
-// This role is intentionally limited to turning API integrations on and off
-// plus managing its own authenticator app (two-factor authentication).
-// Credentials remain behind the administrator endpoints (/api/admin/...).
+// This role owns API integration activation and credentials, plus managing its
+// own authenticator app (two-factor authentication). Administrators can only
+// read the on/off state; their write route was removed.
 import { requireSuperAdmin } from "../middleware/auth.js";
 
 export function registerSuperAdminRoutes(

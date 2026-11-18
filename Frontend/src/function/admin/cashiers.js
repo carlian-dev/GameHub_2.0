@@ -67,7 +67,7 @@ function done(id) { pendingIds.delete(id); }
 async function guard() {
   try {
     const me = await getMe();
-    if (me.role !== "admin") { location.href = "../auth/login.html"; return null; }
+    if (me.role !== "admin") { location.href = staffHome(me.role); return null; }
     const name = me.email || "admin";
     document.getElementById("who").textContent = name;
     document.getElementById("avatar").textContent = name.charAt(0).toUpperCase();

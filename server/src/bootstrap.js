@@ -1,7 +1,8 @@
 // Dependency wiring: DB → models → services → controllers → routes.
 // Shared by server.js (HTTP listener) and the contract runner (in-process),
 // so both exercise the exact same app.
-import { env } from "./config/env.js";
+import crypto from "node:crypto";
+import { env, persistEnvValue } from "./config/env.js";
 import { getDb, getMongoClient } from "./config/db.js";
 import { setupRoutes } from "./app.js";
 
@@ -22,7 +23,9 @@ import { activityModel } from "./models/activity.model.js";
 // Services
 import { healthService } from "./services/health.service.js";
 import { settingsService } from "./services/settings.service.js";
+import { integrationValidationService } from "./services/integrationValidation.service.js";
 import { authService } from "./services/auth.service.js";
+import { twoFactorService } from "./services/twoFactor.service.js";
 import { invitationService } from "./services/invitation.service.js";
 import { cashierService } from "./services/cashier.service.js";
 import { tableService } from "./services/table.service.js";
@@ -33,6 +36,7 @@ import { googleCalendarService } from "./services/googleCalendar.service.js";
 import { mailService } from "./services/mail.service.js";
 import { recaptchaService } from "./services/recaptcha.service.js";
 import { paymongoService } from "./services/paymongo.service.js";
+import { geminiService } from "./services/gemini.service.js";
 import { transactionService } from "./services/transaction.service.js";
 import { reportService } from "./services/report.service.js";
 import { productService } from "./services/product.service.js";
@@ -44,6 +48,7 @@ import {
   healthController,
   settingsController,
   authController,
+  twoFactorController,
   invitationController,
   cashierController,
   tableController,
@@ -106,11 +111,27 @@ export async function wireApp() {
     rateModel: models.rate,
     db,
   });
+  // Super-admin TOTP secrets are AES-256-GCM encrypted at rest. Reuse the
+  // settings key when configured; otherwise derive a dedicated key from
+  // SESSION_SECRET so 2FA needs no extra env value. Changing either key makes
+  // existing authenticators unreadable (reset via the users collection).
+  const twoFactorKey =
+    env.SETTINGS_ENCRYPTION_KEY ||
+    crypto.createHash("sha256").update(`gamehub-2fa:${env.SESSION_SECRET}`).digest("hex");
+  const twoFactorSvc = twoFactorService({
+    userModel: models.user,
+    db,
+    encryptionKey: twoFactorKey,
+  });
+  // Settings > API proves every new credential against the service that
+  // issues it before the settings document is written.
+  const credentialValidator = integrationValidationService();
   const settingsSvc = settingsService({
     settingsModel: models.settings,
     db,
     mongoClient,
     googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
+    googleMapsApiKeyFromEnv: env.GOOGLE_MAPS_API_KEY,
     googleCalendarFromEnv: {
       calendarId: env.GOOGLE_CALENDAR_ID,
       clientEmail: env.GOOGLE_CALENDAR_CLIENT_EMAIL,
@@ -121,15 +142,32 @@ export async function wireApp() {
       siteKey: env.RECAPTCHA_SITE_KEY,
       secretKey: env.RECAPTCHA_SECRET_KEY,
     },
+    paymongoFromEnv: {
+      secretKey: env.PAYMONGO_SECRET_KEY,
+      webhookSecret: env.PAYMONGO_WEBHOOK_SECRET,
+    },
+    geminiApiKeyFromEnv: env.GEMINI_API_KEY,
+    // Credential changes require a current authenticator code (step-up).
+    twoFactorService: twoFactorSvc,
+    // Live provider check for a credential that is being added or replaced.
+    integrationValidator: credentialValidator,
+    // Settings > API mirrors admin credentials into server/.env *_OVERRIDE
+    // fields; an empty field falls back to the base env value.
+    persistEnvValue,
   });
   const paymongo = paymongoService({
     configProvider: () => settingsSvc.paymongoConfig(),
     frontendUrl: env.FRONTEND_URL,
   });
+  const gemini = geminiService({
+    configProvider: () => settingsSvc.geminiConfig(),
+  });
   const services = {
     health: healthService({ healthModel: models.health, dbName: env.MONGODB_DB }),
     settings: settingsSvc,
+    twoFactor: twoFactorSvc,
     paymongo,
+    gemini,
     invitation: invitationService({
       invitationModel: models.invitation,
       db,
@@ -165,6 +203,7 @@ export async function wireApp() {
     settingsModel: models.settings,
     db,
     googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
+    googleAuthConfigProvider: () => settingsSvc.googleAuthConfig(),
     recaptchaService: recaptcha,
   });
 
@@ -206,6 +245,7 @@ export async function wireApp() {
     health: healthController({ healthService: services.health }),
     settings: settingsController({ settingsService: services.settings }),
     auth: authController({ authService: services.auth }),
+    twoFactor: twoFactorController({ twoFactorService: services.twoFactor }),
     invitation: invitationController({ invitationService: services.invitation }),
     cashier: cashierController({ cashierService: services.cashier }),
     table: tableController({ tableService: services.table }),
@@ -213,7 +253,10 @@ export async function wireApp() {
     reservation: reservationController({ reservationService: services.reservation }),
     session: sessionController({ sessionService: services.session }),
     transaction: transactionController({ transactionService: services.transaction }),
-    report: reportController({ reportService: services.report }),
+    report: reportController({
+      reportService: services.report,
+      settingsService: services.settings,
+    }),
     product: productController({ productService: services.product }),
     order: orderController({ orderService: services.order }),
     activity: activityController({ activityService: services.activity }),

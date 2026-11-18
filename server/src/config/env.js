@@ -3,11 +3,27 @@ import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { configureDns } from "./dns.js";
+import { createEnvFileStore } from "./envFile.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(__dirname, "..", "..");
+const envPath = path.join(serverRoot, ".env");
 
-dotenv.config({ path: path.join(serverRoot, ".env") });
+dotenv.config({ path: envPath });
+
+// Settings > API writes admin credentials to the matching *_OVERRIDE keys.
+// Keeping this here means the HTTP server, scripts and tests all resolve the
+// same file.
+const envFile = createEnvFileStore({ filePath: envPath });
+
+export function persistEnvValue(key, value) {
+  return envFile.set(key, value);
+}
+
+/** Add a missing key without touching an existing value (used by setup). */
+export function ensureEnvValue(key, value = "") {
+  return envFile.ensure(key, value);
+}
 
 // Applied here so every entry point (server, scripts, tests) resolves Atlas SRV
 // records the same way before a MongoClient is created.
@@ -27,22 +43,56 @@ export const env = {
   SESSION_TTL_SECONDS: Number(process.env.SESSION_TTL_SECONDS || 43200),
   AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME || "gh_session",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "",
+  // Admin overrides written by Settings > API. Empty = use the default above.
+  GOOGLE_AUTH_CLIENT_ID_OVERRIDE: process.env.GOOGLE_AUTH_CLIENT_ID_OVERRIDE || "",
+  // Optional: location map on the public landing page.
+  GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY || "",
+  GOOGLE_MAPS_API_KEY_OVERRIDE: process.env.GOOGLE_MAPS_API_KEY_OVERRIDE || "",
   // Optional: accepted reservations become events on this shared calendar.
   GOOGLE_CALENDAR_ID: process.env.GOOGLE_CALENDAR_ID || "",
+  GOOGLE_CALENDAR_ID_OVERRIDE: process.env.GOOGLE_CALENDAR_ID_OVERRIDE || "",
   GOOGLE_CALENDAR_CLIENT_EMAIL: process.env.GOOGLE_CALENDAR_CLIENT_EMAIL || "",
+  GOOGLE_CALENDAR_CLIENT_EMAIL_OVERRIDE:
+    process.env.GOOGLE_CALENDAR_CLIENT_EMAIL_OVERRIDE || "",
   GOOGLE_CALENDAR_PRIVATE_KEY: process.env.GOOGLE_CALENDAR_PRIVATE_KEY || "",
+  GOOGLE_CALENDAR_PRIVATE_KEY_OVERRIDE:
+    process.env.GOOGLE_CALENDAR_PRIVATE_KEY_OVERRIDE || "",
   MAIL_USER: process.env.MAIL_USER || "",
   MAIL_PASS: process.env.MAIL_PASS || "",
   MAIL_FROM: process.env.MAIL_FROM || "GameHub",
   MAIL_DRY_RUN: process.env.MAIL_DRY_RUN === "1",
-  // Optional reCAPTCHA defaults when no `settings.recaptcha` document exists.
-  // The admin Settings page is authoritative once a document is saved.
+  // Optional reCAPTCHA defaults. Used whenever the matching admin value is
+  // empty, even when a `settings.recaptcha` document exists.
   RECAPTCHA_SITE_KEY: process.env.RECAPTCHA_SITE_KEY || "",
+  RECAPTCHA_SITE_KEY_OVERRIDE: process.env.RECAPTCHA_SITE_KEY_OVERRIDE || "",
   RECAPTCHA_SECRET_KEY: process.env.RECAPTCHA_SECRET_KEY || "",
+  RECAPTCHA_SECRET_KEY_OVERRIDE: process.env.RECAPTCHA_SECRET_KEY_OVERRIDE || "",
+  // Optional PayMongo defaults; the *_OVERRIDE keys are filled by Settings > API.
+  PAYMONGO_SECRET_KEY: process.env.PAYMONGO_SECRET_KEY || "",
+  PAYMONGO_SECRET_KEY_OVERRIDE: process.env.PAYMONGO_SECRET_KEY_OVERRIDE || "",
+  PAYMONGO_WEBHOOK_SECRET: process.env.PAYMONGO_WEBHOOK_SECRET || "",
+  PAYMONGO_WEBHOOK_SECRET_OVERRIDE:
+    process.env.PAYMONGO_WEBHOOK_SECRET_OVERRIDE || "",
+  // Optional Google Gemini AI API key; the *_OVERRIDE key is filled by Settings > API.
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
+  GEMINI_API_KEY_OVERRIDE: process.env.GEMINI_API_KEY_OVERRIDE || "",
   // Optional: encrypts `secret: true` settings credentials at rest (AES-256-GCM).
   // Required before an admin can save a reCAPTCHA secret key or Calendar key.
   SETTINGS_ENCRYPTION_KEY: process.env.SETTINGS_ENCRYPTION_KEY || "",
   TRUST_PROXY: process.env.TRUST_PROXY || "0",
+  // In-process rate limiting (express-rate-limit). RATE_LIMIT_ENABLED=0 turns
+  // every limiter into a pass-through (contract tests use this). Window values
+  // are milliseconds; invalid/zero values fall back to the defaults in
+  // middleware/rateLimit.js.
+  RATE_LIMIT_ENABLED: process.env.RATE_LIMIT_ENABLED !== "0",
+  RATE_LIMIT_WINDOW_MS: process.env.RATE_LIMIT_WINDOW_MS || "60000",
+  RATE_LIMIT_MAX: process.env.RATE_LIMIT_MAX || "300",
+  AUTH_RATE_LIMIT_WINDOW_MS: process.env.AUTH_RATE_LIMIT_WINDOW_MS || "900000",
+  AUTH_RATE_LIMIT_MAX: process.env.AUTH_RATE_LIMIT_MAX || "10",
+  WRITE_RATE_LIMIT_MAX: process.env.WRITE_RATE_LIMIT_MAX || "60",
+  RESERVATION_RATE_LIMIT_WINDOW_MS:
+    process.env.RESERVATION_RATE_LIMIT_WINDOW_MS || "600000",
+  RESERVATION_RATE_LIMIT_MAX: process.env.RESERVATION_RATE_LIMIT_MAX || "10",
 };
 
 export function validateEnv() {

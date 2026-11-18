@@ -1,6 +1,6 @@
 import { HttpError } from "../utils/HttpError.js";
 
-const ALLOWED_CODES = [400, 401, 403, 404, 409, 410, 422, 502, 503];
+const ALLOWED_CODES = [400, 401, 403, 404, 409, 410, 422, 429, 502, 503];
 
 export function errorHandler(err, req, res, next) {
   // Malformed JSON body -> 400, always JSON.

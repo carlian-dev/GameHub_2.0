@@ -3,6 +3,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { activityService } from "../../src/services/activity.service.js";
+import { activityController } from "../../src/controllers/index.js";
 
 function harness({ docs = [], users = [] } = {}) {
   const calls = { list: [], findIds: [] };
@@ -122,5 +123,74 @@ describe("activityService.list", () => {
     assert.ok(Array.isArray(calls.list[0].filter.$or));
     assert.equal(calls.list[1].filter.actorId, "system");
     assert.equal(calls.list[2].filter.actorId, "u1");
+  });
+});
+
+describe("activityController", () => {
+  it("rejects unauthenticated or non-admin in list()", async () => {
+    const ctrl = activityController({
+      activityService: { async list() { return { logs: [], total: 0 }; } },
+    });
+    await assert.rejects(
+      () => new Promise((_, reject) => ctrl.list({ session: {} }, {}, reject)),
+      (err) => err.status === 401
+    );
+    await assert.rejects(
+      () =>
+        new Promise((_, reject) =>
+          ctrl.list(
+            { session: { user: { id: "u1", role: "cashier" } } },
+            {},
+            reject
+          )
+        ),
+      (err) => err.status === 401
+    );
+  });
+
+  it("allows any logged-in user in myList() and enforces user id", async () => {
+    let capturedFilter = null;
+    const ctrl = activityController({
+      activityService: {
+        async list(filter) {
+          capturedFilter = filter;
+          return { logs: [{ id: "l1" }], total: 1, limit: 200 };
+        },
+      },
+    });
+
+    // Unauthenticated -> 401
+    await assert.rejects(
+      () => new Promise((_, reject) => ctrl.myList({ session: {} }, {}, reject)),
+      (err) => err.status === 401
+    );
+
+    // Cashier with spoofed actorId in query
+    let sentJson = null;
+    let sentStatus = null;
+    const res = {
+      status(code) {
+        sentStatus = code;
+        return this;
+      },
+      json(data) {
+        sentJson = data;
+      },
+    };
+    await ctrl.myList(
+      {
+        session: { user: { id: "cashier-123", role: "cashier" } },
+        query: { actorId: "admin-456", action: "login" },
+      },
+      res,
+      (err) => {
+        if (err) throw err;
+      }
+    );
+
+    assert.equal(sentStatus, 200);
+    assert.equal(sentJson.ok, true);
+    assert.equal(capturedFilter.actorId, "cashier-123");
+    assert.equal(capturedFilter.action, "login");
   });
 });

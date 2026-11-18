@@ -1410,6 +1410,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 #msg { min-height: 20px; margin-top: 10px; font-size: 12.5px; line-height: 1.55; }
 #msg.ok { color: var(--live-on-night); }
 #msg.err { color: var(--danger-on-night); }
+
 .auth-divider {
   display: flex;
   align-items: center;

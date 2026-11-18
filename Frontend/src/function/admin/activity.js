@@ -9,6 +9,7 @@ const MAX_ROWS = 200;
 const ACTION_LABELS = {
   login: "Signed in",
   logout: "Signed out",
+  profile_update: "Profile updated",
   approve_cashier: "Cashier approved",
   decline_application: "Application declined",
   approve_admin: "Admin approved",
@@ -34,11 +35,15 @@ const ACTION_LABELS = {
   fnb_order_update: "F&B quantity changed",
   fnb_order_remove: "F&B removed",
   integration_settings_update: "API settings updated",
+  integration_toggle: "API integration toggled",
+  two_factor_enabled: "2FA enabled",
+  two_factor_disabled: "2FA disabled",
 };
 
 const ACTION_TONES = {
   login: "active",
   logout: "archived",
+  profile_update: "pending",
   approve_cashier: "available",
   decline_application: "declined",
   approve_admin: "available",
@@ -64,6 +69,9 @@ const ACTION_TONES = {
   fnb_order_update: "pending",
   fnb_order_remove: "declined",
   integration_settings_update: "pending",
+  integration_toggle: "pending",
+  two_factor_enabled: "active",
+  two_factor_disabled: "pending",
 };
 
 let allRows = [];
@@ -116,6 +124,8 @@ function shortId(id) {
 function providerText(provider) {
   if (provider === "google") return "Google sign-in";
   if (provider === "password") return "Password sign-in";
+  if (provider === "google+totp") return "Google + authenticator";
+  if (provider === "password+totp") return "Password + authenticator";
   return "";
 }
 
@@ -134,6 +144,9 @@ function detailsOf(log) {
 
   if (action === "login") return providerText(m.provider) || "—";
   if (action === "logout") return providerText(m.provider) || "—";
+  if (action === "profile_update") {
+    return m.newValue ? `Display name → ${m.newValue}` : "Display name updated";
+  }
 
   if (action === "approve_cashier" || action === "archive_cashier" || action === "unarchive_cashier") {
     return log.targetName ? `Account: ${log.targetName}` : `Account ${shortId(log.target)}`;
@@ -187,6 +200,15 @@ function detailsOf(log) {
     const changed = Array.isArray(m.changed) ? m.changed.join(", ") : "";
     const state = m.enabled === true ? "enabled" : m.enabled === false ? "disabled" : "";
     return [log.target, changed ? `changed ${changed}` : "", state].filter(Boolean).join(" · ") || "—";
+  }
+
+  if (action === "integration_toggle") {
+    const state = m.enabled === true ? "enabled" : m.enabled === false ? "disabled" : "";
+    return [log.target, state].filter(Boolean).join(" · ") || "—";
+  }
+
+  if (action === "two_factor_enabled" || action === "two_factor_disabled") {
+    return m.reenrolled === true ? "Authenticator re-enrolled" : "Authenticator app";
   }
 
   const extra = Object.entries(m)
@@ -318,21 +340,30 @@ function populateActions() {
   }
 }
 
-async function populateStaff() {
+async function populateStaff(me) {
   const sel = document.getElementById("fStaff");
   addOption(sel, "", "All staff");
+  if (me && me.id) {
+    addOption(sel, me.id, `My activity (${me.displayName || me.username || me.email || "Me"})`);
+  }
   addOption(sel, "system", "System");
   addOption(sel, "guest", "Guest / public");
   try {
     const { cashiers } = await listCashiers("all", "all");
     for (const c of cashiers || []) {
+      if (me && me.id && String(c.id) === String(me.id)) continue;
       const name = c.displayName || c.username || c.email || c.id;
       const uname = c.username && c.username !== name ? ` (${c.username})` : "";
-      const role = c.role === "admin" ? " · admin" : "";
+      const role =
+        c.role === "admin"
+          ? " · admin"
+          : c.role === "super_admin"
+            ? " · super admin"
+            : "";
       addOption(sel, c.id, `${name}${uname}${role}`);
     }
   } catch {
-    // Filters degrade to the three default options; the table still works.
+    // Filters degrade to the default options; the table still works.
   }
 }
 
@@ -340,7 +371,7 @@ async function guard() {
   try {
     const me = await getMe();
     if (me.role !== "admin") {
-      location.href = "../auth/login.html";
+      location.href = staffHome(me.role);
       return null;
     }
     const name = me.email || me.username || "admin";
@@ -369,7 +400,7 @@ document.getElementById("reset").addEventListener("click", () => {
 populateActions();
 guard().then((me) => {
   if (!me) return;
-  populateStaff().then(load);
+  populateStaff(me).then(load);
 });
 
 // Quiet background refresh while looking at the newest page.

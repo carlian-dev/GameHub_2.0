@@ -70,7 +70,7 @@ server/src/models/*.js       Named Mongo queries + BSON conversions.
   |                                 assertTestDb guard.
   +-- server/src/views/*.js ...... JSON serializers (MVC View).
   +-- server/src/middleware/*.js . Auth guards, error mapping, not-found,
-                                   CORS, session.
+                                   CORS, session, rate limiting.
 ```
 
 Conventions: controllers return plain objects; views serialize to JSON.
@@ -85,26 +85,59 @@ per-request queries.
   `{"ok":true,"integrations":{"googleAuth":{"enabled":true,"clientId":"..."},"googleMaps":{"enabled":false,"apiKey":""}}}`.
   Both settings documents are read in one query; disabled integrations expose
   empty credential strings, never stored values. A settings read failure fails
-  closed for both integrations (HTTP 200 with both disabled). Environment
-  defaults apply only when the relevant document is positively absent.
+  closed for both integrations (HTTP 200 with both disabled). Each credential
+  resolves in this order: matching `*_OVERRIDE` env field (written by the
+  super-admin Settings page), the normal env key, then the settings document. This means a
+  seeded settings document no longer hides `RECAPTCHA_*`, `GOOGLE_CLIENT_ID`,
+  `GEMINI_API_KEY`, or the Calendar defaults.
 - `GET /api/admin/settings/integrations` requires an admin session and returns
-  the integration cards with `available`, `enabled`, `updatedAt`, `updatedBy`,
-  and credentials reduced to `{name,label,required,configured,masked}`. Google
-  client-ID masks use the last four identifying characters before
+  read-only cards: `key`, `name`, `description`, `available`, `enabled`,
+  `updatedAt`, `updatedBy`. Credentials are never included, so this role can
+  see whether a service is on without being able to view, add or replace keys.
+- The old `PUT /api/admin/settings/integrations/{key}` route was removed.
+  Administrators cannot change integrations; only the super administrator does.
+- `GET /api/super-admin/settings/integrations` requires a `super_admin`
+  session and returns the same cards plus credentials reduced to
+  `{name,label,required,configured,masked,source}`. `source` is `override`,
+  `db`, `env`, or empty and never exposes a value. Google client-ID masks use
+  the last four identifying characters before
   `.apps.googleusercontent.com`, not the constant suffix.
-- `PUT /api/admin/settings/integrations/{key}` accepts
-  `{enabled?: bool, credentials?: {name: string}}`. An empty string clears a
-  credential; clearing a required credential auto-disables the integration.
-  The handler writes only changed fields and commits the settings update plus
-  its `integration_settings_update` audit log entry in one MongoDB
-  transaction.
-- The `settings` collection is authoritative (`unique key`). Environment
-  `GOOGLE_CLIENT_ID` is only the default when no `googleAuth` document exists;
-  `npm run setup:settings` creates the documents once (idempotent upsert).
+- `PUT /api/super-admin/settings/integrations/{key}` accepts
+  `{enabled?: bool, credentials?: {name: string}}`. An empty string clears the
+  saved value and falls back to the normal env key; the integration
+  auto-disables only when no required value remains. The handler writes only
+  changed fields, commits the settings update plus its audit log entry
+  (`integration_settings_update` when credentials change, otherwise
+  `integration_toggle`) in one MongoDB transaction, then mirrors explicit
+  values to the matching `*_OVERRIDE` keys in `server/.env`.
+- A credential that is added or replaced is first proved against the provider
+  that issues it (`server/src/services/integrationValidation.service.js`, wired
+  into `settings.update()`): Gemini's model list, `GET /v1/payments` for
+  PayMongo, Maps Geocoding, the Google OAuth authorize endpoint for a client ID,
+  and a service-account JWT exchange plus one `events.list` read for Calendar.
+  A rejected value answers HTTP 422 with the provider's own reason and is never
+  written — no settings document change and no `.env` change — so the card can
+  keep the editor open with the error under the field. An unreachable provider
+  answers 502 instead of storing an unproven key. Google has no server-side way
+  to judge a reCAPTCHA site key or secret (`siteverify` blames the missing
+  visitor token, not the secret), so both reCAPTCHA values — like the PayMongo
+  webhook signing secret and a Calendar triple that is still partial — are
+  stored with an explanatory `verification.notes` entry; clearing a value needs
+  no check. Provider text is scrubbed of token-shaped strings before it is
+  echoed, and the update response carries
+  `verification: {provider, credentials, notes}` (never a secret) so the UI can
+  confirm "verified with …".
+- The `settings` collection owns activation state (`unique key`) and stores the
+  encrypted copy of super-admin credentials. Credential resolution additionally
+  consults the `*_OVERRIDE` env fields and the normal env defaults as described
+  above. `npm run setup:settings` creates the documents once (idempotent
+  upsert); the seed's empty credential fields deliberately fall through to
+  `.env`.
 
 ## 3. Authentication and authorization model
 
-Account lifecycle (single administrator by design):
+Account lifecycle (single administrator plus a least-privilege super
+administrator, both created directly in the database):
 
 ```
   registration (cashier) / Google (admin)
@@ -125,7 +158,20 @@ Account lifecycle (single administrator by design):
 * The single administrator signs in with email + password or Google
   (verified server-side against the `googleAuth` setting, falling back to
   `GOOGLE_CLIENT_ID` only while no settings document exists; unknown emails
-  404, non-admin emails 403). No endpoint creates administrators.
+  404, non-staff emails 403). No endpoint creates administrators.
+* The super administrator signs in with email + password or Google; sign-in
+  does not ask for an authenticator code. Its only data access is
+  `/api/super-admin/settings/integrations`: list activation state and masked
+  credentials, and send `{enabled}` and/or `{credentials}` + `code` for one
+  integration (a current authenticator code is required for any credential
+  change; a toggle needs none). The app is paired from the Security panel
+  through its own `/api/super-admin/2fa` endpoints, and credential changes
+  stay blocked until it is. Every regular `/api/admin/`
+  endpoint treats it as unauthorized. A global `superAdminScope` middleware
+  additionally rejects `/api/admin/*`, `/api/cashier/*`, and the full
+  reservation list for this role, so endpoints that only check for a login
+  cannot be reached either. The service layer enforces the split even if a
+  route guard is bypassed.
 * Sessions are server-side `express-session` stored in MongoDB
   `authSessions` collection (not `sessions`, to avoid collision with
   billing sessions). Cookie `gh_session` is `httpOnly`, `sameSite=lax`,
@@ -137,7 +183,7 @@ Account lifecycle (single administrator by design):
 
 | Collection | Key fields | Indexes |
 |---|---|---|
-| `users` | email (admins/legacy) / username (cashiers), passwordHash (bcrypt), googleSub, role, status, names, schedule, authProvider | unique partial `email`, unique sparse `username` |
+| `users` | email (admins/legacy) / username (cashiers), passwordHash (bcrypt), googleSub, role (`admin`, `super_admin`, `cashier`), status, names, schedule, authProvider | unique partial `email`, unique sparse `username` |
 | `tables` | name (unique), status (available/occupied/reserved/maintenance), archived flag | unique `name` |
 | `rates` | type (regular/special), pricePerHour, active | (tiny; type lookup) |
 | `sessions` | tableId, tableName, customerName, cashierId, cashierName, startTime, endTime, plannedMinutes, status, pricePerHour, rateType, closedAt, createdAt, updatedAt | unique partial `tableId` where `status="active"` |
@@ -159,7 +205,8 @@ Frontend/
   index.html               Customer landing (hero, location, map)
   login/index.html         Redirect so bare /login resolves
   src/function/auth/       Login (single step + Google), cashier signup form
-  src/function/admin/      Admin dashboard (live stat cards), applicants/staff table
+  src/function/admin/      Admin dashboard, staff, credentials, operations
+  src/function/super-admin/ Integration on/off control (no credentials)
   src/function/cashiers/   Cashier dashboard
   src/function/tables/     Tables, rates page, sessions view
   src/function/shared/     Landing status logic
@@ -189,6 +236,8 @@ Frontend/
    never see connection strings, mail passwords, or hashes.
 2. Every state-changing and every listing endpoint re-checks the session
    server-side; role is taken from the session, never from request data.
+   Integration credentials are admin-only and activation is super-admin-only;
+   neither role can exercise the other's capability.
 3. Passwords are bcrypt-hashed and invite tokens are SHA-256-hashed; plain
    values never touch the database, logs, or responses. List endpoints
    project hashes out.
@@ -201,6 +250,11 @@ Frontend/
    Frontend and Backend share the `localhost` host so session cookies apply.
 6. Validation is allow-list style per endpoint (roles, statuses, name and
    username shapes, positive prices); unknown fields are ignored, never stored.
+7. Rate limiting protects every `/api` request (`express-rate-limit`, in-memory
+   per process): a broad per-IP budget, a tighter write budget per user, a
+   failed-attempt budget for login/authenticator-change/register/invite lookups, and a
+   guest-only reservation budget. Rejections are `429` with `Retry-After`; see
+   `server/src/middleware/rateLimit.js` and the `*_RATE_LIMIT_*` env keys.
 
 ## 7. Performance notes
 

@@ -94,14 +94,60 @@ async function logout() {
 async function getMe() {
   return api("/api/me");
 }
-// --- Admin settings (masked credentials; server is authoritative) ---
+// Cashier self-service profile: display name only (email stays read-only).
+async function updateMyProfile(displayName) {
+  return api("/api/me/profile", {
+    method: "PUT",
+    body: JSON.stringify({ displayName }),
+  });
+}
+
+// Landing page for a staff role. Every protected page sits one directory under
+// src/function/, so this relative path works from admin/, cashiers/, tables/,
+// auth/, and super-admin/ pages alike.
+function staffHome(role) {
+  if (role === "super_admin") return "../super-admin/integrations.html";
+  if (role === "admin") return "../admin/admin-dashboard.html";
+  if (role === "cashier") return "../cashiers/cashier-dashboard.html";
+  return "../auth/login.html";
+}
+
+// --- Admin settings (read-only: integration on/off state only) ---
 async function getAdminIntegrations() {
   return api("/api/admin/settings/integrations");
 }
-async function updateAdminIntegration(key, fields) {
-  return api(`/api/admin/settings/integrations/${encodeURIComponent(key)}`, {
+
+// --- Super admin settings (activation + masked credentials) ---
+async function getSuperAdminIntegrations() {
+  return api("/api/super-admin/settings/integrations");
+}
+async function updateSuperAdminIntegration(key, fields) {
+  return api(`/api/super-admin/settings/integrations/${encodeURIComponent(key)}`, {
     method: "PUT",
-    body: JSON.stringify(fields),
+    body: JSON.stringify(fields || {}),
+  });
+}
+
+// --- Super admin authenticator app (TOTP) ---
+async function getSuperAdminTwoFactor() {
+  return api("/api/super-admin/2fa");
+}
+async function setupSuperAdminTwoFactor(code = "") {
+  return api("/api/super-admin/2fa/setup", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+async function enableSuperAdminTwoFactor(code) {
+  return api("/api/super-admin/2fa/enable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+async function disableSuperAdminTwoFactor(code) {
+  return api("/api/super-admin/2fa/disable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
   });
 }
 
@@ -130,6 +176,15 @@ async function listActivityLogs({ actorId = "", action = "", from = "", to = "",
   if (from) q.set("from", from);
   if (to) q.set("to", to);
   return api(`/api/admin/activity-logs?${q.toString()}`);
+}
+
+// --- Personal activity log (all roles: cashier, super-admin, admin) ---
+async function listMyActivityLogs({ action = "", from = "", to = "", limit = 200 } = {}) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (action) q.set("action", action);
+  if (from) q.set("from", from);
+  if (to) q.set("to", to);
+  return api(`/api/me/activity-logs?${q.toString()}`);
 }
 
 // --- Sprint 02: tables (AD-008..AD-013) + rates (AD-016/017) + sessions view (AD-014) ---

@@ -11,7 +11,8 @@
         "googleAuth": { "enabled": false, "clientId": "" },
         "googleMaps": { "enabled": true, "apiKey": "" },
         "recaptcha": { "enabled": false, "siteKey": "" },
-        "paymongo": { "enabled": false }
+        "paymongo": { "enabled": false },
+        "exports": { "receiptPdf": true, "csvExport": true }
       }
     }
   }

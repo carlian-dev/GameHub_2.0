@@ -19,6 +19,7 @@ function clipText(value, max) {
 }
 
 let lastDoc = null;
+let pdfEnabled = true;
 let lastRef = "";
 let lastUrl = "";
 
@@ -201,6 +202,21 @@ function showPreview() {
   }
   try {
     await getMe();
+    try {
+      const cfg = await getAppConfig();
+      pdfEnabled = !(cfg && cfg.exports && cfg.exports.receiptPdf === false);
+    } catch {
+      // The flag is only a hint; the bill details still load.
+    }
+    if (!pdfEnabled) {
+      const dl = document.getElementById("download");
+      if (dl) {
+        dl.disabled = true;
+        dl.hidden = true;
+      }
+      const wrap = document.querySelector(".pdf-wrap");
+      if (wrap) wrap.hidden = true;
+    }
   } catch {
     location.href = "../auth/login.html";
     return;
@@ -254,6 +270,11 @@ function showPreview() {
     document.getElementById("rTbl").hidden = false;
     document.title = `Receipt ${t.ref} — GameHub`;
 
+    if (!pdfEnabled) {
+      msg.textContent = "PDF receipts are turned off by the super administrator.";
+      msg.className = "dash-msg err";
+      return;
+    }
     if (!window.jspdf || !window.jspdf.jsPDF) {
       msg.textContent = "PDF library failed to load (js/vendor/jspdf.umd.min.js). Details above still valid.";
       msg.className = "dash-msg err";

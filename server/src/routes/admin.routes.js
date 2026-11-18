@@ -4,7 +4,7 @@
 //   GET  /api/admin/invitations              (10) invite_list
 //   POST /api/admin/invitations/{id}/revoke  (11) invite_revoke
 //   GET  /api/admin/settings/integrations    (12) settings_list
-//   PUT  /api/admin/settings/integrations/{key} (13) settings_update
+//   (removed 13) PUT /api/admin/settings/integrations/{key} - super_admin only
 //   GET  /api/admin/cashiers                 (14) cashiers_list
 //   PUT  /api/admin/cashiers/{id}            (15) cashiers_update
 //   POST /api/admin/cashiers/{id}/archive    (16) cashiers_archive
@@ -23,7 +23,7 @@ export function registerAdminRoutes(router, {
 
   // Settings integrations
   router.get("/admin/settings/integrations", settingsController.adminIntegrations);
-  router.put("/admin/settings/integrations/:key", settingsController.settingsUpdate);
+  // Read-only: only a super administrator can change integrations.
 
   // Cashiers
   router.get("/admin/cashiers", cashierController.list);

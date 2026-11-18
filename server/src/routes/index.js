@@ -4,9 +4,11 @@
 // Routes register directly on the main router (no sub-router mounting,
 // which caused issues with Express 5).
 import { Router } from "express";
+import { superAdminScope } from "../middleware/auth.js";
 import { registerPublicRoutes } from "./public.routes.js";
 import { registerAuthRoutes } from "./auth.routes.js";
 import { registerAdminRoutes } from "./admin.routes.js";
+import { registerSuperAdminRoutes } from "./superAdmin.routes.js";
 import { registerTableRoutes } from "./tables.routes.js";
 import { registerSessionRoutes } from "./session.routes.js";
 import { registerTransactionRoutes } from "./transaction.routes.js";
@@ -18,6 +20,13 @@ import { registerPaymongoRoutes } from "./paymongo.routes.js";
 export default function apiRoutes({ controllers }) {
   const router = Router();
 
+  // Least privilege for super admins: their session only unlocks /me, /logout,
+  // and the super-admin integration routes. Public routes ignore the session,
+  // so landing-page config keeps working. Operational /admin and /cashier
+  // endpoints (sessions, billing, reservations, reports) are off limits even
+  // when a controller otherwise checks only for a login.
+  router.use(superAdminScope);
+
   // Public routes (no login required): health, config, register, invite check,
   // public table availability, rates, reservations.
   registerPublicRoutes(router, {
@@ -28,10 +37,11 @@ export default function apiRoutes({ controllers }) {
     reservationController: controllers.reservation,
   });
 
-  // Auth routes (session-based): login, logout, me, google, register, invite token.
+  // Auth routes (session-based): login, logout, me, google, register, invite token, own activity logs.
   registerAuthRoutes(router, {
     authController: controllers.auth,
     invitationController: controllers.invitation,
+    activityController: controllers.activity,
   });
 
   // Admin routes (requireAdmin).
@@ -40,6 +50,12 @@ export default function apiRoutes({ controllers }) {
     settingsController: controllers.settings,
     cashierController: controllers.cashier,
     activityController: controllers.activity,
+  });
+
+  // Super-admin routes (requireSuperAdmin): integration on/off + own 2FA.
+  registerSuperAdminRoutes(router, {
+    settingsController: controllers.settings,
+    twoFactorController: controllers.twoFactor,
   });
 
   // Table routes (admin + public availability).

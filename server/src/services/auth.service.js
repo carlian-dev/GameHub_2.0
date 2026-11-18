@@ -11,6 +11,7 @@ export function authService({
   settingsModel,
   db,
   googleClientIdFromEnv = "",
+  googleAuthConfigProvider = null,
   recaptchaService = null,
 }) {
   const usersColl = db.collection("users");
@@ -29,6 +30,12 @@ export function authService({
     ["archived", "account archived"],
     ["declined", "application was declined"],
   ];
+
+  function statusError(status, message) {
+    const err = new Error(message);
+    err.status = status;
+    return err;
+  }
 
   async function checkStatus(user) {
     for (const [status, message] of STATUS_GATES) {
@@ -65,6 +72,36 @@ export function authService({
     } catch {
       // Audit is best-effort: a log write must never block sign-in/sign-out.
     }
+  }
+
+  function sessionPayload(user) {
+    return {
+      id: String(user._id),
+      username: user.username ?? null,
+      email: user.email ?? null,
+      role: user.role,
+    };
+  }
+
+  async function regenerateSession(req) {
+    if (req.session && typeof req.session.regenerate === "function") {
+      await new Promise((resolve, reject) => {
+        req.session.regenerate((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }
+  }
+
+  /** Create the logged-in session after password/Google passes. */
+  async function completeLogin(req, user, provider) {
+    const payload = sessionPayload(user);
+    await regenerateSession(req);
+    req.session.user = payload;
+    if (typeof req.session.save === "function") await req.session.save();
+    await logAuth("login", user, provider);
+    return { username: user.username ?? null, email: user.email ?? null, role: user.role };
   }
 
   return {
@@ -105,29 +142,7 @@ export function authService({
       }
 
       await checkStatus(user);
-
-      // Session payload exactly (migration.md §13.1).
-      const payload = {
-        id: String(user._id),
-        username: user.username ?? null,
-        email: user.email ?? null,
-        role: user.role,
-      };
-
-      // Regenerate + save to prevent session fixation (divergence #1).
-      if (req.session.regenerate) {
-        await new Promise((resolve, reject) => {
-          req.session.regenerate((err) => {
-            if (err) return reject(err);
-            resolve();
-          });
-        });
-      }
-      req.session.user = payload;
-      await req.session.save();
-      await logAuth("login", user, "password");
-
-      return { username: user.username ?? null, email: user.email ?? null, role: user.role };
+      return completeLogin(req, user, "password");
     },
 
     async logout(req) {
@@ -181,7 +196,59 @@ export function authService({
         authProvider: provider,
         createdAt: createdAtIso,
         googleLinked: googleSub !== "",
+        twoFactorEnabled:
+          user.role === "super_admin" && user.twoFactor?.enabled === true,
       };
+    },
+
+    /**
+     * PUT /api/me/profile — a cashier may change only their own display name.
+     * Email, username, role and password are never accepted here.
+     */
+    async updateProfile(userId, { displayName } = {}) {
+      const user = await userModel.findById(userId);
+      if (!user) {
+        throw statusError(401, "not logged in");
+      }
+      if (user.status !== "active") {
+        throw statusError(403, "account is not active");
+      }
+      if (user.role !== "cashier") {
+        throw statusError(403, "cashier only");
+      }
+
+      const name = typeof displayName === "string" ? displayName.trim() : "";
+      if (name.length < 2 || name.length > 60) {
+        throw statusError(422, "display name must be 2-60 characters");
+      }
+
+      const before = String(user.displayName ?? "").trim();
+      if (name === before) {
+        return { displayName: name };
+      }
+
+      await usersColl.updateOne(
+        { _id: user._id },
+        { $set: { displayName: name } }
+      );
+
+      try {
+        await activityLogsColl.insertOne({
+          actorId: String(user._id),
+          action: "profile_update",
+          target: String(user._id),
+          meta: {
+            field: "displayName",
+            oldValue: before || null,
+            newValue: name,
+          },
+          at: new Date(),
+        });
+      } catch {
+        // Audit is best-effort, like sign-in/sign-out logging.
+      }
+
+      return { displayName: name };
     },
 
     /** Invitation-only registration. Role forced to cashier, status active. */
@@ -304,25 +371,33 @@ export function authService({
 
     /** Google admin-only login. */
     async google({ idToken, email }, req) {
-      // Read googleAuth settings; DB authoritative; read failure → 503.
-      let authDoc;
+      // Resolve the same effective client ID GET /api/config publishes:
+      // Settings > API override (.env) -> settings document -> env default.
+      // A read failure must fail closed.
+      let clientId = "";
       try {
-        authDoc = await settingsModel.findOne("googleAuth");
+        if (typeof googleAuthConfigProvider === "function") {
+          const cfg = await googleAuthConfigProvider();
+          if (cfg && cfg.enabled) {
+            clientId = String(cfg.clientId || "").trim();
+          }
+        } else {
+          // Fallback for callers that only provide the settings model.
+          const authDoc = await settingsModel.findOne("googleAuth");
+          if (authDoc) {
+            if (authDoc.enabled) {
+              clientId = String(authDoc.credentials?.clientId?.value || "").trim();
+            }
+          } else {
+            clientId = String(googleClientIdFromEnv || "").trim();
+          }
+        }
       } catch {
         const err = new Error("Google sign-in is temporarily unavailable");
         err.status = 503;
         throw err;
       }
-      // Google Auth settings: DB authoritative, but while no document exists
-      // GOOGLE_CLIENT_ID is the default — the same rule GET /api/config uses
-      // (architecture.md §2.1). A document that exists always wins.
-      let clientId = "";
-      if (authDoc) {
-        if (authDoc.enabled) clientId = authDoc.credentials?.clientId?.value || "";
-      } else {
-        clientId = String(googleClientIdFromEnv || "").trim();
-        if (!isValidGoogleClientId(clientId)) clientId = "";
-      }
+      if (!isValidGoogleClientId(clientId)) clientId = "";
       if (!clientId) {
         const err = new Error("Google sign-in is not configured");
         err.status = 503;
@@ -384,8 +459,8 @@ export function authService({
         throw err;
       }
 
-      // Only admin can use Google login.
-      if (user.role !== "admin") {
+      // Only staff administrators (admin or super admin) can use Google login.
+      if (user.role !== "admin" && user.role !== "super_admin") {
         const err = new Error("invalid Google sign-in");
         err.status = 403;
         throw err;
@@ -414,28 +489,7 @@ export function authService({
         );
       }
 
-      // Session payload exactly (migration.md §13.1).
-      const payload = {
-        id: String(user._id),
-        username: user.username ?? null,
-        email: user.email ?? null,
-        role: user.role,
-      };
-
-      // Regenerate + save to prevent session fixation (divergence #1).
-      if (req.session.regenerate) {
-        await new Promise((resolve, reject) => {
-          req.session.regenerate((err) => {
-            if (err) return reject(err);
-            resolve();
-          });
-        });
-      }
-      req.session.user = payload;
-      await req.session.save();
-      await logAuth("login", user, "google");
-
-      return { username: user.username ?? null, email: user.email ?? null, role: user.role };
+      return completeLogin(req, user, "google");
     },
   };
 }

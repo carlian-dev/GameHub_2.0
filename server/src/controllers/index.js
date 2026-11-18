@@ -6,10 +6,13 @@ import {
   healthView,
   loginView,
   meView,
+  profileView,
   publicConfigView,
   adminIntegrationsView,
   invitationCheckView,
   activityView,
+  twoFactorSetupView,
+  twoFactorStatusView,
 } from "../views/index.js";
 
 // -------- Tables --------
@@ -296,7 +299,7 @@ export function transactionController({ transactionService }) {
 }
 
 // -------- Reports --------
-export function reportController({ reportService }) {
+export function reportController({ reportService, settingsService }) {
   return {
     daily: asyncHandler(async (req, res) => {
       const user = req.session && req.session.user;
@@ -333,6 +336,12 @@ export function reportController({ reportService }) {
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
+      const exportsCfg = settingsService
+        ? await settingsService.exportConfig()
+        : { csvExport: true };
+      if (!exportsCfg.csvExport) {
+        throw new HttpError(403, "CSV export is turned off by the super administrator");
+      }
       const result = await reportService.export({
         from: req.query.from,
         to: req.query.to,
@@ -360,8 +369,8 @@ export function settingsController({ settingsService }) {
   return {
     publicConfig: asyncHandler(async (req, res) => {
       res.set("Cache-Control", "no-store");
-      const data = await settingsService.publicConfig();
-      res.status(200).json(publicConfigView(data));
+      const { exports, ...integrations } = await settingsService.publicConfig();
+      res.status(200).json({ ...publicConfigView(integrations), exports });
     }),
     adminIntegrations: asyncHandler(async (req, res) => {
       const user = req.session && req.session.user;
@@ -371,16 +380,31 @@ export function settingsController({ settingsService }) {
       const data = await settingsService.adminIntegrations();
       res.status(200).json(adminIntegrationsView(data));
     }),
-    settingsUpdate: asyncHandler(async (req, res) => {
+    /** Super admin: activation state plus masked credentials. */
+    superAdminIntegrations: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const data = await settingsService.superAdminIntegrations();
+      res.status(200).json(adminIntegrationsView(data));
+    }),
+    /**
+     * Super admin: flip one integration and/or change its credentials. A
+     * `credentials` payload must also carry the 6-digit authenticator `code`
+     * (step-up); the service verifies it before writing.
+     */
+    superAdminUpdate: asyncHandler(async (req, res) => {
       const { key } = req.params || {};
       if (!key) throw new HttpError(422, "unknown integration");
       const user = req.session && req.session.user;
-      if (!user || user.role !== "admin") {
-        throw new HttpError(401, "not logged in");
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
       }
       const shaped = await settingsService.update(key, req.body || {}, {
         id: user.id,
         email: user.email ?? null,
+        role: user.role,
       });
       res.status(200).json({ ok: true, integration: shaped });
     }),
@@ -415,6 +439,18 @@ export function authController({ authService }) {
       res.status(200).json(meView(result));
     }),
 
+    /** PUT /api/me/profile — cashier self-service display name. */
+    updateProfile: asyncHandler(async (req, res) => {
+      const userId = req.session && req.session.user ? req.session.user.id : null;
+      if (!userId) {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await authService.updateProfile(userId, {
+        displayName: req.body?.displayName,
+      });
+      res.status(200).json(profileView(result));
+    }),
+
     google: asyncHandler(async (req, res) => {
       const { idToken, email } = req.body || {};
       const result = await authService.google({ idToken, email }, req);
@@ -435,6 +471,55 @@ export function authController({ authService }) {
         remoteIp: req.ip,
       });
       res.status(200).json(loginView(result));
+    }),
+  };
+}
+
+// -------- Super-admin two-factor authentication (TOTP) --------
+export function twoFactorController({ twoFactorService }) {
+  function requireActor(req) {
+    const user = req.session && req.session.user;
+    if (!user || user.role !== "super_admin") {
+      throw new HttpError(403, "super admin only");
+    }
+    return user;
+  }
+
+  return {
+    status: asyncHandler(async (req, res) => {
+      const user = requireActor(req);
+      const result = await twoFactorService.status(user.id);
+      res.status(200).json(twoFactorStatusView(result));
+    }),
+
+    /** Re-enroll / first-time setup from the security panel. Replacing a paired app also needs its current code. */
+    setup: asyncHandler(async (req, res) => {
+      const user = requireActor(req);
+      const result = await twoFactorService.beginEnrollment(
+        user.id,
+        req.body?.code
+      );
+      res.status(200).json(twoFactorSetupView(result));
+    }),
+
+    enable: asyncHandler(async (req, res) => {
+      const { code } = req.body || {};
+      if (!code) {
+        throw new HttpError(422, "enter the 6-digit code from your authenticator app");
+      }
+      const user = requireActor(req);
+      const result = await twoFactorService.completeEnrollment(user.id, code);
+      res.status(200).json(twoFactorStatusView(result));
+    }),
+
+    disable: asyncHandler(async (req, res) => {
+      const { code } = req.body || {};
+      if (!code) {
+        throw new HttpError(422, "enter the 6-digit code from your authenticator app");
+      }
+      const user = requireActor(req);
+      const result = await twoFactorService.disable(user.id, code);
+      res.status(200).json(twoFactorStatusView(result));
     }),
   };
 }
@@ -538,7 +623,7 @@ export function cashierController({ cashierService }) {
   };
 }
 
-// -------- Activity log (admin only, AD-026) --------
+// -------- Activity log (admin full audit + user self audit) --------
 export function activityController({ activityService }) {
   return {
     list: asyncHandler(async (req, res) => {
@@ -549,6 +634,21 @@ export function activityController({ activityService }) {
       const result = await activityService.list({
         action: req.query.action,
         actorId: req.query.actorId,
+        from: req.query.from,
+        to: req.query.to,
+        limit: req.query.limit,
+      });
+      res.status(200).json(activityView(result));
+    }),
+
+    myList: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user || !user.id) {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await activityService.list({
+        action: req.query.action,
+        actorId: String(user.id),
         from: req.query.from,
         to: req.query.to,
         limit: req.query.limit,

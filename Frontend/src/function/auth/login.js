@@ -2,10 +2,12 @@
 // Pair: src/function/auth/login.html <-> server/src/routes/auth.routes.js
 // (POST /api/login, POST /api/auth/google).
 // Valid ACTIVE accounts log straight in (email/username + password, or Google)
-// and redirect by role: admin -> ../admin/admin-dashboard.html,
-// cashier -> ../cashiers/cashier-dashboard.html. Pending/archived/declined show
-// the Backend message verbatim. Enter submits via the real <form>; per-field
-// validation marks aria-invalid + red border until fixed.
+// and redirect by role (staffHome): super_admin -> integration toggles,
+// admin -> admin dashboard, cashier -> cashier dashboard. Pending/archived/
+// declined show the Backend message verbatim. Enter submits via the real
+// <form>; per-field validation marks aria-invalid + red border until fixed.
+// Super-admin sign-in is single-step; the authenticator app is only requested
+// later, when adding, replacing or clearing an API credential.
 
 function setFieldError(input, hasError) {
   input.setAttribute("aria-invalid", hasError ? "true" : "false");
@@ -22,7 +24,7 @@ function welcomeAndGo(data) {
   const msg = document.getElementById("msg");
   msg.textContent = `Welcome ${who} (${data.role}).`;
   msg.className = "ok";
-  location.href = data.role === "admin" ? "../admin/admin-dashboard.html" : "../cashiers/cashier-dashboard.html";
+  location.href = staffHome(data.role);
 }
 
 async function submitLogin() {
@@ -53,7 +55,8 @@ async function submitLogin() {
       msg.className = "err";
       return;
     }
-    welcomeAndGo(await login(emailEl.value.trim(), pwEl.value, recaptchaToken));
+    const resp = await login(emailEl.value.trim(), pwEl.value, recaptchaToken);
+    welcomeAndGo(resp);
   } catch (e) {
     // Tokens are single-use: let the guest retry after any rejected attempt.
     GameHubRecaptcha.reset();

@@ -61,6 +61,29 @@ describe("super-admin two-factor step-up", () => {
     );
   });
 
+  it("requires the current code before replacing a paired authenticator", async () => {
+    const svc = serviceFor();
+    const currentCode = generateTotp(SECRET);
+    const wrongCode = currentCode === "000000" ? "000001" : "000000";
+    await assert.rejects(
+      () => svc.beginEnrollment("super-1", ""),
+      (err) => err.status === 422 && /current 6-digit code/i.test(err.message)
+    );
+    await assert.rejects(
+      () => svc.beginEnrollment("super-1", wrongCode),
+      (err) => err.status === 422 && /invalid authenticator code/i.test(err.message)
+    );
+    const setup = await svc.beginEnrollment("super-1", currentCode);
+    assert.match(setup.otpauthUrl, /^otpauth:\/\/totp\//);
+  });
+
+  it("lets a first-time pairing start without a code", async () => {
+    const svc = serviceFor({ twoFactor: null });
+    const setup = await svc.beginEnrollment("super-1", "");
+    assert.match(setup.otpauthUrl, /^otpauth:\/\/totp\//);
+    assert.match(setup.qrDataUrl, /^data:image\/png;base64,/);
+  });
+
   it("rejects an inactive account", async () => {
     const svc = serviceFor({ status: "archived" });
     await assert.rejects(

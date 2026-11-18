@@ -9,6 +9,7 @@ const MAX_ROWS = 200;
 const ACTION_LABELS = {
   login: "Signed in",
   logout: "Signed out",
+  profile_update: "Profile updated",
   approve_cashier: "Cashier approved",
   decline_application: "Application declined",
   approve_admin: "Admin approved",
@@ -42,6 +43,7 @@ const ACTION_LABELS = {
 const ACTION_TONES = {
   login: "active",
   logout: "archived",
+  profile_update: "pending",
   approve_cashier: "available",
   decline_application: "declined",
   approve_admin: "available",
@@ -142,6 +144,9 @@ function detailsOf(log) {
 
   if (action === "login") return providerText(m.provider) || "—";
   if (action === "logout") return providerText(m.provider) || "—";
+  if (action === "profile_update") {
+    return m.newValue ? `Display name → ${m.newValue}` : "Display name updated";
+  }
 
   if (action === "approve_cashier" || action === "archive_cashier" || action === "unarchive_cashier") {
     return log.targetName ? `Account: ${log.targetName}` : `Account ${shortId(log.target)}`;

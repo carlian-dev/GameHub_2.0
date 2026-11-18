@@ -67,6 +67,7 @@ function shortId(id) {
 function providerText(provider) {
   if (provider === "google") return "Google sign-in";
   if (provider === "password") return "Password sign-in";
+  // Historical sign-ins recorded while 2FA still gated login.
   if (provider === "google+totp") return "Google + authenticator";
   if (provider === "password+totp") return "Password + authenticator";
   return "";

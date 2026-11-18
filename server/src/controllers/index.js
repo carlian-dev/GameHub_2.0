@@ -6,11 +6,11 @@ import {
   healthView,
   loginView,
   meView,
+  profileView,
   publicConfigView,
   adminIntegrationsView,
   invitationCheckView,
   activityView,
-  twoFactorChallengeView,
   twoFactorSetupView,
   twoFactorStatusView,
 } from "../views/index.js";
@@ -421,10 +421,6 @@ export function authController({ authService }) {
         { identifier, password, recaptchaToken },
         req
       );
-      if (result.twoFactorRequired) {
-        res.status(200).json(twoFactorChallengeView(result));
-        return;
-      }
       res.status(200).json(loginView(result));
     }),
 
@@ -443,37 +439,22 @@ export function authController({ authService }) {
       res.status(200).json(meView(result));
     }),
 
+    /** PUT /api/me/profile — cashier self-service display name. */
+    updateProfile: asyncHandler(async (req, res) => {
+      const userId = req.session && req.session.user ? req.session.user.id : null;
+      if (!userId) {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await authService.updateProfile(userId, {
+        displayName: req.body?.displayName,
+      });
+      res.status(200).json(profileView(result));
+    }),
+
     google: asyncHandler(async (req, res) => {
       const { idToken, email } = req.body || {};
       const result = await authService.google({ idToken, email }, req);
-      if (result.twoFactorRequired) {
-        res.status(200).json(twoFactorChallengeView(result));
-        return;
-      }
       res.status(200).json(loginView(result));
-    }),
-
-    /** Step 2 for super admins: verify the authenticator code. */
-    twoFactorVerify: asyncHandler(async (req, res) => {
-      const { code } = req.body || {};
-      if (!code) {
-        throw new HttpError(422, "enter the 6-digit code from your authenticator app");
-      }
-      const result = await authService.verifyTwoFactor({ code }, req);
-      res.status(200).json(loginView(result));
-    }),
-
-    /** Enrollment during a pending super-admin login: QR + manual key. */
-    twoFactorSetup: asyncHandler(async (req, res) => {
-      const result = await authService.setupPendingEnrollment(req);
-      res.status(200).json(twoFactorSetupView(result));
-    }),
-
-    /** Abandon a pending 2FA login and return to the password step. */
-    twoFactorCancel: asyncHandler(async (req, res) => {
-      await authService.cancelTwoFactor(req);
-      res.clearCookie("gh_session", { path: "/" });
-      res.status(200).json({ ok: true });
     }),
 
     register: asyncHandler(async (req, res) => {
@@ -511,10 +492,13 @@ export function twoFactorController({ twoFactorService }) {
       res.status(200).json(twoFactorStatusView(result));
     }),
 
-    /** Re-enroll / first-time setup from the security panel. */
+    /** Re-enroll / first-time setup from the security panel. Replacing a paired app also needs its current code. */
     setup: asyncHandler(async (req, res) => {
       const user = requireActor(req);
-      const result = await twoFactorService.beginEnrollment(user.id);
+      const result = await twoFactorService.beginEnrollment(
+        user.id,
+        req.body?.code
+      );
       res.status(200).json(twoFactorSetupView(result));
     }),
 

@@ -7,22 +7,23 @@
 //   POST /api/auth/google              (6)
 //   POST /api/logout                   (7)   Auth
 //   GET  /api/me                       (8)    Auth
+//   PUT  /api/me/profile                      Cashier self-service display name
 //   GET  /api/me/activity-logs                Self activity audit (any role)
+import { requireCashier } from "../middleware/auth.js";
+import { rateLimiters } from "../middleware/rateLimit.js";
+
 export function registerAuthRoutes(router, { authController, invitationController, activityController }) {
-  // Public (no login)
-  router.post("/cashiers/register", authController.register);
-  router.get("/invitations/:token", invitationController.check);
-  router.post("/login", authController.login);
-  // Super-admin authenticator step: guarded by the pending session inside the
-  // controller/service, not by requireLogin (there is no `user` yet).
-  router.post("/login/2fa", authController.twoFactorVerify);
-  router.post("/login/2fa/setup", authController.twoFactorSetup);
-  router.post("/login/2fa/cancel", authController.twoFactorCancel);
-  router.post("/auth/google", authController.google);
+  // Public (no login). These are the only password/token-guessing surfaces, so
+  // they get the strict `auth` limiter (successful attempts are not counted).
+  router.post("/cashiers/register", rateLimiters.auth, authController.register);
+  router.get("/invitations/:token", rateLimiters.auth, invitationController.check);
+  router.post("/login", rateLimiters.auth, authController.login);
+  router.post("/auth/google", rateLimiters.auth, authController.google);
 
   // Authenticated (session required — requireLogin applied inside controllers)
   router.post("/logout", authController.logout);
   router.get("/me", authController.me);
+  router.put("/me/profile", requireCashier, authController.updateProfile);
   if (activityController && activityController.myList) {
     router.get("/me/activity-logs", activityController.myList);
   }

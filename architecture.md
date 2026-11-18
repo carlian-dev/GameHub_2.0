@@ -70,7 +70,7 @@ server/src/models/*.js       Named Mongo queries + BSON conversions.
   |                                 assertTestDb guard.
   +-- server/src/views/*.js ...... JSON serializers (MVC View).
   +-- server/src/middleware/*.js . Auth guards, error mapping, not-found,
-                                   CORS, session.
+                                   CORS, session, rate limiting.
 ```
 
 Conventions: controllers return plain objects; views serialize to JSON.
@@ -110,6 +110,23 @@ per-request queries.
   (`integration_settings_update` when credentials change, otherwise
   `integration_toggle`) in one MongoDB transaction, then mirrors explicit
   values to the matching `*_OVERRIDE` keys in `server/.env`.
+- A credential that is added or replaced is first proved against the provider
+  that issues it (`server/src/services/integrationValidation.service.js`, wired
+  into `settings.update()`): Gemini's model list, `GET /v1/payments` for
+  PayMongo, Maps Geocoding, the Google OAuth authorize endpoint for a client ID,
+  and a service-account JWT exchange plus one `events.list` read for Calendar.
+  A rejected value answers HTTP 422 with the provider's own reason and is never
+  written — no settings document change and no `.env` change — so the card can
+  keep the editor open with the error under the field. An unreachable provider
+  answers 502 instead of storing an unproven key. Google has no server-side way
+  to judge a reCAPTCHA site key or secret (`siteverify` blames the missing
+  visitor token, not the secret), so both reCAPTCHA values — like the PayMongo
+  webhook signing secret and a Calendar triple that is still partial — are
+  stored with an explanatory `verification.notes` entry; clearing a value needs
+  no check. Provider text is scrubbed of token-shaped strings before it is
+  echoed, and the update response carries
+  `verification: {provider, credentials, notes}` (never a secret) so the UI can
+  confirm "verified with …".
 - The `settings` collection owns activation state (`unique key`) and stores the
   encrypted copy of super-admin credentials. Credential resolution additionally
   consults the `*_OVERRIDE` env fields and the normal env defaults as described
@@ -142,14 +159,14 @@ administrator, both created directly in the database):
   (verified server-side against the `googleAuth` setting, falling back to
   `GOOGLE_CLIENT_ID` only while no settings document exists; unknown emails
   404, non-staff emails 403). No endpoint creates administrators.
-* The super administrator signs in with email + password or Google, then always
-  passes a second factor: an authenticator-app TOTP code (first sign-in forces
-  QR enrollment). Its only data access is
+* The super administrator signs in with email + password or Google; sign-in
+  does not ask for an authenticator code. Its only data access is
   `/api/super-admin/settings/integrations`: list activation state and masked
   credentials, and send `{enabled}` and/or `{credentials}` + `code` for one
   integration (a current authenticator code is required for any credential
-  change; a toggle needs none),
-  plus its own `/api/super-admin/2fa` endpoints. Every regular `/api/admin/`
+  change; a toggle needs none). The app is paired from the Security panel
+  through its own `/api/super-admin/2fa` endpoints, and credential changes
+  stay blocked until it is. Every regular `/api/admin/`
   endpoint treats it as unauthorized. A global `superAdminScope` middleware
   additionally rejects `/api/admin/*`, `/api/cashier/*`, and the full
   reservation list for this role, so endpoints that only check for a login
@@ -233,6 +250,11 @@ Frontend/
    Frontend and Backend share the `localhost` host so session cookies apply.
 6. Validation is allow-list style per endpoint (roles, statuses, name and
    username shapes, positive prices); unknown fields are ignored, never stored.
+7. Rate limiting protects every `/api` request (`express-rate-limit`, in-memory
+   per process): a broad per-IP budget, a tighter write budget per user, a
+   failed-attempt budget for login/authenticator-change/register/invite lookups, and a
+   guest-only reservation budget. Rejections are `429` with `Retry-After`; see
+   `server/src/middleware/rateLimit.js` and the `*_RATE_LIMIT_*` env keys.
 
 ## 7. Performance notes
 

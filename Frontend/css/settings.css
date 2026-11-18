@@ -1,10 +1,11 @@
 /* ================================================
-   css/settings.css - admin settings page + settings menu.
-   Loaded after dashboard.css on admin pages only. Uses the existing
-   --d-* design tokens; cashier pages never load this file.
+   css/settings.css - settings pages + settings menu.
+   Loaded after dashboard.css on admin and cashier pages. Uses the existing
+   --d-* design tokens.
    ================================================ */
 
-/* ---- Admin settings gear menu ---- */
+/* ---- Settings gear menu (admin + cashier) ---- */
+[data-settings-menu],
 [data-admin-settings] { display: flex; align-items: center; }
 .dash-settings-btn {
   width: 40px;
@@ -166,6 +167,28 @@
   font-size: 12.5px;
   line-height: 1.6;
   color: var(--d-muted);
+}
+
+/* ---- Editable profile form (cashier settings) ---- */
+.settings-form {
+  display: grid;
+  gap: 14px;
+  max-width: 520px;
+  margin-top: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--d-border-soft);
+}
+.settings-form .field { margin-bottom: 0; }
+.settings-form .field-hint { line-height: 1.55; }
+.settings-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.settings-form-actions .btn {
+  min-height: 42px;
+  padding: 0 18px;
+  font-size: 13px;
 }
 
 /* ---- API integration tab ---- */

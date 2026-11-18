@@ -3,6 +3,7 @@
 // own authenticator app (two-factor authentication). Administrators can only
 // read the on/off state; their write route was removed.
 import { requireSuperAdmin } from "../middleware/auth.js";
+import { rateLimiters } from "../middleware/rateLimit.js";
 
 export function registerSuperAdminRoutes(
   router,
@@ -29,11 +30,15 @@ export function registerSuperAdminRoutes(
   router.post(
     "/super-admin/2fa/enable",
     requireSuperAdmin,
+    // Failed codes count against the same strict auth budget as login, so a
+    // hijacked session cannot brute-force the 6-digit authenticator code.
+    rateLimiters.auth,
     twoFactorController.enable
   );
   router.post(
     "/super-admin/2fa/disable",
     requireSuperAdmin,
+    rateLimiters.auth,
     twoFactorController.disable
   );
 }

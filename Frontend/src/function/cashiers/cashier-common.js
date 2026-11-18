@@ -1,18 +1,18 @@
 // src/function/cashiers/cashier-common.js - shared cashier shell helpers.
 // Pages: cashier-dashboard.html (start), cashier-sessions.html (lifecycle +
 // billing), cashier-reservations.html (accept/reject requests),
-// cashier-tables.html (read-only). Pair: js/dash.js (shell) + js/api.js
-// (endpoints). Guard + identity + timers live here so the pages stay 1:1 with
-// their HTML without duplicating auth logic.
+// cashier-tables.html (read-only), cashier-settings.html (profile name).
+// Pair: js/dash.js (shell) + js/api.js (endpoints). Guard + identity + timers
+// live here so the pages stay 1:1 with their HTML without duplicating auth logic.
 
-/** Cashier-only guard. Sets #who/#avatar, binds #out. Returns `me` or redirects. */
+/** Cashier-only guard. Sets #who/#avatar from the profile name. Returns `me` or redirects. */
 async function cashierGuard() {
   const me = await getMe();
   if (me.role !== "cashier") {
     location.href = staffHome(me.role);
     throw new Error("redirect");
   }
-  const name = me.email || me.username || "cashier";
+  const name = me.displayName || me.email || me.username || "cashier";
   const who = document.getElementById("who");
   if (who) who.textContent = name;
   const avatar = document.getElementById("avatar");
@@ -20,6 +20,7 @@ async function cashierGuard() {
   return me;
 }
 
+/** Legacy inline logout button; cashier pages now use the settings gear menu. */
 function bindCashierLogout() {
   document.getElementById("out")?.addEventListener("click", async () => {
     try { await logout(); } catch { /* still leave */ }

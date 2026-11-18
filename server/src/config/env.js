@@ -80,6 +80,19 @@ export const env = {
   // Required before an admin can save a reCAPTCHA secret key or Calendar key.
   SETTINGS_ENCRYPTION_KEY: process.env.SETTINGS_ENCRYPTION_KEY || "",
   TRUST_PROXY: process.env.TRUST_PROXY || "0",
+  // In-process rate limiting (express-rate-limit). RATE_LIMIT_ENABLED=0 turns
+  // every limiter into a pass-through (contract tests use this). Window values
+  // are milliseconds; invalid/zero values fall back to the defaults in
+  // middleware/rateLimit.js.
+  RATE_LIMIT_ENABLED: process.env.RATE_LIMIT_ENABLED !== "0",
+  RATE_LIMIT_WINDOW_MS: process.env.RATE_LIMIT_WINDOW_MS || "60000",
+  RATE_LIMIT_MAX: process.env.RATE_LIMIT_MAX || "300",
+  AUTH_RATE_LIMIT_WINDOW_MS: process.env.AUTH_RATE_LIMIT_WINDOW_MS || "900000",
+  AUTH_RATE_LIMIT_MAX: process.env.AUTH_RATE_LIMIT_MAX || "10",
+  WRITE_RATE_LIMIT_MAX: process.env.WRITE_RATE_LIMIT_MAX || "60",
+  RESERVATION_RATE_LIMIT_WINDOW_MS:
+    process.env.RESERVATION_RATE_LIMIT_WINDOW_MS || "600000",
+  RESERVATION_RATE_LIMIT_MAX: process.env.RESERVATION_RATE_LIMIT_MAX || "10",
 };
 
 export function validateEnv() {

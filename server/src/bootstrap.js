@@ -23,6 +23,7 @@ import { activityModel } from "./models/activity.model.js";
 // Services
 import { healthService } from "./services/health.service.js";
 import { settingsService } from "./services/settings.service.js";
+import { integrationValidationService } from "./services/integrationValidation.service.js";
 import { authService } from "./services/auth.service.js";
 import { twoFactorService } from "./services/twoFactor.service.js";
 import { invitationService } from "./services/invitation.service.js";
@@ -122,6 +123,9 @@ export async function wireApp() {
     db,
     encryptionKey: twoFactorKey,
   });
+  // Settings > API proves every new credential against the service that
+  // issues it before the settings document is written.
+  const credentialValidator = integrationValidationService();
   const settingsSvc = settingsService({
     settingsModel: models.settings,
     db,
@@ -145,6 +149,8 @@ export async function wireApp() {
     geminiApiKeyFromEnv: env.GEMINI_API_KEY,
     // Credential changes require a current authenticator code (step-up).
     twoFactorService: twoFactorSvc,
+    // Live provider check for a credential that is being added or replaced.
+    integrationValidator: credentialValidator,
     // Settings > API mirrors admin credentials into server/.env *_OVERRIDE
     // fields; an empty field falls back to the base env value.
     persistEnvValue,
@@ -199,7 +205,6 @@ export async function wireApp() {
     googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
     googleAuthConfigProvider: () => settingsSvc.googleAuthConfig(),
     recaptchaService: recaptcha,
-    twoFactorService: services.twoFactor,
   });
 
   // Calendar sync is DB-backed (settings.googleCalendar), with env fallback

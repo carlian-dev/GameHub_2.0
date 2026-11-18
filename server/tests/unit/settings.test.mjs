@@ -579,3 +579,201 @@ describe("gemini integration settings", () => {
     );
   });
 });
+
+describe("provider validation of new credentials", () => {
+  const ENV_KEYS = [
+    "GEMINI_API_KEY",
+    "GEMINI_API_KEY_OVERRIDE",
+    "GOOGLE_CALENDAR_ID",
+    "GOOGLE_CALENDAR_ID_OVERRIDE",
+    "GOOGLE_CALENDAR_CLIENT_EMAIL",
+    "GOOGLE_CALENDAR_CLIENT_EMAIL_OVERRIDE",
+    "GOOGLE_CALENDAR_PRIVATE_KEY",
+    "GOOGLE_CALENDAR_PRIVATE_KEY_OVERRIDE",
+  ];
+  const saved = {};
+
+  beforeEach(() => {
+    for (const key of ENV_KEYS) {
+      saved[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const key of ENV_KEYS) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  });
+
+  /** Minimal settings collection that counts writes and mutates its document. */
+  function trackingDb(existing = null) {
+    const state = { doc: existing, writes: 0 };
+    const db = {
+      collection(name) {
+        if (name === "settings") {
+          return {
+            async findOne() {
+              return state.doc;
+            },
+            async findOneAndUpdate(filter, update) {
+              state.writes += 1;
+              state.doc = { ...(state.doc || { key: filter.key }) };
+              for (const [path, value] of Object.entries(update.$set || {})) {
+                if (path.startsWith("credentials.")) {
+                  state.doc.credentials = { ...(state.doc.credentials || {}) };
+                  state.doc.credentials[path.slice("credentials.".length)] = value;
+                } else {
+                  state.doc[path] = value;
+                }
+              }
+              return state.doc;
+            },
+          };
+        }
+        if (name === "activityLogs") {
+          return { async insertOne() {} };
+        }
+        throw new Error(`unexpected collection ${name}`);
+      },
+    };
+    return { db, state };
+  }
+
+  function serviceWith(db, validator) {
+    return settingsService({
+      settingsModel: { findMany: async () => ({}), findOne: async () => null },
+      db,
+      mongoClient: null,
+      settingsEncryptionKey: "b".repeat(64),
+      twoFactorService: twoFactorStub(),
+      integrationValidator: validator,
+    });
+  }
+
+  it("refuses to save a credential its provider rejects", async () => {
+    const { db, state } = trackingDb({ key: "gemini", enabled: false, credentials: {} });
+    const svc = serviceWith(db, {
+      async verify() {
+        const err = new Error(
+          "Gemini API key is not valid — Google rejected it. Nothing was saved."
+        );
+        err.status = 422;
+        throw err;
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        svc.update(
+          "gemini",
+          { credentials: { apiKey: "AIzaSyBadKey12345678901234567890" }, code: "123456" },
+          { role: "super_admin", id: "super-1" }
+        ),
+      (err) => err.status === 422 && /not valid/i.test(err.message)
+    );
+
+    assert.strictEqual(state.writes, 0, "a rejected key must never reach the database");
+  });
+
+  it("checks a new value together with the values already in effect", async () => {
+    const { db } = trackingDb({
+      key: "googleCalendar",
+      enabled: false,
+      credentials: {
+        clientEmail: {
+          value: "gamehub@project.iam.gserviceaccount.com",
+          last4: ".com",
+        },
+        privateKey: { value: "-----BEGIN PRIVATE KEY-----stored", last4: "ored" },
+      },
+    });
+    let seen = null;
+    const svc = serviceWith(db, {
+      async verify(key, input) {
+        seen = { key, ...input };
+        return { provider: "Google Calendar", credentials: [], notes: [] };
+      },
+    });
+
+    await svc.update(
+      "googleCalendar",
+      { credentials: { calendarId: "gamehub@group.calendar.google.com" }, code: "123456" },
+      { role: "super_admin", id: "super-1" }
+    );
+
+    assert.strictEqual(seen.key, "googleCalendar");
+    assert.deepStrictEqual(seen.changed, ["calendarId"]);
+    assert.strictEqual(seen.values.calendarId, "gamehub@group.calendar.google.com");
+    assert.strictEqual(
+      seen.values.clientEmail,
+      "gamehub@project.iam.gserviceaccount.com"
+    );
+  });
+
+  it("returns which provider accepted the value", async () => {
+    const { db } = trackingDb({
+      key: "gemini",
+      enabled: true,
+      credentials: { apiKey: { value: "old-key-12345678901234567890", last4: "7890" } },
+    });
+    const svc = serviceWith(db, {
+      async verify() {
+        return {
+          provider: "Google Gemini",
+          credentials: ["apiKey"],
+          notes: ["Saved after a live check."],
+        };
+      },
+    });
+
+    const shaped = await svc.update(
+      "gemini",
+      { credentials: { apiKey: "new-key-123456789012345678901" }, code: "123456" },
+      { role: "super_admin", id: "super-1" }
+    );
+
+    assert.deepStrictEqual(shaped.verification, {
+      provider: "Google Gemini",
+      credentials: ["apiKey"],
+      notes: ["Saved after a live check."],
+    });
+  });
+
+  it("does not call the provider when a credential is cleared", async () => {
+    const { db } = trackingDb({
+      key: "gemini",
+      enabled: true,
+      credentials: { apiKey: { value: "old-key-12345678901234567890", last4: "7890" } },
+    });
+    let calls = 0;
+    const svc = serviceWith(db, {
+      async verify() {
+        calls += 1;
+        return { provider: "", credentials: [], notes: [] };
+      },
+    });
+
+    await svc.update(
+      "gemini",
+      { credentials: { apiKey: "" }, code: "123456" },
+      { role: "super_admin", id: "super-1" }
+    );
+
+    assert.strictEqual(calls, 0);
+  });
+
+  it("rejects a private key that is not a PEM key before any provider call", () => {
+    const svc = serviceWith(null, {
+      async verify() {
+        assert.fail("no provider call expected for a malformed key");
+      },
+    });
+
+    assert.throws(
+      () => svc.validateCredential("googleCalendar", "privateKey", "not-a-pem"),
+      (err) => err.status === 422 && /PEM/i.test(err.message)
+    );
+  });
+});

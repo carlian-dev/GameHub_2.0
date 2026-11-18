@@ -5,6 +5,7 @@ import MongoStore from "connect-mongo";
 import { validateEnv, env } from "./config/env.js";
 import { notFound } from "./middleware/notFound.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { rateLimiters } from "./middleware/rateLimit.js";
 import apiRoutes from "./routes/index.js";
 
 validateEnv();
@@ -24,8 +25,15 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    // Let the frontend read Retry-After on a 429 if it wants to show a wait.
+    exposedHeaders: ["Retry-After"],
   })
 );
+
+// The broad /api budget runs before the JSON body parser on purpose: a flood
+// of malformed bodies must still be throttled, and it is cheap to reject
+// before parsing. Anonymous and signed-in traffic share this per-IP budget.
+app.use("/api", rateLimiters.api);
 
 // JSON only: the frontend always sends application/json.
 // Keep the raw bytes too: PayMongo webhook signatures cover the exact body,
@@ -65,6 +73,12 @@ app.use(
     },
   })
 );
+
+// The write budget runs after the session middleware on purpose: signed-in
+// traffic is keyed by user id, so one cafe IP with several cashiers does not
+// share a single bucket. Route-level limiters (auth, reservations) use the
+// same keying.
+app.use("/api", rateLimiters.writes);
 
 // Root service probe (divergence #6: service string says Node).
 app.get("/", (req, res) => {

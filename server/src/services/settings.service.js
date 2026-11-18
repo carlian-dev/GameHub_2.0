@@ -1,6 +1,7 @@
 // Settings service — business rules for settings endpoints.
 // migration.md §13.6: DB authoritative, env defaults only when doc absent,
 // masked credentials, fail-closed config, transaction + audit on update.
+import crypto from "node:crypto";
 import { maskValue } from "../utils/mask.js";
 import { isValidGoogleClientId } from "../utils/google.js";
 import { createSecretBox } from "../utils/secretBox.js";
@@ -355,6 +356,9 @@ export function settingsService({
   paymongoFromEnv,
   geminiApiKeyFromEnv = "",
   twoFactorService = null,
+  // Provider-side key check (integrationValidation.service.js). Optional so unit
+  // tests and callers without network access can skip the live verification.
+  integrationValidator = null,
   persistEnvValue = null,
 }) {
   capturedEnv = {
@@ -702,6 +706,25 @@ export function settingsService({
           throw err;
         }
       }
+      if (key === "googleCalendar" && name === "privateKey" && value !== "") {
+        // A pasted service-account key that is not a real RSA PEM can never
+        // sign a JWT, so reject it before it reaches the provider check.
+        let parsed = null;
+        try {
+          parsed = crypto.createPrivateKey(String(value).replace(/\\n/g, "\n").trim());
+        } catch {
+          const err = new Error(
+            "Service account private key must be a PEM key (the whole -----BEGIN PRIVATE KEY----- block)"
+          );
+          err.status = 422;
+          throw err;
+        }
+        if (parsed.asymmetricKeyType !== "rsa") {
+          const err = new Error("Service account private key must be an RSA key");
+          err.status = 422;
+          throw err;
+        }
+      }
     },
 
     /**
@@ -740,6 +763,34 @@ export function settingsService({
       const existingDoc = await settingsColl.findOne({ key });
       const effective = effectiveDoc(key, existingDoc || null);
       const plan = this.planUpdate(key, effective, payload);
+
+      // Provider-side validation: a credential that the super administrator
+      // adds or replaces must be accepted by the service that issues it. A
+      // rejected value is never stored (no DB write, no server/.env write), so
+      // a typo cannot silently switch an integration back on with a dead key.
+      const changedCredentials = Object.entries(plan.values || {})
+        .filter(([, value]) => String(value ?? "") !== "")
+        .map(([name]) => name);
+      let verification = null;
+      if (
+        changedCredentials.length > 0 &&
+        integrationValidator &&
+        typeof integrationValidator.verify === "function"
+      ) {
+        const intended = {};
+        for (const cred of reg.credentials) {
+          intended[cred.name] = Object.prototype.hasOwnProperty.call(
+            plan.values,
+            cred.name
+          )
+            ? String(plan.values[cred.name] ?? "")
+            : String(effective.credentials[cred.name]?.value ?? "");
+        }
+        verification = await integrationValidator.verify(key, {
+          changed: changedCredentials,
+          values: intended,
+        });
+      }
 
       // Credential changes are a step-up action: the super administrator must
       // prove possession of the authenticator app in the same request. The
@@ -821,7 +872,13 @@ export function settingsService({
               ? "integration_settings_update"
               : "integration_toggle",
             target: key,
-            meta: { enabled: plan.enabled, changed: plan.changed, role: actorRole },
+            meta: {
+              enabled: plan.enabled,
+              changed: plan.changed,
+              role: actorRole,
+              // Which provider proved the new credential (empty = no check).
+              verified: verification ? verification.provider || "" : "",
+            },
             at: new Date(),
           },
           { session }
@@ -867,7 +924,19 @@ export function settingsService({
 
       await persistCredentialOverrides();
       const fresh = effectiveDoc(key, updatedDoc);
-      return this.shape(key, fresh);
+      const shaped = this.shape(key, fresh);
+      if (shaped && verification) {
+        // Non-secret detail for the settings UI: which provider accepted the
+        // new value(s) and which credentials cannot be live-checked.
+        shaped.verification = {
+          provider: verification.provider || "",
+          credentials: Array.isArray(verification.credentials)
+            ? verification.credentials
+            : [],
+          notes: Array.isArray(verification.notes) ? verification.notes : [],
+        };
+      }
+      return shaped;
     },
 
     /** Shape for admins: activation state, never credentials. */

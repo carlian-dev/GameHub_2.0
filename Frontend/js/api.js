@@ -79,20 +79,6 @@ async function login(email, password, recaptchaToken = "") {
     body: JSON.stringify({ email, password, recaptchaToken }),
   });
 }
-// Super-admin two-factor (authenticator app, TOTP). Login returns
-// twoFactorRequired before a session exists; these finish that pending login.
-async function verifyTwoFactorLogin(code) {
-  return api("/api/login/2fa", {
-    method: "POST",
-    body: JSON.stringify({ code }),
-  });
-}
-async function getTwoFactorSetup() {
-  return api("/api/login/2fa/setup", { method: "POST" });
-}
-async function cancelTwoFactorLogin() {
-  return api("/api/login/2fa/cancel", { method: "POST" });
-}
 async function loginWithGoogle(idToken) {
   return api("/api/auth/google", {
     method: "POST",
@@ -107,6 +93,13 @@ async function logout() {
 }
 async function getMe() {
   return api("/api/me");
+}
+// Cashier self-service profile: display name only (email stays read-only).
+async function updateMyProfile(displayName) {
+  return api("/api/me/profile", {
+    method: "PUT",
+    body: JSON.stringify({ displayName }),
+  });
 }
 
 // Landing page for a staff role. Every protected page sits one directory under
@@ -139,8 +132,11 @@ async function updateSuperAdminIntegration(key, fields) {
 async function getSuperAdminTwoFactor() {
   return api("/api/super-admin/2fa");
 }
-async function setupSuperAdminTwoFactor() {
-  return api("/api/super-admin/2fa/setup", { method: "POST" });
+async function setupSuperAdminTwoFactor(code = "") {
+  return api("/api/super-admin/2fa/setup", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
 }
 async function enableSuperAdminTwoFactor(code) {
   return api("/api/super-admin/2fa/enable", {

@@ -7,6 +7,7 @@ const MAX_ROWS = 200;
 const ACTION_LABELS = {
   login: "Signed in",
   logout: "Signed out",
+  profile_update: "Profile updated",
   session_start: "Session started",
   session_extend: "Session extended",
   session_end: "Session ended",
@@ -26,6 +27,7 @@ const ACTION_LABELS = {
 const ACTION_TONES = {
   login: "active",
   logout: "archived",
+  profile_update: "pending",
   session_start: "active",
   session_extend: "active",
   session_end: "closed",
@@ -114,6 +116,10 @@ function detailsOf(log) {
 
   if (action === "login" || action === "logout") {
     return providerText(m.provider) || "—";
+  }
+
+  if (action === "profile_update") {
+    return m.newValue ? `Display name → ${m.newValue}` : "Display name updated";
   }
 
   if (action === "payment_record") {

@@ -1,8 +1,8 @@
 // Super-admin two-factor authentication (TOTP / authenticator app).
 //
-// Scope: ONLY `super_admin` accounts. Login is challenged after the password
-// (or Google) check passes; a super admin with no authenticator enrolled must
-// enroll before the session is created (enforced in auth.service.js).
+// Scope: ONLY `super_admin` accounts. Sign-in does not ask for a code; the
+// authenticator is step-up verification for adding, replacing or clearing an
+// integration credential in Settings > API (enforced in settings.service.js).
 //
 // The shared secret is encrypted at rest with AES-256-GCM (utils/secretBox).
 // The plaintext secret leaves the server exactly once, inside the setup
@@ -74,31 +74,12 @@ export function twoFactorService({ userModel, db, encryptionKey }) {
 
   return {
     /**
-     * What the login flow must do next for this account:
-     *   { required: false }                     — not a super admin
-     *   { required: true, mode: "enroll" }      — no authenticator yet
-     *   { required: true, mode: "challenge" }   — verify a 6-digit code
-     * Fails closed when an enrolled secret cannot be decrypted.
-     */
-    async challengeState(user) {
-      if (!user || user.role !== "super_admin") return { required: false };
-      const twoFactor = user.twoFactor || {};
-      if (twoFactor.enabled === true) {
-        decryptSecret(
-          twoFactor.secretEnc,
-          "two-factor authentication is misconfigured; an operator must reset the authenticator for this account"
-        );
-        return { required: true, mode: "challenge" };
-      }
-      return { required: true, mode: "enroll" };
-    },
-
-    /**
      * Generate a new secret and keep it pending until the user proves their
-     * app works. Re-enrollment is allowed while 2FA is already enabled: the
+     * app works. Replacing an already-paired app requires a current code (a
+     * stolen password must not be able to swap in the attacker's device); the
      * old secret stays active until the new one is confirmed.
      */
-    async beginEnrollment(userId) {
+    async beginEnrollment(userId, code = "") {
       if (!secretBox.configured) {
         throw httpError(
           503,
@@ -106,6 +87,21 @@ export function twoFactorService({ userModel, db, encryptionKey }) {
         );
       }
       const user = await findSuperAdmin(userId);
+      if (user.twoFactor?.enabled === true) {
+        const currentSecret = decryptSecret(
+          user.twoFactor.secretEnc,
+          "two-factor authentication is misconfigured; an operator must reset the authenticator for this account"
+        );
+        if (!/^\d{6}$/.test(String(code))) {
+          throw httpError(
+            422,
+            "enter the current 6-digit code from your authenticator app to pair a new device"
+          );
+        }
+        if (!verifyTotp(currentSecret, code).valid) {
+          throw httpError(422, "invalid authenticator code");
+        }
+      }
       const secret = generateTotpSecret();
       const account = user.email || user.username || String(user._id);
       const setupId = crypto.randomUUID();
@@ -194,50 +190,10 @@ export function twoFactorService({ userModel, db, encryptionKey }) {
     },
 
     /**
-     * Check a login challenge code. The replay guard is atomic: a code can
-     * complete only one sign-in (within the 30-second step and its ±1 drift).
-     */
-    async verifyLogin(userId, code) {
-      const user = await findSuperAdmin(userId);
-      if (user.status !== "active") throw httpError(403, "account is not active");
-      const twoFactor = user.twoFactor || {};
-      if (twoFactor.enabled !== true) {
-        throw httpError(409, "two-factor authentication is not enabled");
-      }
-      const secret = decryptSecret(
-        twoFactor.secretEnc,
-        "two-factor authentication is misconfigured; an operator must reset the authenticator for this account"
-      );
-      const result = verifyTotp(secret, code);
-      if (!result.valid) throw httpError(422, "invalid authenticator code");
-
-      const now = new Date();
-      const res = await usersColl.updateOne(
-        {
-          _id: user._id,
-          $or: [
-            { "twoFactor.lastUsedCounter": { $exists: false } },
-            { "twoFactor.lastUsedCounter": { $lt: result.counter } },
-          ],
-        },
-        {
-          $set: {
-            "twoFactor.lastUsedCounter": result.counter,
-            "twoFactor.lastUsedAt": now,
-          },
-        }
-      );
-      if (res.modifiedCount === 0) {
-        throw httpError(409, "this code was already used — wait for the next code");
-      }
-      return true;
-    },
-
-    /**
      * Step-up check for a sensitive in-session action (credential changes).
-     * Accepts any still-valid code — including the one used to sign in during
-     * the same 30-second window — but rejects a code older than the last one
-     * used, so a code captured from an earlier sign-in cannot be replayed.
+     * Accepts any still-valid code, including one already used for an earlier
+     * step-up in the same 30-second window, but rejects a code older than the
+     * last one used, so a captured code cannot be replayed.
      */
     async verifyStepUp(userId, code) {
       const user = await findSuperAdmin(userId);
@@ -278,7 +234,7 @@ export function twoFactorService({ userModel, db, encryptionKey }) {
       return true;
     },
 
-    /** Turn 2FA off. Requires a valid current code; the next login re-enrolls. */
+    /** Turn 2FA off. Requires a valid current code; API-key changes stay blocked until an app is paired again. */
     async disable(userId, code) {
       const user = await findSuperAdmin(userId);
       const twoFactor = user.twoFactor || {};

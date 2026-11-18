@@ -7,6 +7,8 @@
   const msg = document.getElementById("msg");
   const list = document.getElementById("apiList");
   let loading = false;
+  // null = status not loaded yet; true/false = authenticator app paired or not.
+  let tfaPaired = null;
 
   function setMsg(text, kind = "") {
     if (!msg) return;
@@ -125,6 +127,45 @@
     return code;
   }
 
+  /**
+   * Provider check summary returned by the server after a credential change.
+   * The server refuses to store a rejected key, so reaching this point means the
+   * provider accepted it (or could not check it, which comes with a note).
+   */
+  function verificationText(updated, credName) {
+    const v = updated && updated.verification ? updated.verification : null;
+    if (!v) return "";
+    const provider = v.provider || "the provider";
+    const verified =
+      Array.isArray(v.credentials) && v.credentials.includes(credName);
+    const notes = Array.isArray(v.notes)
+      ? v.notes.filter((note) => typeof note === "string" && note.trim() !== "")
+      : [];
+    const parts = [];
+    if (verified) parts.push(`Verified with ${provider}.`);
+    if (notes.length) parts.push(notes.join(" "));
+    return parts.length ? ` ${parts.join(" ")}` : "";
+  }
+
+  /**
+   * Credential changes are step-up protected: the server requires a current
+   * authenticator code, which cannot exist until an app is paired. Point the
+   * super admin at the Security panel instead of letting the save fail with 409.
+   */
+  function requireAuthenticator() {
+    if (tfaPaired !== false) return true;
+    dashToast(
+      "Pair an authenticator app in the Security panel below before changing API keys.",
+      "err",
+      { title: "Authenticator required", timeout: 7000 }
+    );
+    document.getElementById("security")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    return false;
+  }
+
   // ---- Credential rows (add / replace / clear) ----
   function credentialRow(card, integration, cred) {
     const row = make("div", "api-credential");
@@ -158,16 +199,18 @@
         return;
       }
       const turnedOff = updated.enabled === false && integration.enabled === true;
-      dashToast(
-        turnedOff
-          ? `${cred.label} updated. ${updated.name} is now off because a required credential is missing.`
-          : `${cred.label} updated.`,
-        "ok"
-      );
+      // A cleared value has nothing for the provider to check.
+      const check = next === "" ? "" : verificationText(updated, cred.name);
+      const message = turnedOff
+        ? `${cred.label} updated. ${updated.name} is now off because a required credential is missing.`
+        : `${cred.label} updated.${check}`;
+      // Provider notes can be a full sentence, so keep them on screen longer.
+      dashToast(message, "ok", { timeout: message.length > 110 ? 9000 : 4200 });
       card.replaceWith(cardFor(updated));
     }
 
     function openEditor() {
+      if (!requireAuthenticator()) return;
       actions.hidden = true;
       editor.hidden = false;
       editor.replaceChildren();
@@ -222,16 +265,23 @@
         }
         saveBtn.disabled = true;
         cancelBtn.disabled = true;
+        saveBtn.textContent = "Verifying…";
         error.hidden = true;
         try {
           await save(next, code);
         } catch (e) {
-          error.textContent = e.message;
+          const message = e && e.message ? String(e.message) : "The value was not saved.";
+          const rejected = /not valid|invalid|rejected|not recognise/i.test(message);
+          error.textContent = message;
           error.hidden = false;
-          dashToast(e.message, "err");
+          dashToast(message, "err", {
+            title: rejected ? "API key not accepted" : "Not saved",
+            timeout: 8000,
+          });
         } finally {
           saveBtn.disabled = false;
           cancelBtn.disabled = false;
+          saveBtn.textContent = "Save";
         }
       });
       const cancelBtn = makeButton("Cancel", "btn btn-ghost api-btn", closeEditor);
@@ -241,6 +291,7 @@
     }
 
     async function clear() {
+      if (!requireAuthenticator()) return;
       const ok = await dashConfirm(
         `Clear the saved value for ${cred.label} on ${integration.name}? The .env default will be used again if one is set.`,
         "Clear credential"
@@ -375,6 +426,7 @@
 
   function renderSecurity(status) {
     const enabled = !!(status && status.enabled);
+    tfaPaired = enabled;
     if (tfaStatus) {
       tfaStatus.textContent = enabled ? "Enabled" : "Off";
       tfaStatus.className = `settings-badge ${enabled ? "is-active" : "is-declined"}`;
@@ -388,10 +440,10 @@
           ? ` Last used ${formatDate(status.lastUsedAt)}.`
           : "";
         tfaNote.textContent =
-          `An authenticator app is paired. Every super admin sign-in asks for a fresh 6-digit code.${enrolled}${used}`;
+          `An authenticator app is paired. It is required when adding, replacing or clearing an API credential.${enrolled}${used}`;
       } else {
         tfaNote.textContent =
-          "2FA is off. The next super admin sign-in will require pairing an authenticator app before the dashboard opens.";
+          "2FA is off. Pair an authenticator app before adding, replacing or clearing API keys. Sign-in does not require it.";
       }
     }
     if (tfaActions) tfaActions.hidden = false;
@@ -416,11 +468,26 @@
   }
 
   async function beginSecuritySetup() {
+    let code = "";
+    if (tfaPaired) {
+      const entered = await dashPrompt(
+        "Enter the current 6-digit code from your authenticator app before pairing a new device.",
+        "6-digit code",
+        "",
+        "Set up a new device"
+      );
+      if (entered === null) return;
+      code = String(entered).replace(/\D/g, "");
+      if (code.length !== 6) {
+        tfaSetMsg("Enter the current 6-digit code from your authenticator app.", "err");
+        return;
+      }
+    }
     const btn = document.getElementById("tfaReenroll");
     if (btn) btn.disabled = true;
     tfaSetMsg("Preparing your QR code…");
     try {
-      const data = await setupSuperAdminTwoFactor();
+      const data = await setupSuperAdminTwoFactor(code);
       document.getElementById("tfaSetupQr").src = data.qrDataUrl;
       document.getElementById("tfaSetupSecret").textContent =
         String(data.secret || "").match(/.{1,4}/g)?.join(" ") || data.secret;
@@ -460,7 +527,7 @@
     try {
       const status = await enableSuperAdminTwoFactor(code);
       renderSecurity(status);
-      tfaSetMsg("Authenticator app confirmed. You’ll use it at every sign-in.", "ok");
+      tfaSetMsg("Authenticator app confirmed. You’ll use it when changing API keys.", "ok");
       dashToast("Two-factor authentication is on.", "ok");
     } catch (e) {
       tfaSetMsg(e.message, "err");
@@ -473,7 +540,7 @@
 
   async function disableSecurity() {
     const entered = await dashPrompt(
-      "Enter the current 6-digit code from your authenticator app. Turning 2FA off means the next sign-in must pair the app again.",
+      "Enter the current 6-digit code from your authenticator app. Turning 2FA off blocks API key changes until you pair an app again.",
       "6-digit code",
       "",
       "Turn off two-factor authentication"
@@ -490,7 +557,7 @@
     try {
       const status = await disableSuperAdminTwoFactor(code);
       renderSecurity(status);
-      tfaSetMsg("2FA is off. Pair an authenticator before your next sign-in.", "ok");
+      tfaSetMsg("2FA is off. Pair an authenticator before changing API keys.", "ok");
       dashToast("Two-factor authentication is off.", "ok");
     } catch (e) {
       tfaSetMsg(e.message, "err");

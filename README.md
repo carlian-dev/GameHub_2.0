@@ -157,10 +157,10 @@ GameHub_2.0/
 * The super administrator's only feature is turning API integrations on or
   off at `/src/function/super-admin/integrations.html`. Administrators manage
   the credentials on Admin > Settings > API but cannot send the on/off flag;
-  the server rejects it. Super-admin sign-in always requires an authenticator
-  app (TOTP): the first login forces QR enrollment, later logins ask for a
-  6-digit code. A lost phone is recovered by clearing the account's
-  `twoFactor` fields in Atlas (see AGENTS.md).
+  the server rejects it. Super-admin sign-in is single-step; an authenticator
+  app (TOTP) is only required to add, replace or clear an integration
+  credential. A lost phone is recovered by clearing the account's `twoFactor`
+  fields in Atlas and pairing a new app from Settings > API (see AGENTS.md).
 * One-time email codes protect account creation verification and
   destructive approvals (archiving). Day-to-day login is direct session
   authentication after the status gates.
@@ -193,6 +193,11 @@ GameHub_2.0/
 | `SESSION_TTL_SECONDS` | Session rolling TTL (default 43200 = 12h) |
 | `AUTH_COOKIE_NAME` | Session cookie name (default `gh_session`) |
 | `TRUST_PROXY` | `0`, `1`, or hop count when behind a proxy |
+| `RATE_LIMIT_ENABLED` | `0` disables all request rate limiting (default on) |
+| `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` | Global per-IP `/api` budget (default 300 requests per 60s) |
+| `AUTH_RATE_LIMIT_WINDOW_MS` / `AUTH_RATE_LIMIT_MAX` | Failed login/authenticator/register/invite attempts (default 10 per 15 min) |
+| `WRITE_RATE_LIMIT_MAX` | POST/PUT/PATCH/DELETE budget per user/IP per `RATE_LIMIT_WINDOW_MS` (default 60) |
+| `RESERVATION_RATE_LIMIT_WINDOW_MS` / `RESERVATION_RATE_LIMIT_MAX` | Guest reservation create/lookup/cancel per IP (default 10 per 10 min) |
 | `MAIL_DRY_RUN` | `1` to log instead of sending mail (tests) |
 
 ### PayMongo

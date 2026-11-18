@@ -19,16 +19,6 @@ export function loginView({ username, email, role }) {
   };
 }
 
-/** Super-admin login step 2: no session yet, only a pending challenge. */
-export function twoFactorChallengeView({ enrollmentRequired }) {
-  return {
-    ok: true,
-    twoFactorRequired: true,
-    enrollmentRequired: !!enrollmentRequired,
-    method: "totp",
-  };
-}
-
 /** Enrollment payload. The plaintext secret is returned exactly once. */
 export function twoFactorSetupView({
   secret,
@@ -83,6 +73,13 @@ export function meView({
     createdAt,
     googleLinked,
     twoFactorEnabled: !!twoFactorEnabled,
+  };
+}
+
+export function profileView({ displayName }) {
+  return {
+    ok: true,
+    displayName: displayName ?? "",
   };
 }
 

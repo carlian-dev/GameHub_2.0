@@ -53,11 +53,11 @@
     });
   }
 
-  // ---- Admin settings gear menu (admin pages only) ----
+  // ---- Settings gear menu (admin + cashier pages) ----
   // The panel is appended to body (fixed positioning) so the sticky header's
-  // overflow/backdrop-filter cannot clip it. Cashier pages have no
-  // [data-admin-settings] host and keep the inline theme/logout buttons.
-  const settingsHost = document.querySelector("[data-admin-settings]");
+  // overflow/backdrop-filter cannot clip it. Admin hosts also show the API
+  // tab; cashier hosts ([data-settings-menu]) show Profile, theme and logout.
+  const settingsHost = document.querySelector("[data-settings-menu], [data-admin-settings]");
   if (settingsHost) {
     const gear = document.createElement("button");
     gear.type = "button";
@@ -88,6 +88,9 @@
       a.textContent = label;
       return a;
     };
+    const showApi =
+      settingsHost.hasAttribute("data-admin-settings") ||
+      settingsHost.hasAttribute("data-settings-api");
     const profileItem = menuLink("Profile", "profile");
     const apiItem = menuLink("API Integrations", "api");
 
@@ -120,7 +123,9 @@
     logoutItem.tabIndex = -1;
     logoutItem.textContent = "Log out";
 
-    panel.append(profileItem, apiItem, sep(), themeItem, sep(), logoutItem);
+    panel.append(profileItem);
+    if (showApi) panel.append(apiItem);
+    panel.append(sep(), themeItem, sep(), logoutItem);
     document.body.appendChild(panel);
 
     const menuItems = () => Array.from(panel.querySelectorAll(".dash-settings-item"));

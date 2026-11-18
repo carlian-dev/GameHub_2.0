@@ -71,16 +71,12 @@
       message += " Accepted reservations will no longer create calendar events.";
     } else if (integration.key === "recaptcha") {
       message += " Staff login, cashier signup and reservations will stop showing the bot check.";
-    } else if (integration.key === "paymongo") {
-      message += " Cashiers will no longer be able to create GCash online payment links for session bills.";
     } else if (integration.key === "receiptPdf") {
       message +=
         " Cashiers and administrators will no longer be able to preview or download customer receipt PDFs.";
     } else if (integration.key === "csvExport") {
       message +=
         " Administrators will no longer be able to export the income report as CSV.";
-    } else if (integration.key === "gemini") {
-      message += " Google Gemini AI features and assistant services will be disabled.";
     }
     return message;
   }

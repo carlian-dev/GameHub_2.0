@@ -4,8 +4,8 @@
 // fetch() calls in one place. Example: getHealth() asks "GET http://localhost:8000/api/health"
 // and returns {ok:true, db:"gamehub_2_0", ...}. To add login later, add getUsers(), login(), etc. here.
 // Purpose: fetch wrapper. Frontend never talks to MongoDB directly, only to the Express Backend.
-// NOTE: credentials:"include" sends the session cookie, without it login
-// would succeed but the next request would look like a stranger (401).
+// NOTE: credentials:"include" sends the HttpOnly JWT auth cookie, without it
+// login would succeed but the next request would look like a stranger (401).
 // A hung backend/Atlas connection must not leave a page on "Loading…" forever.
 const API_TIMEOUT_MS = 15000;
 
@@ -310,22 +310,6 @@ async function listMenuProducts({ category = "", q = "" } = {}) {
 async function getBill(sessionId) {
   return api(`/api/cashier/sessions/${encodeURIComponent(sessionId)}/bill`);
 }
-// --- PayMongo hosted checkout for a closed session bill ---
-async function createPaymongoCheckout(sessionId) {
-  return api(`/api/cashier/sessions/${encodeURIComponent(sessionId)}/paymongo`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
-}
-async function getPaymongoCheckout(checkoutId) {
-  return api(`/api/cashier/paymongo/checkouts/${encodeURIComponent(checkoutId)}`);
-}
-async function cancelPaymongoCheckout(sessionId) {
-  return api(
-    `/api/cashier/sessions/${encodeURIComponent(sessionId)}/paymongo/cancel`,
-    { method: "POST", body: JSON.stringify({}) }
-  );
-}
 async function addOrderLine(sessionId, productId, qty) {
   return api(`/api/cashier/sessions/${encodeURIComponent(sessionId)}/orders`, {
     method: "POST",
@@ -425,4 +409,8 @@ async function acceptReservation(ref) {
 }
 async function rejectReservation(ref) {
   return api(`/api/cashier/reservations/${encodeURIComponent(ref)}/reject`, { method: "POST" });
+}
+// Check in an accepted reservation: starts a session, marks the table occupied.
+async function checkInReservation(ref) {
+  return api(`/api/cashier/reservations/${encodeURIComponent(ref)}/check-in`, { method: "POST" });
 }

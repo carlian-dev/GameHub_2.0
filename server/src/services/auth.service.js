@@ -1,10 +1,14 @@
 // Auth service — business rules for login/logout/me/register/google.
 // migration.md §13.1 (auth & sessions), §13.2 (invitations).
-// Role comes from the session only — never from request data.
+// Authentication is stateless: a successful login returns a signed JWT whose
+// claims are backed by the live user document on every request. Role comes
+// from that document — never from request data.
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { invitationModel } from "../models/invitation.model.js";
+import { toObjectId } from "../models/bson.js";
 import { isValidGoogleClientId } from "../utils/google.js";
+import { signAuthToken } from "../utils/authToken.js";
 
 export function authService({
   userModel,
@@ -67,34 +71,21 @@ export function authService({
     }
   }
 
-  function sessionPayload(user) {
-    return {
-      id: String(user._id),
-      username: user.username ?? null,
-      email: user.email ?? null,
-      role: user.role,
-    };
-  }
-
-  async function regenerateSession(req) {
-    if (req.session && typeof req.session.regenerate === "function") {
-      await new Promise((resolve, reject) => {
-        req.session.regenerate((err) => {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
-    }
-  }
-
-  /** Create the logged-in session after password/Google passes. */
-  async function completeLogin(req, user, provider) {
-    const payload = sessionPayload(user);
-    await regenerateSession(req);
-    req.session.user = payload;
-    if (typeof req.session.save === "function") await req.session.save();
+  /**
+   * Issue the stateless credential after password/Google passes. The caller
+   * puts `token` in the HttpOnly cookie; `user` is what the API returns.
+   */
+  async function completeLogin(user, provider) {
+    const token = signAuthToken(user);
     await logAuth("login", user, provider);
-    return { username: user.username ?? null, email: user.email ?? null, role: user.role };
+    return {
+      token,
+      user: {
+        username: user.username ?? null,
+        email: user.email ?? null,
+        role: user.role,
+      },
+    };
   }
 
   return {
@@ -133,44 +124,36 @@ export function authService({
       }
 
       await checkStatus(user);
-      return completeLogin(req, user, "password");
+      return completeLogin(user, "password");
     },
 
-    async logout(req) {
-      // Capture before destroy: the session store is gone afterwards.
-      const user = req.session && req.session.user;
-      if (req.session.destroy) {
-        await new Promise((resolve, reject) => {
-          req.session.destroy((err) => {
-            if (err) return reject(err);
-            resolve();
-          });
-        });
-      }
+    /**
+     * Stateless logout. There is no server-side session to destroy, so the
+     * caller's cookie is cleared and `tokenVersion` is bumped: every token
+     * issued before this moment (this request's included) then fails the
+     * version check in the auth middleware.
+     */
+    async logout(user) {
+      const id = user && (user.id ?? user._id);
+      if (!id) return { ok: true };
+      await usersColl.updateOne(
+        { _id: toObjectId(id) },
+        { $inc: { tokenVersion: 1 } }
+      );
       await logAuth("logout", user);
       return { ok: true };
     },
 
     /** GET /api/me — re-read Atlas, status re-check (divergence #3). */
-    async me(userId, req) {
+    async me(userId) {
       const user = await userModel.findById(userId);
       if (!user) {
-        const err = new Error("not logged in");
-        err.status = 401;
-        throw err;
+        throw statusError(401, "not logged in");
       }
+      // A token stays valid until it expires, so every guarded read re-checks
+      // the live status: an archived account is logged out immediately.
       if (user.status !== "active") {
-        if (req.session.destroy) {
-          await new Promise((resolve, reject) => {
-            req.session.destroy((err) => {
-              if (err) return reject(err);
-              resolve();
-            });
-          });
-        }
-        const err = new Error("not logged in");
-        err.status = 401;
-        throw err;
+        throw statusError(401, "not logged in");
       }
 
       const googleSub = String(user.googleSub || "");
@@ -468,7 +451,7 @@ export function authService({
         );
       }
 
-      return completeLogin(req, user, "google");
+      return completeLogin(user, "google");
     },
   };
 }

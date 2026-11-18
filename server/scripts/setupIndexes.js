@@ -7,7 +7,6 @@
 //   products unique nameKey + {archived, category, name} menu read,
 //   sessions {tableId:1} unique partial {status:"active"} (optional, duplicate-checked),
 //   sessions {status:1, endTime:1} for the auto-end sweeper,
-//   sessions {paymongoCheckoutId:1} unique partial string for hosted checkout IDs,
 //   activityLogs {at:-1} for the admin activity viewer.
 import dotenv from "dotenv";
 import path from "node:path";
@@ -73,14 +72,6 @@ async function main() {
     await db.collection("sessions").createIndex(
       { status: 1, endTime: 1 },
       { name: "idx_sessions_status_endTime" }
-    );
-    await db.collection("sessions").createIndex(
-      { paymongoCheckoutId: 1 },
-      {
-        unique: true,
-        partialFilterExpression: { paymongoCheckoutId: { $type: "string" } },
-        name: "uniq_session_paymongo_checkout",
-      }
     );
     await db.collection("activityLogs").createIndex(
       { at: -1 },

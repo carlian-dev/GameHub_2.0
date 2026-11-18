@@ -21,6 +21,8 @@ export function registerPublicRoutes(router, { healthController, settingsControl
   // Cashier decisions on pending requests (401 without a session).
   router.post("/cashier/reservations/:ref/accept", reservationController.accept);
   router.post("/cashier/reservations/:ref/reject", reservationController.reject);
+  // Cashier check-in: accepted request -> session starts, table occupied.
+  router.post("/cashier/reservations/:ref/check-in", reservationController.checkIn);
   router.get("/reservations/:ref", rateLimiters.reservations, reservationController.get);
   router.post(
     "/reservations/:ref/cancel",

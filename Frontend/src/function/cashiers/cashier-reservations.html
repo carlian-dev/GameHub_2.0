@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <!--
   src/function/cashiers/cashier-reservations.html - cashier Reservations page.
-  Pair: cashier-reservations.js (list + accept/reject) + cashier-common.js
-  (guard/logout) + js/dash.js (shell/dialogs/toasts).
+  Pair: cashier-reservations.js (list + accept/reject + check-in) +
+  cashier-common.js (guard/logout) + js/dash.js (shell/dialogs/toasts).
   Sidebar: Dashboard, Sessions, Reservations (active), Tables. Guard: cashiers stay.
   Pending guest requests can be accepted (slot stays booked and the customer
-  gets an ACCEPTED email) or rejected (slot is released).
+  gets an ACCEPTED email) or rejected (slot is released). Starting a session
+  from an accepted card marks the table occupied for that customer.
 -->
 <html lang="en">
 <head>
@@ -89,6 +90,9 @@
               <button type="button" data-filter="accepted" aria-pressed="false">
                 Accepted <span id="resAcceptedCount">0</span>
               </button>
+              <button type="button" data-filter="seated" aria-pressed="false">
+                In play <span id="resSeatedCount">0</span>
+              </button>
               <button type="button" data-filter="rejected" aria-pressed="false">
                 Rejected <span id="resRejectedCount">0</span>
               </button>
@@ -98,6 +102,8 @@
           <p class="res-lede">
             Accept a request to keep the table slot booked — the customer gets an
             <strong>ACCEPTED</strong> email automatically. Rejecting releases the slot.
+            When the guest arrives, <strong>Start session</strong> on an accepted card
+            opens their table and marks it <strong>occupied</strong>.
           </p>
           <div class="dash-msg" id="resMsg" role="status">Loading…</div>
           <div class="res-queue" id="resList"></div>

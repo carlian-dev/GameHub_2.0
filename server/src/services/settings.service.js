@@ -47,30 +47,6 @@ const REGISTRY = [
     ],
   },
   {
-    key: "paymongo",
-    name: "PayMongo",
-    description: "GCash checkout for closed session bills",
-    available: true,
-    credentials: [
-      { name: "secretKey", label: "Secret key", required: true, secret: true },
-      {
-        name: "webhookSecret",
-        label: "Webhook signing secret (optional)",
-        required: false,
-        secret: true,
-      },
-    ],
-  },
-  {
-    key: "gemini",
-    name: "Google Gemini AI",
-    description: "AI assistance and intelligent automation services",
-    available: true,
-    credentials: [
-      { name: "apiKey", label: "Gemini API key", required: true, secret: true },
-    ],
-  },
-  {
     key: "receiptPdf",
     name: "PDF Receipt Export",
     description: "Customer receipt PDF preview and download",
@@ -82,13 +58,6 @@ const REGISTRY = [
     name: "CSV Report Export",
     description: "Income report CSV download on the Transactions page",
     available: true,
-    credentials: [],
-  },
-  {
-    key: "otp",
-    name: "OTP / email codes",
-    description: "Email verification codes (planned)",
-    available: false,
     credentials: [],
   },
 ];
@@ -135,22 +104,6 @@ const ENV_CREDENTIALS = {
     secretKey: {
       override: "RECAPTCHA_SECRET_KEY_OVERRIDE",
       base: "RECAPTCHA_SECRET_KEY",
-    },
-  },
-  paymongo: {
-    secretKey: {
-      override: "PAYMONGO_SECRET_KEY_OVERRIDE",
-      base: "PAYMONGO_SECRET_KEY",
-    },
-    webhookSecret: {
-      override: "PAYMONGO_WEBHOOK_SECRET_OVERRIDE",
-      base: "PAYMONGO_WEBHOOK_SECRET",
-    },
-  },
-  gemini: {
-    apiKey: {
-      override: "GEMINI_API_KEY_OVERRIDE",
-      base: "GEMINI_API_KEY",
     },
   },
 };
@@ -318,14 +271,6 @@ function defaultEnabled(key, { baseOnly = false } = {}) {
       envValue("recaptcha", "siteKey") && envValue("recaptcha", "secretKey")
     );
   }
-  if (key === "paymongo") {
-    // A secret key in .env is enough to make a fresh database usable; an
-    // existing settings document still owns the on/off switch.
-    return Boolean(envValue("paymongo", "secretKey"));
-  }
-  if (key === "gemini") {
-    return Boolean(envValue("gemini", "apiKey"));
-  }
   return false;
 }
 
@@ -373,8 +318,6 @@ export function settingsService({
   googleCalendarFromEnv,
   settingsEncryptionKey,
   recaptchaFromEnv,
-  paymongoFromEnv,
-  geminiApiKeyFromEnv = "",
   twoFactorService = null,
   // Provider-side key check (integrationValidation.service.js). Optional so unit
   // tests and callers without network access can skip the live verification.
@@ -386,8 +329,6 @@ export function settingsService({
     googleMaps: { apiKey: String(googleMapsApiKeyFromEnv || "") },
     googleCalendar: googleCalendarFromEnv || {},
     recaptcha: recaptchaFromEnv || {},
-    paymongo: paymongoFromEnv || {},
-    gemini: { apiKey: String(geminiApiKeyFromEnv || "") },
   };
   secretBox = createSecretBox(settingsEncryptionKey);
   return {
@@ -400,14 +341,12 @@ export function settingsService({
           "googleAuth",
           "googleMaps",
           "recaptcha",
-          "paymongo",
           "receiptPdf",
           "csvExport",
         ]);
         const auth = effectiveDoc("googleAuth", docs.googleAuth || null);
         const maps = effectiveDoc("googleMaps", docs.googleMaps || null);
         const recaptcha = effectiveDoc("recaptcha", docs.recaptcha || null);
-        const paymongo = effectiveDoc("paymongo", docs.paymongo || null);
         return {
           googleAuth: {
             enabled: auth.enabled,
@@ -423,8 +362,6 @@ export function settingsService({
             enabled: recaptcha.enabled,
             siteKey: recaptcha.enabled ? recaptcha.credentials.siteKey.value : "",
           },
-          // Cashier UI only needs the on/off flag; no PayMongo key is public.
-          paymongo: { enabled: paymongo.enabled },
           // On/off state for the built-in exports (no credentials, no secrets).
           exports: {
             receiptPdf: !!effectiveDoc("receiptPdf", docs.receiptPdf || null).enabled,
@@ -437,7 +374,6 @@ export function settingsService({
           googleAuth: { enabled: false, clientId: "" },
           googleMaps: { enabled: false, apiKey: "" },
           recaptcha: { enabled: false, siteKey: "" },
-          paymongo: { enabled: false },
           exports: { receiptPdf: false, csvExport: false },
         };
       }
@@ -512,23 +448,6 @@ export function settingsService({
       };
     },
     /**
-     * Server-only PayMongo config (includes decrypted secret keys).
-     * PayMongo is only enabled when the required secret key is present; the
-     * webhook secret is optional so polling works without a public tunnel.
-     */
-    async paymongoConfig() {
-      const docs = await settingsModel.findMany(["paymongo"]);
-      const effective = effectiveDoc("paymongo", docs.paymongo || null);
-      return {
-        enabled: !!effective.enabled,
-        secretKey: String(effective.credentials.secretKey?.value || ""),
-        webhookSecret: String(effective.credentials.webhookSecret?.value || ""),
-      };
-    },
-    /**
-     * Server-only Google Gemini AI config (includes decrypted API key).
-     */
-    /**
      * Server-only on/off state for the built-in export features (PDF receipt
      * and CSV income report). No credentials are involved.
      */
@@ -542,14 +461,6 @@ export function settingsService({
       } catch {
         return { receiptPdf: false, csvExport: false };
       }
-    },
-    async geminiConfig() {
-      const docs = await settingsModel.findMany(["gemini"]);
-      const effective = effectiveDoc("gemini", docs.gemini || null);
-      return {
-        enabled: !!effective.enabled,
-        apiKey: String(effective.credentials.apiKey?.value || ""),
-      };
     },
     /**
      * settings_plan_update port: build field-level update plan.
@@ -713,18 +624,6 @@ export function settingsService({
         const err = new Error("reCAPTCHA keys contain no spaces and are at least 20 characters");
         err.status = 422;
         throw err;
-      }
-      if (key === "paymongo" && value !== "" && (/\s/.test(value) || value.length < 10)) {
-        const err = new Error("PayMongo keys contain no spaces and are at least 10 characters");
-        err.status = 422;
-        throw err;
-      }
-      if (key === "gemini" && name === "apiKey" && value !== "") {
-        if (/\s/.test(value) || value.length < 20) {
-          const err = new Error("Gemini API key must not contain whitespace and must be at least 20 characters");
-          err.status = 422;
-          throw err;
-        }
       }
       if (key === "googleCalendar" && name === "privateKey" && value !== "") {
         // A pasted service-account key that is not a real RSA PEM can never

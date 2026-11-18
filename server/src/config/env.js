@@ -39,9 +39,17 @@ export const env = {
   // Optional: resolver(s) Node uses for Atlas SRV lookups, e.g. "8.8.8.8,1.1.1.1".
   MONGODB_DNS_SERVERS: process.env.MONGODB_DNS_SERVERS || "",
   FRONTEND_URL: process.env.FRONTEND_URL || "",
+  // SESSION_SECRET is still required: it derives the authenticator (TOTP)
+  // encryption key when SETTINGS_ENCRYPTION_KEY is blank.
   SESSION_SECRET: process.env.SESSION_SECRET || "",
-  SESSION_TTL_SECONDS: Number(process.env.SESSION_TTL_SECONDS || 43200),
-  AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME || "gh_session",
+  // Stateless JWT auth. JWT_SECRET falls back to SESSION_SECRET so existing
+  // deployments keep working; set a dedicated value in production so rotating
+  // one secret does not affect the other.
+  JWT_SECRET: process.env.JWT_SECRET || process.env.SESSION_SECRET || "",
+  JWT_TTL_SECONDS: Number(
+    process.env.JWT_TTL_SECONDS || process.env.SESSION_TTL_SECONDS || 43200
+  ),
+  AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME || "gh_token",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "",
   // Admin overrides written by Settings > API. Empty = use the default above.
   GOOGLE_AUTH_CLIENT_ID_OVERRIDE: process.env.GOOGLE_AUTH_CLIENT_ID_OVERRIDE || "",
@@ -67,15 +75,6 @@ export const env = {
   RECAPTCHA_SITE_KEY_OVERRIDE: process.env.RECAPTCHA_SITE_KEY_OVERRIDE || "",
   RECAPTCHA_SECRET_KEY: process.env.RECAPTCHA_SECRET_KEY || "",
   RECAPTCHA_SECRET_KEY_OVERRIDE: process.env.RECAPTCHA_SECRET_KEY_OVERRIDE || "",
-  // Optional PayMongo defaults; the *_OVERRIDE keys are filled by Settings > API.
-  PAYMONGO_SECRET_KEY: process.env.PAYMONGO_SECRET_KEY || "",
-  PAYMONGO_SECRET_KEY_OVERRIDE: process.env.PAYMONGO_SECRET_KEY_OVERRIDE || "",
-  PAYMONGO_WEBHOOK_SECRET: process.env.PAYMONGO_WEBHOOK_SECRET || "",
-  PAYMONGO_WEBHOOK_SECRET_OVERRIDE:
-    process.env.PAYMONGO_WEBHOOK_SECRET_OVERRIDE || "",
-  // Optional Google Gemini AI API key; the *_OVERRIDE key is filled by Settings > API.
-  GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
-  GEMINI_API_KEY_OVERRIDE: process.env.GEMINI_API_KEY_OVERRIDE || "",
   // Optional: encrypts `secret: true` settings credentials at rest (AES-256-GCM).
   // Required before an admin can save a reCAPTCHA secret key or Calendar key.
   SETTINGS_ENCRYPTION_KEY: process.env.SETTINGS_ENCRYPTION_KEY || "",

@@ -27,6 +27,7 @@ const ACTION_LABELS = {
   reservation_create: "Reservation created",
   reservation_accept: "Reservation accepted",
   reservation_reject: "Reservation rejected",
+  reservation_check_in: "Reservation checked in",
   fnb_product_add: "Menu item added",
   fnb_product_update: "Menu item updated",
   fnb_product_archive: "Menu item archived",
@@ -65,6 +66,7 @@ const ACTION_TONES = {
   reservation_create: "reserved",
   reservation_accept: "available",
   reservation_reject: "declined",
+  reservation_check_in: "occupied",
   fnb_product_add: "available",
   fnb_product_update: "pending",
   fnb_product_archive: "archived",
@@ -195,7 +197,7 @@ function detailsOf(log) {
     return `${m.productName || "F&B item"} × ${m.qty ?? "?"}`;
   }
 
-  if (action === "reservation_create" || action === "reservation_accept" || action === "reservation_reject") {
+  if (action === "reservation_create" || action === "reservation_accept" || action === "reservation_reject" || action === "reservation_check_in") {
     return log.target ? `Ref ${log.target}` : "—";
   }
 

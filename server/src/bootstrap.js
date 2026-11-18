@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { env, persistEnvValue } from "./config/env.js";
 import { getDb, getMongoClient } from "./config/db.js";
 import { setupRoutes } from "./app.js";
+import { authenticate } from "./middleware/auth.js";
 
 // Models
 import { healthModel } from "./models/health.model.js";
@@ -35,8 +36,6 @@ import { reservationService } from "./services/reservation.service.js";
 import { googleCalendarService } from "./services/googleCalendar.service.js";
 import { mailService } from "./services/mail.service.js";
 import { recaptchaService } from "./services/recaptcha.service.js";
-import { paymongoService } from "./services/paymongo.service.js";
-import { geminiService } from "./services/gemini.service.js";
 import { transactionService } from "./services/transaction.service.js";
 import { reportService } from "./services/report.service.js";
 import { productService } from "./services/product.service.js";
@@ -142,11 +141,6 @@ export async function wireApp() {
       siteKey: env.RECAPTCHA_SITE_KEY,
       secretKey: env.RECAPTCHA_SECRET_KEY,
     },
-    paymongoFromEnv: {
-      secretKey: env.PAYMONGO_SECRET_KEY,
-      webhookSecret: env.PAYMONGO_WEBHOOK_SECRET,
-    },
-    geminiApiKeyFromEnv: env.GEMINI_API_KEY,
     // Credential changes require a current authenticator code (step-up).
     twoFactorService: twoFactorSvc,
     // Live provider check for a credential that is being added or replaced.
@@ -155,19 +149,10 @@ export async function wireApp() {
     // fields; an empty field falls back to the base env value.
     persistEnvValue,
   });
-  const paymongo = paymongoService({
-    configProvider: () => settingsSvc.paymongoConfig(),
-    frontendUrl: env.FRONTEND_URL,
-  });
-  const gemini = geminiService({
-    configProvider: () => settingsSvc.geminiConfig(),
-  });
   const services = {
     health: healthService({ healthModel: models.health, dbName: env.MONGODB_DB }),
     settings: settingsSvc,
     twoFactor: twoFactorSvc,
-    paymongo,
-    gemini,
     invitation: invitationService({
       invitationModel: models.invitation,
       db,
@@ -182,7 +167,6 @@ export async function wireApp() {
       sessionModel: models.session,
       sessionService: sessionSvc,
       db,
-      paymongoService: paymongo,
     }),
     report: reportService({ transactionModel: models.transaction }),
     product: productService({ productModel: models.product, db }),
@@ -232,6 +216,7 @@ export async function wireApp() {
     calendarService: calendar,
     mailer,
     recaptchaService: recaptcha,
+    sessionService: sessionSvc,
   });
   services.order = orderService({
     sessionModel: models.session,
@@ -262,7 +247,9 @@ export async function wireApp() {
     activity: activityController({ activityService: services.activity }),
   };
 
-  setupRoutes(controllers);
+  setupRoutes(controllers, {
+    authenticate: authenticate({ userModel: models.user }),
+  });
   wired = true;
   wiredGraph = { models, services, controllers };
   return wiredGraph;

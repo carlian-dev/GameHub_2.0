@@ -132,14 +132,14 @@ describe("activityController", () => {
       activityService: { async list() { return { logs: [], total: 0 }; } },
     });
     await assert.rejects(
-      () => new Promise((_, reject) => ctrl.list({ session: {} }, {}, reject)),
+      () => new Promise((_, reject) => ctrl.list({ authUser: null }, {}, reject)),
       (err) => err.status === 401
     );
     await assert.rejects(
       () =>
         new Promise((_, reject) =>
           ctrl.list(
-            { session: { user: { id: "u1", role: "cashier" } } },
+            { authUser: { id: "u1", role: "cashier" } },
             {},
             reject
           )
@@ -161,7 +161,7 @@ describe("activityController", () => {
 
     // Unauthenticated -> 401
     await assert.rejects(
-      () => new Promise((_, reject) => ctrl.myList({ session: {} }, {}, reject)),
+      () => new Promise((_, reject) => ctrl.myList({ authUser: null }, {}, reject)),
       (err) => err.status === 401
     );
 
@@ -179,7 +179,7 @@ describe("activityController", () => {
     };
     await ctrl.myList(
       {
-        session: { user: { id: "cashier-123", role: "cashier" } },
+        authUser: { id: "cashier-123", role: "cashier" },
         query: { actorId: "admin-456", action: "login" },
       },
       res,

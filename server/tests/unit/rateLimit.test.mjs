@@ -24,14 +24,14 @@ function config(overrides = {}) {
   };
 }
 
-// Minimal stand-in for express-session: `x-user-id` marks the request as
+// Minimal stand-in for the JWT middleware: `x-user-id` marks the request as
 // signed in, everything else is anonymous (same shape the real middleware
-// stores under req.session.user).
+// stores under req.authUser).
 function testApp(limiters) {
   const app = express();
   app.use((req, res, next) => {
     const id = req.get("x-user-id");
-    req.session = id ? { user: { id, role: "admin" } } : {};
+    req.authUser = id ? { id, role: "admin" } : null;
     next();
   });
   app.get("/read", limiters.api, (req, res) => res.json({ ok: true }));

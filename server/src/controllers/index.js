@@ -2,6 +2,7 @@
 // through a view. No DB queries. migration.md §9 layer rules.
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/HttpError.js";
+import { clearAuthCookie, setAuthCookie } from "../utils/authToken.js";
 import {
   healthView,
   loginView,
@@ -19,7 +20,7 @@ import {
 export function tableController({ tableService }) {
   return {
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -28,7 +29,7 @@ export function tableController({ tableService }) {
     }),
 
     add: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -40,7 +41,7 @@ export function tableController({ tableService }) {
     rename: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -52,7 +53,7 @@ export function tableController({ tableService }) {
     status: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -64,7 +65,7 @@ export function tableController({ tableService }) {
     archive: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -75,7 +76,7 @@ export function tableController({ tableService }) {
     unarchive: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -89,7 +90,7 @@ export function tableController({ tableService }) {
     }),
 
     cashierList: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -103,7 +104,7 @@ export function tableController({ tableService }) {
 export function rateController({ rateService }) {
   return {
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -112,7 +113,7 @@ export function rateController({ rateService }) {
     }),
 
     set: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -131,7 +132,7 @@ export function rateController({ rateService }) {
 export function sessionController({ sessionService }) {
   return {
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -142,7 +143,7 @@ export function sessionController({ sessionService }) {
     }),
 
     start: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -162,7 +163,7 @@ export function sessionController({ sessionService }) {
     extend: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -178,7 +179,7 @@ export function sessionController({ sessionService }) {
     end: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -189,7 +190,7 @@ export function sessionController({ sessionService }) {
     cancel: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -203,7 +204,7 @@ export function sessionController({ sessionService }) {
 export function transactionController({ transactionService }) {
   return {
     create: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -218,61 +219,8 @@ export function transactionController({ transactionService }) {
       res.status(200).json(result);
     }),
 
-    /** POST /api/cashier/sessions/{id}/paymongo */
-    paymongoCheckout: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
-      if (!user) {
-        throw new HttpError(401, "not logged in");
-      }
-      const { id } = req.params || {};
-      const result = await transactionService.startPaymongo(
-        { sessionId: id },
-        user
-      );
-      res.status(200).json(result);
-    }),
-
-    /** GET /api/cashier/paymongo/checkouts/{id} */
-    paymongoStatus: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
-      if (!user) {
-        throw new HttpError(401, "not logged in");
-      }
-      const result = await transactionService.paymongoStatus(req.params?.id);
-      res.status(200).json(result);
-    }),
-
-    /** POST /api/cashier/sessions/{id}/paymongo/cancel */
-    paymongoCancel: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
-      if (!user) {
-        throw new HttpError(401, "not logged in");
-      }
-      const result = await transactionService.cancelPaymongo(
-        req.params?.id,
-        user
-      );
-      res.status(200).json(result);
-    }),
-
-    /** POST /api/paymongo/webhook — public; the signature is the auth. */
-    paymongoWebhook: asyncHandler(async (req, res) => {
-      const raw = req.rawBody ? req.rawBody.toString("utf8") : "";
-      const signature =
-        req.get("paymongo-signature") ||
-        req.get("x-paymongo-signature") ||
-        req.get("paymongo_signature") ||
-        "";
-      const result = await transactionService.handlePaymongoWebhook(
-        raw,
-        signature,
-        req.body
-      );
-      res.status(200).json(result);
-    }),
-
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -288,7 +236,7 @@ export function transactionController({ transactionService }) {
     get: asyncHandler(async (req, res) => {
       const { ref } = req.params || {};
       if (!ref) throw new HttpError(422, "ref is required");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -302,7 +250,7 @@ export function transactionController({ transactionService }) {
 export function reportController({ reportService, settingsService }) {
   return {
     daily: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -311,7 +259,7 @@ export function reportController({ reportService, settingsService }) {
     }),
 
     monthly: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -320,7 +268,7 @@ export function reportController({ reportService, settingsService }) {
     }),
 
     income: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -332,7 +280,7 @@ export function reportController({ reportService, settingsService }) {
     }),
 
     export: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -373,7 +321,7 @@ export function settingsController({ settingsService }) {
       res.status(200).json({ ...publicConfigView(integrations), exports });
     }),
     adminIntegrations: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -382,7 +330,7 @@ export function settingsController({ settingsService }) {
     }),
     /** Super admin: activation state plus masked credentials. */
     superAdminIntegrations: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "super_admin") {
         throw new HttpError(403, "super admin only");
       }
@@ -397,7 +345,7 @@ export function settingsController({ settingsService }) {
     superAdminUpdate: asyncHandler(async (req, res) => {
       const { key } = req.params || {};
       if (!key) throw new HttpError(422, "unknown integration");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "super_admin") {
         throw new HttpError(403, "super admin only");
       }
@@ -414,7 +362,7 @@ export function settingsController({ settingsService }) {
      * authenticator step-up as a credential change is required.
      */
     superAdminReset: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "super_admin") {
         throw new HttpError(403, "super admin only");
       }
@@ -437,27 +385,32 @@ export function authController({ authService }) {
         { identifier, password, recaptchaToken },
         req
       );
-      res.status(200).json(loginView(result));
+      // The JWT travels only in the HttpOnly cookie; the body carries just the
+      // fields the frontend needs to redirect by role.
+      setAuthCookie(res, result.token);
+      res.status(200).json(loginView(result.user));
     }),
 
     logout: asyncHandler(async (req, res) => {
-      await authService.logout(req);
-      res.clearCookie("gh_session", { path: "/" });
-      res.status(200).json({ ok: true });
+      // Stateless: nothing server-side to destroy. Clearing the cookie and the
+      // tokenVersion bump in the service invalidate every token issued so far.
+      const result = await authService.logout(req.authUser);
+      clearAuthCookie(res);
+      res.status(200).json(result);
     }),
 
     me: asyncHandler(async (req, res) => {
-      const userId = req.session && req.session.user ? req.session.user.id : null;
+      const userId = req.authUser ? req.authUser.id : null;
       if (!userId) {
         throw new HttpError(401, "not logged in");
       }
-      const result = await authService.me(userId, req);
+      const result = await authService.me(userId);
       res.status(200).json(meView(result));
     }),
 
     /** PUT /api/me/profile — cashier self-service display name. */
     updateProfile: asyncHandler(async (req, res) => {
-      const userId = req.session && req.session.user ? req.session.user.id : null;
+      const userId = req.authUser ? req.authUser.id : null;
       if (!userId) {
         throw new HttpError(401, "not logged in");
       }
@@ -470,7 +423,8 @@ export function authController({ authService }) {
     google: asyncHandler(async (req, res) => {
       const { idToken, email } = req.body || {};
       const result = await authService.google({ idToken, email }, req);
-      res.status(200).json(loginView(result));
+      setAuthCookie(res, result.token);
+      res.status(200).json(loginView(result.user));
     }),
 
     register: asyncHandler(async (req, res) => {
@@ -486,7 +440,7 @@ export function authController({ authService }) {
         token, firstName, lastName, email, password, username, recaptchaToken,
         remoteIp: req.ip,
       });
-      res.status(200).json(loginView(result));
+      res.status(200).json(loginView(result.user || result));
     }),
   };
 }
@@ -494,7 +448,7 @@ export function authController({ authService }) {
 // -------- Super-admin two-factor authentication (TOTP) --------
 export function twoFactorController({ twoFactorService }) {
   function requireActor(req) {
-    const user = req.session && req.session.user;
+    const user = req.authUser;
     if (!user || user.role !== "super_admin") {
       throw new HttpError(403, "super admin only");
     }
@@ -573,7 +527,7 @@ export function invitationController({ invitationService }) {
 
     create: asyncHandler(async (req, res) => {
       const { email } = req.body || {};
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -587,7 +541,7 @@ export function invitationController({ invitationService }) {
     }),
 
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -598,7 +552,7 @@ export function invitationController({ invitationService }) {
     revoke: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -612,7 +566,7 @@ export function invitationController({ invitationService }) {
 export function cashierController({ cashierService }) {
   return {
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -626,7 +580,7 @@ export function cashierController({ cashierService }) {
     update: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -637,7 +591,7 @@ export function cashierController({ cashierService }) {
     archive: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -648,7 +602,7 @@ export function cashierController({ cashierService }) {
     unarchive: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -662,7 +616,7 @@ export function cashierController({ cashierService }) {
 export function activityController({ activityService }) {
   return {
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -677,7 +631,7 @@ export function activityController({ activityService }) {
     }),
 
     myList: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || !user.id) {
         throw new HttpError(401, "not logged in");
       }
@@ -716,7 +670,7 @@ export function productController({ productService }) {
     create: asyncHandler(async (req, res) => {
       const result = await productService.add(
         req.body || {},
-        req.session && req.session.user
+        req.authUser
       );
       res.status(201).json(result);
     }),
@@ -727,7 +681,7 @@ export function productController({ productService }) {
       const result = await productService.update(
         id,
         req.body || {},
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -737,7 +691,7 @@ export function productController({ productService }) {
       if (!id) throw new HttpError(422, "invalid id");
       const result = await productService.archive(
         id,
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -747,7 +701,7 @@ export function productController({ productService }) {
       if (!id) throw new HttpError(422, "invalid id");
       const result = await productService.unarchive(
         id,
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -773,7 +727,7 @@ export function orderController({ orderService }) {
           productId: req.body?.productId,
           qty: req.body?.qty,
         },
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -785,7 +739,7 @@ export function orderController({ orderService }) {
         id,
         lineId,
         { qty: req.body?.qty },
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -796,7 +750,7 @@ export function orderController({ orderService }) {
       const result = await orderService.remove(
         id,
         lineId,
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -822,7 +776,7 @@ export function reservationController({ reservationService }) {
     }),
 
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -838,7 +792,7 @@ export function reservationController({ reservationService }) {
     }),
 
     accept: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -848,12 +802,22 @@ export function reservationController({ reservationService }) {
     }),
 
     reject: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
       const { ref } = req.params || {};
       const result = await reservationService.reject(ref, user.id);
+      res.status(200).json(result);
+    }),
+
+    checkIn: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user) {
+        throw new HttpError(401, "not logged in");
+      }
+      const { ref } = req.params || {};
+      const result = await reservationService.checkIn(ref, user);
       res.status(200).json(result);
     }),
 

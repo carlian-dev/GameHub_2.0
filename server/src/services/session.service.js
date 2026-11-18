@@ -60,6 +60,7 @@ export function sessionService({
   const sessionsColl = db.collection("sessions");
   const tablesColl = db.collection("tables");
   const usersColl = db.collection("users");
+  const reservationsColl = db.collection("reservations");
   const activityLogs = db.collection("activityLogs");
 
   return {
@@ -143,14 +144,15 @@ export function sessionService({
           rateType: d.rateType ?? null,
           closedAt:
             d.closedAt instanceof Date ? d.closedAt.toISOString() : null,
+          reservationRef: d.reservationRef ?? null,
           fnbTotal: fnbTotalOf(d),
           fnbLineCount: Array.isArray(d.fnbOrders) ? d.fnbOrders.length : 0,
         })),
       };
     },
 
-    /** POST /api/cashier/sessions — start a walk-in session. */
-    async start({ tableId, customerName, durationMinutes, hours, minutes },
+    /** POST /api/cashier/sessions — start a walk-in session or a reservation check-in. */
+    async start({ tableId, customerName, durationMinutes, hours, minutes, reservationRef },
       actor) {
       if (!tableId || !/^[0-9a-fA-F]{24}$/.test(String(tableId))) {
         const err = new Error("tableId is required");
@@ -191,9 +193,16 @@ export function sessionService({
         err.status = 422;
         throw err;
       }
-      if ((table.status ?? "available") !== "available") {
+      const reservationRefText = String(reservationRef || "").trim();
+      const tableStatus = table.status ?? "available";
+      // A reservation's table may already be flagged "reserved" by an admin;
+      // that is exactly the table this booking is allowed to occupy now.
+      const canOccupy =
+        tableStatus === "available" ||
+        (reservationRefText !== "" && tableStatus === "reserved");
+      if (!canOccupy) {
         const err = new Error(
-          `table is not available (current: ${table.status ?? "?"})`
+          `table is not available (current: ${tableStatus || "?"})`
         );
         err.status = 409;
         throw err;
@@ -236,6 +245,7 @@ export function sessionService({
         status: "active",
         pricePerHour: price,
         rateType: rateType,
+        reservationRef: reservationRefText || null,
         createdAt: start,
         updatedAt: start,
       });
@@ -306,6 +316,7 @@ export function sessionService({
         plannedMinutes: newPlanned,
         updatedAt: new Date(),
       });
+      await syncLinkedReservationEnd(doc, newEnd);
       const actorId = actor && actor.id ? String(actor.id) : "";
       await activityLogs.insertOne({
         actorId,
@@ -347,6 +358,7 @@ export function sessionService({
         updatedAt: now,
       });
       await freeTable(doc.tableId);
+      await completeLinkedReservation(doc, closedAt);
       const actorId = actor && actor.id ? String(actor.id) : "";
       await activityLogs.insertOne({
         actorId,
@@ -392,6 +404,7 @@ export function sessionService({
         updatedAt: now,
       });
       await freeTable(doc.tableId);
+      await releaseLinkedReservation(doc, now);
       const actorId = actor && actor.id ? String(actor.id) : "";
       await activityLogs.insertOne({
         actorId,
@@ -415,7 +428,7 @@ export function sessionService({
         status: "active",
         endTime: { $type: "date", $lte: now },
       })
-      .project({ _id: 1, tableId: 1, endTime: 1 })
+      .project({ _id: 1, tableId: 1, endTime: 1, reservationRef: 1 })
       .toArray();
     let closed = 0;
     for (const doc of expired) {
@@ -441,6 +454,7 @@ export function sessionService({
     );
     if (res.modifiedCount !== 1) return false;
     await freeTable(doc.tableId);
+    await completeLinkedReservation(doc, closedAt);
     await activityLogs.insertOne({
       actorId: "system",
       action: AUTO_END_ACTION,
@@ -448,6 +462,71 @@ export function sessionService({
       at: now,
     });
     return true;
+  }
+
+  // A reservation that opened a session is "checked-in" while it runs.
+  // Ending the session completes the booking; voiding it returns the booking
+  // to accepted so the cashier can start it again (mistake recovery).
+  async function completeLinkedReservation(doc, when) {
+    if (!doc || !doc.reservationRef) return;
+    try {
+      await reservationsColl.updateOne(
+        { ref: doc.reservationRef, status: "checked-in" },
+        {
+          $set: {
+            status: "completed",
+            completedAt: when instanceof Date ? when : new Date(),
+            updatedAt: new Date(),
+          },
+        }
+      );
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[gamehub] reservation complete failed:",
+        e && e.message ? e.message : e
+      );
+    }
+  }
+
+  async function syncLinkedReservationEnd(doc, newEnd) {
+    if (!doc || !doc.reservationRef) return;
+    try {
+      await reservationsColl.updateOne(
+        { ref: doc.reservationRef, status: "checked-in" },
+        { $set: { sessionEndsAt: newEnd, updatedAt: new Date() } }
+      );
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[gamehub] reservation end sync failed:",
+        e && e.message ? e.message : e
+      );
+    }
+  }
+
+  async function releaseLinkedReservation(doc, now) {
+    if (!doc || !doc.reservationRef) return;
+    try {
+      await reservationsColl.updateOne(
+        { ref: doc.reservationRef, status: "checked-in" },
+        {
+          $set: { status: "accepted", updatedAt: now },
+          $unset: {
+            checkedInAt: "",
+            checkedInBy: "",
+            sessionId: "",
+            sessionEndsAt: "",
+          },
+        }
+      );
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[gamehub] reservation reopen failed:",
+        e && e.message ? e.message : e
+      );
+    }
   }
 
   async function freeTable(tableId) {
@@ -481,6 +560,7 @@ export function sessionService({
       rateType: doc.rateType ?? null,
       closedAt:
         doc.closedAt instanceof Date ? doc.closedAt.toISOString() : null,
+      reservationRef: doc.reservationRef ?? null,
       fnbTotal: fnbTotalOf(doc),
       fnbLineCount: Array.isArray(doc.fnbOrders) ? doc.fnbOrders.length : 0,
     };

@@ -1,6 +1,6 @@
 // One-time idempotent seed of the `settings` collection documents
-// (googleAuth, googleMaps, googleCalendar, recaptcha, paymongo, gemini,
-// receiptPdf, csvExport, otp). DB is
+// (googleAuth, googleMaps, googleCalendar, recaptcha,
+// receiptPdf, csvExport). DB is
 // authoritative; env defaults only apply when a document is absent. Guards
 // against gamehub_2_0.
 import dotenv from "dotenv";
@@ -57,25 +57,6 @@ const SETTINGS = [
     updatedBy: null,
   },
   {
-    key: "paymongo",
-    enabled: false,
-    credentials: {
-      secretKey: { value: "", last4: "", updatedAt: null },
-      webhookSecret: { value: "", last4: "", updatedAt: null },
-    },
-    updatedAt: null,
-    updatedBy: null,
-  },
-  {
-    key: "gemini",
-    enabled: false,
-    credentials: {
-      apiKey: { value: "", last4: "", updatedAt: null },
-    },
-    updatedAt: null,
-    updatedBy: null,
-  },
-  {
     key: "receiptPdf",
     enabled: true,
     credentials: {},
@@ -85,13 +66,6 @@ const SETTINGS = [
   {
     key: "csvExport",
     enabled: true,
-    credentials: {},
-    updatedAt: null,
-    updatedBy: null,
-  },
-  {
-    key: "otp",
-    enabled: false,
     credentials: {},
     updatedAt: null,
     updatedBy: null,

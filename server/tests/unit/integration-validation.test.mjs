@@ -52,122 +52,6 @@ const RSA_PEM = crypto
   })
   .privateKey;
 
-describe("integrationValidation gemini", () => {
-  it("accepts a key that Google lists models for", async () => {
-    let seen = "";
-    const svc = service(async (url) => {
-      seen = String(url);
-      return jsonResponse(200, { models: [{ name: "models/gemini-1.5-flash" }] });
-    });
-
-    const result = await svc.verify("gemini", {
-      changed: ["apiKey"],
-      values: { apiKey: "AIzaSyValidGeminiKey1234567890" },
-    });
-
-    assert.strictEqual(result.provider, "Google Gemini");
-    assert.deepStrictEqual(result.credentials, ["apiKey"]);
-    assert.match(seen, /generativelanguage\.googleapis\.com/);
-  });
-
-  it("rejects a key Google says is not valid", async () => {
-    const svc = service(async () =>
-      jsonResponse(400, {
-        error: {
-          code: 400,
-          message: "API key not valid. Please pass a valid API key.",
-          status: "INVALID_ARGUMENT",
-          details: [{ reason: "API_KEY_INVALID" }],
-        },
-      })
-    );
-
-    await assert.rejects(
-      () =>
-        svc.verify("gemini", {
-          changed: ["apiKey"],
-          values: { apiKey: "AIzaSyWrongKey12345678901234567890" },
-        }),
-      (err) => err.status === 422 && /not valid/i.test(err.message)
-    );
-  });
-
-  it("fails closed when Google is unreachable", async () => {
-    const svc = service(async () => {
-      throw new Error("getaddrinfo ENOTFOUND");
-    });
-
-    await assert.rejects(
-      () =>
-        svc.verify("gemini", {
-          changed: ["apiKey"],
-          values: { apiKey: "AIzaSyUnreachable123456789012345" },
-        }),
-      (err) =>
-        err.status === 502 &&
-        /could not verify/i.test(err.message) &&
-        !/getaddrinfo/.test(err.message)
-    );
-  });
-});
-
-describe("integrationValidation paymongo", () => {
-  it("accepts a secret key that can read payments", async () => {
-    let headers = {};
-    const svc = service(async (url, options) => {
-      headers = options.headers;
-      return jsonResponse(200, { data: [] });
-    });
-
-    const result = await svc.verify("paymongo", {
-      changed: ["secretKey"],
-      values: { secretKey: "sk_test_valid_key_12345" },
-    });
-
-    assert.deepStrictEqual(result.credentials, ["secretKey"]);
-    assert.match(String(headers.Authorization), /^Basic /);
-  });
-
-  it("rejects a key PayMongo refuses to authenticate", async () => {
-    const svc = service(async () =>
-      jsonResponse(401, {
-        errors: [
-          {
-            code: "authentication_failed",
-            detail:
-              "API key sk_test_thi*****************goKey123 does not exist.",
-          },
-        ],
-      })
-    );
-
-    await assert.rejects(
-      () =>
-        svc.verify("paymongo", {
-          changed: ["secretKey"],
-          values: { secretKey: "sk_test_broken_key_12345" },
-        }),
-      (err) =>
-        err.status === 422 &&
-        /not valid/i.test(err.message) &&
-        // Never echo any part of the submitted key back to the browser.
-        !/sk_test_thi|goKey123/.test(err.message) &&
-        /\[redacted\]/.test(err.message)
-    );
-  });
-
-  it("does not call PayMongo for a webhook secret it cannot prove", async () => {
-    const svc = service(async () => assert.fail("no request expected"));
-    const result = await svc.verify("paymongo", {
-      changed: ["webhookSecret"],
-      values: { webhookSecret: "whsec_1234567890" },
-    });
-
-    assert.deepStrictEqual(result.credentials, []);
-    assert.strictEqual(result.notes.length, 1);
-  });
-});
-
 describe("integrationValidation recaptcha", () => {
   it("saves a secret with a note because Google cannot judge one alone", async () => {
     const svc = service(async () => assert.fail("no request expected"));
@@ -437,7 +321,7 @@ describe("integrationValidation scope", () => {
 
   it("does nothing when no credential is being set", async () => {
     const svc = service(async () => assert.fail("no request expected"));
-    const result = await svc.verify("gemini", { changed: [], values: {} });
+    const result = await svc.verify("googleMaps", { changed: [], values: {} });
     assert.deepStrictEqual(result.credentials, []);
   });
 });

@@ -5,9 +5,9 @@ San Isidro St, Malaybalay City, Bukidnon). It covers staff identity and
 access, cashier account administration, billiard-table and rate management,
 customer sessions, reservations, billing and payments, reporting, and audit
 logging across four roles: Super Administrator, Administrator, Cashier, and
-walk-in Customer. The super administrator is intentionally limited to turning
-API integrations on and off (plus managing their own authenticator-app 2FA);
-administrators configure credentials and run the hall.
+walk-in Customer. The super administrator is intentionally limited to
+managing API integrations and their credentials (plus their own
+authenticator-app 2FA); administrators run the hall.
 
 The system is intentionally built with a small, explainable stack: a
 Node/Express JSON API backed by MongoDB Atlas, and a dependency-free
@@ -17,16 +17,16 @@ backend was archived under `archive/Backend/` and is not used at runtime.
 ## Features (by delivery)
 
 * **Sprint 1 — Identity & staff administration.** Cashier self-registration
-  (username accounts), Google sign-in for the administrator account, email
-  one-time codes for sensitive steps, administrator approval / decline of
-  applicants, archiving with re-verification, role-based dashboards.
+  (username accounts), Google sign-in for the administrator account,
+  invitation-only registration, administrator approval / decline of applicants,
+  archiving with a confirmation step, role-based dashboards.
 * **Sprint 2 — Tables, rates, sessions foundation.** Billiard-table
   add/rename/archive/maintenance/status views, regular (₱120/h) and special
   (₱180/h) hourly rates, and an active-sessions view (session lifecycle
   operations follow in a later sprint).
 * **Super administrator — API integration control.** A least-privilege account
-  that can only turn the configured API integrations on or off. Integration
-  credentials stay with the administrator.
+  that owns integration activation and credentials; administrators see
+  integration state read-only.
 * **Planned next.** Session start/extend/end with per-minute billing,
   reservations with overlap protection, accepted-reservation email alerts, food & beverage ordering, cash/GCash
   payments with receipts, daily/monthly/usage reports with export.
@@ -55,7 +55,7 @@ backend was archived under `archive/Backend/` and is not used at runtime.
    ```
    Fill in `MONGODB_URI`, `MONGODB_DB`, `FRONTEND_URL`, `NODE_ENV`
    (required — the backend refuses to start without it), `GOOGLE_CLIENT_ID`,
-   `SESSION_SECRET`, `SESSION_TTL_SECONDS`, `AUTH_COOKIE_NAME`,
+   `SESSION_SECRET`, `JWT_SECRET`, `JWT_TTL_SECONDS`, `AUTH_COOKIE_NAME`,
    `MAIL_USER`/`MAIL_PASS`/`MAIL_FROM` (for invite mail),
    and `TRUST_PROXY` if behind a proxy. Only used by the Express backend.
    Optional Google Calendar sync uses `GOOGLE_CALENDAR_ID`,
@@ -69,12 +69,6 @@ backend was archived under `archive/Backend/` and is not used at runtime.
    the normal env key above is used. Set `SETTINGS_ENCRYPTION_KEY` before
    saving any secret key; generate one with
    `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
-   PayMongo is configured in Admin > Settings > API too: add the secret key
-   (plus the webhook signing secret for automatic production confirmation),
-   then enable the card. The webhook endpoint is
-   `POST /api/paymongo/webhook`; for local development expose it with a public
-   tunnel or rely on the cashier page's checkout-status polling (no webhook
-   required for a manual test).
 
 3. Create the first administrator directly in the `users` collection
    (MongoDB Compass): `{ email, passwordHash (bcrypt), role: "admin",
@@ -138,7 +132,7 @@ GameHub_2.0/
     login/index.html        Redirect so bare /login resolves
     src/function/auth/      Login, registration pages + logic
     src/function/admin/     Admin dashboard, staff, credentials, operations
-    src/function/super-admin/ Integration on/off control (no credentials)
+    src/function/super-admin/ Integration activation and credentials
     src/function/cashiers/  Cashier dashboard
     src/function/tables/    Tables, sessions pages
     src/function/shared/    Landing status logic
@@ -154,25 +148,28 @@ GameHub_2.0/
 * Cashiers register with a chosen username and password (no email required).
   The single administrator and the super administrator sign in with
   email + password or Google.
-* The super administrator's only feature is turning API integrations on or
-  off at `/src/function/super-admin/integrations.html`. Administrators manage
-  the credentials on Admin > Settings > API but cannot send the on/off flag;
-  the server rejects it. Super-admin sign-in is single-step; an authenticator
-  app (TOTP) is only required to add, replace or clear an integration
-  credential. Up to five devices can be paired at once (Settings > API >
+* The super administrator owns API integration activation and credentials at
+  `/src/function/super-admin/integrations.html`. Administrators can view
+  integration state on Admin > Settings > API but cannot change credentials or
+  toggle a service; the server rejects both. Super-admin sign-in is
+  single-step; an authenticator app (TOTP) is only required to add, replace or
+  clear an integration credential. Up to five devices can be paired at once (Settings > API >
   Security): each has its own secret and any one can approve a change, so a
   backup phone keeps working if the first is lost. Remove a single device in
   that panel. If every device is lost, run `npm run reset:2fa -- --email
   <super-admin email> --yes` from `server/` (dry run without `--yes`), reload
   the Security panel, and pair a new app — no old code is required. There is no
   in-app bypass by design (see AGENTS.md).
-* One-time email codes protect account creation verification and
-  destructive approvals (archiving). Day-to-day login is direct session
-  authentication after the status gates.
-* Sessions are server-side `express-session` stored in MongoDB
-  `authSessions` collection (not `sessions`, to avoid collision with
-  billing sessions). Cookie `gh_session` is `httpOnly`, `sameSite=lax`,
-  `path=/`, `secure` in production, rolling 12h TTL.
+* There is no OTP or email-code step: cashier signup is invitation-only
+  (the emailed invite link carries the token) and archiving is a one-step
+  administrator action with a confirmation dialog. Day-to-day login is direct
+  JWT authentication after the status gates.
+* Authentication is stateless JWT (HS256, `JWT_SECRET`): login and Google
+  sign-in return a token that is also set as the `AUTH_COOKIE_NAME`
+  (`gh_token`) HttpOnly cookie — `sameSite=lax`, `path=/`, `secure` in
+  production, `JWT_TTL_SECONDS` (12h default). There is no server-side session
+  store; `Authorization: Bearer <jwt>` works too. Logging out clears the cookie
+  and bumps `users.tokenVersion`, which rejects every older token.
 * `GET /api/me` re-reads the account from Atlas on every guarded page load,
   so an archive or role change takes effect immediately.
 
@@ -189,14 +186,14 @@ GameHub_2.0/
 | `GOOGLE_MAPS_API_KEY` | Optional Google Maps key for the landing page; the admin value is mirrored to `GOOGLE_MAPS_API_KEY_OVERRIDE` |
 | `GOOGLE_CALENDAR_ID` / `GOOGLE_CALENDAR_CLIENT_EMAIL` / `GOOGLE_CALENDAR_PRIVATE_KEY` | Optional service-account sync: accepted reservations become events on this shared calendar (blank = disabled); admin values use the matching `*_OVERRIDE` keys |
 | `RECAPTCHA_SITE_KEY` / `RECAPTCHA_SECRET_KEY` | Optional reCAPTCHA v2 defaults, used whenever the matching admin value is empty; admin values use `RECAPTCHA_SITE_KEY_OVERRIDE` / `RECAPTCHA_SECRET_KEY_OVERRIDE` |
-| `PAYMONGO_SECRET_KEY` / `PAYMONGO_WEBHOOK_SECRET` | Optional PayMongo defaults; admin values use `PAYMONGO_SECRET_KEY_OVERRIDE` / `PAYMONGO_WEBHOOK_SECRET_OVERRIDE` |
 | `*_OVERRIDE` (all integrations) | Filled automatically by Admin > Settings > API. Precedence: override, then the normal env key, then the settings document. Clearing an admin value falls back to the normal env key |
-| `SETTINGS_ENCRYPTION_KEY` | 32 random bytes as 64 hex chars; required before saving secret credentials (reCAPTCHA secret key, Calendar private key, PayMongo keys). Stored secrets use AES-256-GCM |
+| `SETTINGS_ENCRYPTION_KEY` | 32 random bytes as 64 hex chars; required before saving secret credentials (reCAPTCHA secret key, Calendar private key, super-admin 2FA secrets). Stored secrets use AES-256-GCM |
 | `MAIL_USER` / `MAIL_PASS` | Gmail sender + app password (cashier invitations and accepted-reservation emails) |
 | `MAIL_FROM` | Display name on outgoing mail |
-| `SESSION_SECRET` | 32 random bytes as 64 hex chars |
-| `SESSION_TTL_SECONDS` | Session rolling TTL (default 43200 = 12h) |
-| `AUTH_COOKIE_NAME` | Session cookie name (default `gh_session`) |
+| `SESSION_SECRET` | 32 random bytes as 64 hex chars (also derives the 2FA encryption key when `SETTINGS_ENCRYPTION_KEY` is blank) |
+| `JWT_SECRET` | Signs the stateless auth JWT (HS256); blank = reuse `SESSION_SECRET` |
+| `JWT_TTL_SECONDS` | Auth token lifetime (default 43200 = 12h) |
+| `AUTH_COOKIE_NAME` | HttpOnly JWT cookie name (default `gh_token`) |
 | `TRUST_PROXY` | `0`, `1`, or hop count when behind a proxy |
 | `RATE_LIMIT_ENABLED` | `0` disables all request rate limiting (default on) |
 | `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` | Global per-IP `/api` budget (default 300 requests per 60s) |
@@ -205,25 +202,11 @@ GameHub_2.0/
 | `RESERVATION_RATE_LIMIT_WINDOW_MS` / `RESERVATION_RATE_LIMIT_MAX` | Guest reservation create/lookup/cancel per IP (default 10 per 10 min) |
 | `MAIL_DRY_RUN` | `1` to log instead of sending mail (tests) |
 
-### PayMongo
+## Billing
 
-PayMongo is optional and disabled by default. Configure it in
-**Admin > Settings > API > PayMongo**:
-
-* **Secret key** — from the PayMongo dashboard (test or live mode).
-* **Webhook signing secret** *(optional but recommended for production)* —
-  created when you add a webhook endpoint at
-  `<backend-public-url>/api/paymongo/webhook` with the
-  `checkout_session.payment.paid` event. Without it, the webhook endpoint
-  rejects requests; the cashier page still confirms payments by polling the
-  checkout status, so local testing does not need a public tunnel.
-
-Only GCash is enabled in the hosted checkout for now. When a cashier selects
-**GCash online** in a closed session’s bill sheet, the server locks the bill,
-creates a PayMongo Checkout Session for the exact total, and shows the hosted
-payment page. Payment is recorded automatically by the signed webhook or by the
-cashier’s status check (polling works without a public tunnel). Cancelling the
-link releases the bill lock after asking PayMongo to expire the session.
+Session bills are settled manually at the counter. Cash and counter GCash are
+recorded as payment entries; no online checkout or payment-provider webhook is
+involved.
 
 ## Scripts
 
@@ -275,4 +258,5 @@ never started by any npm script.
 * Cashier login is password-only (cashier accounts carry no email for codes).
 * Exactly one administrator account exists; none can be created or archived
   through the application. A super administrator account is also created
-  directly in the database and is limited to integration on/off.
+  directly in the database and is limited to integration activation and
+  credentials.

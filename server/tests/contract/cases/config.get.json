@@ -10,10 +10,9 @@
       "integrations": {
         "googleAuth": { "enabled": false, "clientId": "" },
         "googleMaps": { "enabled": true, "apiKey": "" },
-        "recaptcha": { "enabled": false, "siteKey": "" },
-        "paymongo": { "enabled": false },
-        "exports": { "receiptPdf": true, "csvExport": true }
-      }
+        "recaptcha": { "enabled": false, "siteKey": "" }
+      },
+      "exports": { "receiptPdf": true, "csvExport": true }
     }
   }
 }

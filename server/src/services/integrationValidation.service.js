@@ -10,8 +10,8 @@
 //   - credential rejected by the provider -> 422 "{Integration} ... is not valid"
 //   - provider unreachable / rate limited  -> 502 "could not verify ... not saved"
 //   - credential that no provider can check on its own (a reCAPTCHA site key or
-//     secret, a webhook signing secret, a calendar ID without its service
-//     account) is reported as unchecked with a note instead of being blocked.
+//     secret, a calendar ID without its service account) is reported as
+//     unchecked with a note instead of being blocked.
 //
 // The real fetch is injected so unit tests never touch the network.
 import crypto from "node:crypto";
@@ -20,8 +20,6 @@ import { HttpError } from "../utils/HttpError.js";
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_TOTAL_BUDGET_MS = 9000;
 
-const GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-const PAYMONGO_API_BASE = "https://api.paymongo.com";
 const GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -33,12 +31,10 @@ const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 // client, which would make the check useless.
 const PROBE_REDIRECT_URI = "https://example.com/oauth2/key-check";
 
-// Providers sometimes quote a masked copy of the key they received (PayMongo:
-// "API key sk_test_thi***123 does not exist."). Strip token-shaped text so no
-// part of a credential can reach the UI, an audit row, or a log line.
+// Providers sometimes quote a masked copy of the key they received. Strip
+// token-shaped text so no part of a credential can reach the UI, an audit row,
+// or a log line.
 const TOKEN_PATTERNS = [
-  /\b(?:sk|pk)_(?:test|live)_[A-Za-z0-9_*-]{3,}/g,
-  /\bwhsec_[A-Za-z0-9_*-]{3,}/g,
   /\bAIza[0-9A-Za-z_*-]{8,}/g,
   /\b6L[a-zA-Z0-9_*-]{20,}/g,
 ];
@@ -148,86 +144,6 @@ export function integrationValidationService({
       body = null;
     }
     return { res, body };
-  }
-
-  function apiMessage(payload) {
-    if (!payload || typeof payload !== "object") return "";
-    const first = Array.isArray(payload.errors) ? payload.errors[0] : null;
-    return (
-      (first && (first.detail || first.title || first.code)) ||
-      payload.message ||
-      (payload.error && (payload.error.message || payload.error)) ||
-      ""
-    );
-  }
-
-  // ---- Google Gemini: list models with the key (read-only, cheap) ----
-  async function verifyGemini(changed, values, deadline) {
-    const provider = "Google Gemini";
-    if (!changed.includes("apiKey") || !values.apiKey) return ok(provider);
-
-    const url = `${GEMINI_MODELS_URL}?key=${encodeURIComponent(values.apiKey)}`;
-    const { res, body } = await request(provider, url, { method: "GET" }, { deadline });
-    if (res.ok) return ok(provider, ["apiKey"]);
-
-    const message = String(body?.error?.message || "");
-    const reasons = Array.isArray(body?.error?.details)
-      ? body.error.details.map((d) => String(d?.reason || "")).join(" ")
-      : "";
-
-    if (
-      res.status === 400 ||
-      res.status === 401 ||
-      /API_KEY_INVALID|api key not valid|invalid api key/i.test(`${reasons} ${message}`)
-    ) {
-      throw invalid(
-        `Gemini API key is not valid — Google rejected it${
-          message ? `: ${detail(message)}` : ""
-        }. Nothing was saved.`
-      );
-    }
-    throw unverified(provider, message || `HTTP ${res.status}`);
-  }
-
-  // ---- PayMongo: read one payment with the secret key ----
-  async function verifyPaymongo(changed, values, deadline) {
-    const provider = "PayMongo";
-    const notes = [];
-    let verified = false;
-
-    if (changed.includes("secretKey") && values.secretKey) {
-      const auth = `Basic ${Buffer.from(`${values.secretKey}:`).toString("base64")}`;
-      const { res, body } = await request(
-        provider,
-        `${PAYMONGO_API_BASE}/v1/payments?limit=1`,
-        { method: "GET", headers: { Authorization: auth, Accept: "application/json" } },
-        { deadline }
-      );
-      if (res.ok) {
-        verified = true;
-      } else {
-        const message = apiMessage(body);
-        if (
-          res.status === 401 ||
-          /authenticat|unauthor|invalid|expired|revoked/i.test(String(message))
-        ) {
-          throw invalid(
-            `PayMongo secret key is not valid${
-              message ? ` — PayMongo: ${detail(message)}` : ""
-            }. Nothing was saved.`
-          );
-        }
-        throw unverified(provider, message || `HTTP ${res.status}`);
-      }
-    }
-
-    if (changed.includes("webhookSecret") && values.webhookSecret) {
-      notes.push(
-        "The webhook signing secret can only be proven by a signed PayMongo event, so it was saved without a live check."
-      );
-    }
-
-    return ok(provider, verified ? ["secretKey"] : [], notes);
   }
 
   // ---- Google reCAPTCHA: Google cannot judge a key on its own ----
@@ -457,10 +373,6 @@ export function integrationValidationService({
       const deadline = totalBudgetMs > 0 ? now() + totalBudgetMs : 0;
 
       switch (key) {
-        case "gemini":
-          return verifyGemini(names, input, deadline);
-        case "paymongo":
-          return verifyPaymongo(names, input, deadline);
         case "recaptcha":
           return verifyRecaptcha(names, input, deadline);
         case "googleMaps":

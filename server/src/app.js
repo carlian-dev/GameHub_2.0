@@ -1,7 +1,5 @@
 import express from "express";
 import cors from "cors";
-import session from "express-session";
-import MongoStore from "connect-mongo";
 import { validateEnv, env } from "./config/env.js";
 import { notFound } from "./middleware/notFound.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -36,49 +34,17 @@ app.use(
 app.use("/api", rateLimiters.api);
 
 // JSON only: the frontend always sends application/json.
-// Keep the raw bytes too: PayMongo webhook signatures cover the exact body,
-// and re-serializing the parsed object would change whitespace/key order.
-app.use(
-  express.json({
-    verify: (req, res, buf) => {
-      if (buf && buf.length) req.rawBody = Buffer.from(buf);
-    },
-  })
-);
+app.use(express.json());
 // Normalize missing bodies to {} so handlers can destructure safely.
 app.use((req, res, next) => {
   if (req.body == null) req.body = {};
   next();
 });
 
-app.use(
-  session({
-    name: env.AUTH_COOKIE_NAME,
-    secret: env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    rolling: true,
-    store: MongoStore.create({
-      mongoUrl: env.MONGODB_URI,
-      dbName: env.MONGODB_DB,
-      collectionName: "authSessions", // NOT "sessions"
-      ttl: env.SESSION_TTL_SECONDS,
-      autoRemove: "native",
-    }),
-    cookie: {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: env.NODE_ENV === "production",
-      path: "/",
-    },
-  })
-);
-
-// The write budget runs after the session middleware on purpose: signed-in
-// traffic is keyed by user id, so one cafe IP with several cashiers does not
-// share a single bucket. Route-level limiters (auth, reservations) use the
-// same keying.
-app.use("/api", rateLimiters.writes);
+// Authentication is stateless: the JWT is read from an HttpOnly cookie inside
+// the API router, where the user document can verify tokenVersion/status. The
+// write budget is mounted there too so it can key signed-in traffic by user id
+// instead of sharing one bucket per cafe IP.
 
 // Root service probe (divergence #6: service string says Node).
 app.get("/", (req, res) => {
@@ -91,8 +57,8 @@ app.get("/", (req, res) => {
 });
 
 // Mount API routes once the DB is wired (called from server.js after getDb()).
-export function setupRoutes(controllers) {
-  const routes = apiRoutes({ controllers });
+export function setupRoutes(controllers, { authenticate } = {}) {
+  const routes = apiRoutes({ controllers, authenticate });
   app.use("/api", routes);
 
   // notFound and errorHandler must be mounted AFTER /api routes so they

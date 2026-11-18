@@ -1,16 +1,26 @@
-// Unit tests for the super-admin route scope and sign-in.
-// The role is intentionally least-privilege: it may only manage integrations,
-// so operational admin/cashier routes must be rejected before a controller
-// that merely checks for a login sees the request.
+// Unit tests for the super-admin route scope and stateless JWT sign-in.
+// Auth is JWT-based: login returns a signed token (the controller puts it in an
+// HttpOnly cookie) and logout bumps users.tokenVersion instead of destroying a
+// server-side session.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
-import { superAdminScope } from "../../src/middleware/auth.js";
-import { authService } from "../../src/services/auth.service.js";
+
+// env.js reads JWT_SECRET when it is first imported, so pin a test value before
+// the dynamic imports below (dotenv never overrides an existing env value).
+process.env.JWT_SECRET = process.env.JWT_SECRET || "unit-test-jwt-secret";
+
+const { superAdminScope } = await import("../../src/middleware/auth.js");
+const { authService } = await import("../../src/services/auth.service.js");
+const { signAuthToken, verifyAuthToken } = await import(
+  "../../src/utils/authToken.js"
+);
+
+const USER_ID = "64b7f0c2f1a2b3c4d5e6f7a8";
 
 function scope({ role, method = "GET", path }) {
   const req = {
-    session: role ? { user: { id: "u1", role } } : {},
+    authUser: role ? { id: "u1", role } : null,
     method,
     path,
   };
@@ -71,23 +81,8 @@ describe("superAdminScope", () => {
   });
 });
 
-function fakeSession() {
-  return {
-    user: null,
-    destroyed: false,
-    regenerate(cb) {
-      this.user = null;
-      cb(null);
-    },
-    async save() {},
-    destroy(cb) {
-      this.destroyed = true;
-      if (cb) cb(null);
-    },
-  };
-}
-
-function serviceFor(user) {
+/** Fake dependency graph; `calls` captures the audit/version writes. */
+function serviceFor(user, calls = {}) {
   return authService({
     userModel: {
       findByEmail: async () => user,
@@ -96,50 +91,107 @@ function serviceFor(user) {
     },
     settingsModel: {},
     db: {
-      collection: () => ({
-        insertOne: async () => ({ insertedId: "log-1" }),
+      collection: (name) => ({
+        insertOne: async (doc) => {
+          calls.log = { name, doc };
+          return { insertedId: "log-1" };
+        },
+        updateOne: async (filter, update) => {
+          calls.update = { name, filter, update };
+          return { modifiedCount: 1 };
+        },
       }),
     },
   });
 }
 
-describe("super-admin sign-in without an authenticator", () => {
-  it("creates the session directly when no app is paired", async () => {
+describe("stateless JWT sign-in", () => {
+  it("returns a signed token instead of creating a server session", async () => {
     const passwordHash = await bcrypt.hash("Secret123", 4);
     const user = {
-      _id: "super-1",
+      _id: USER_ID,
       email: "super@example.com",
       passwordHash,
       role: "super_admin",
       status: "active",
     };
-    const req = { ip: "127.0.0.1", session: fakeSession() };
 
-    const result = await serviceFor(user).login(
-      { identifier: "super@example.com", password: "Secret123" },
-      req
-    );
+    const result = await serviceFor(user).login({
+      identifier: "super@example.com",
+      password: "Secret123",
+    });
 
-    assert.equal(result.role, "super_admin");
+    assert.equal(result.user.role, "super_admin");
+    assert.equal(result.user.email, "super@example.com");
     assert.equal(result.twoFactorRequired, undefined);
-    assert.equal(req.session.user.id, "super-1");
-    assert.equal(req.session.user.role, "super_admin");
+
+    const claims = verifyAuthToken(result.token);
+    assert.equal(claims.sub, USER_ID);
+    assert.equal(claims.role, "super_admin");
+    assert.equal(claims.ver, 0);
+    assert.ok(claims.exp > claims.iat);
+  });
+
+  it("signs the tokenVersion so a logout can invalidate old tokens", () => {
+    const token = signAuthToken({ _id: USER_ID, role: "cashier", tokenVersion: 4 });
+    assert.equal(verifyAuthToken(token).ver, 4);
+  });
+
+  it("rejects a token signed with a different secret", () => {
+    const token = signAuthToken({ _id: USER_ID, role: "admin" });
+    const claims = verifyAuthToken(token);
+    assert.equal(claims.sub, USER_ID);
+    // Only the signature check proves the token was minted by this backend.
+    assert.throws(() => {
+      const jwt = token.split(".");
+      jwt[2] = "deadbeef";
+      verifyAuthToken(jwt.join("."));
+    });
+  });
+
+  it("logs out by bumping tokenVersion, not by destroying a session", async () => {
+    const calls = {};
+    const result = await serviceFor({}, calls).logout({
+      id: USER_ID,
+      role: "super_admin",
+    });
+
+    assert.deepEqual(result, { ok: true });
+    assert.equal(calls.update.update.$inc.tokenVersion, 1);
+    assert.equal(String(calls.update.filter._id), USER_ID);
+    assert.equal(calls.log.doc.action, "logout");
+  });
+
+  it("treats a guest logout as a no-op", async () => {
+    const calls = {};
+    assert.deepEqual(await serviceFor({}, calls).logout(null), { ok: true });
+    assert.equal(calls.update, undefined);
   });
 
   it("does not invalidate /api/me for a super admin with 2FA off", async () => {
     const user = {
-      _id: "super-1",
+      _id: USER_ID,
       email: "super@example.com",
       role: "super_admin",
       status: "active",
     };
-    const req = { session: fakeSession() };
-    req.session.user = { id: "super-1", role: "super_admin" };
 
-    const me = await serviceFor(user).me("super-1", req);
+    const me = await serviceFor(user).me(USER_ID);
 
     assert.equal(me.role, "super_admin");
     assert.equal(me.twoFactorEnabled, false);
-    assert.equal(req.session.destroyed, false);
+  });
+
+  it("still refuses /api/me for an account that is no longer active", async () => {
+    const user = {
+      _id: USER_ID,
+      role: "cashier",
+      status: "archived",
+    };
+
+    await assert.rejects(() => serviceFor(user).me(USER_ID), {
+      status: 401,
+      message: "not logged in",
+    });
   });
 });

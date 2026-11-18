@@ -8,11 +8,10 @@
 //   reservations public booking create/lookup/cancel (guests only)
 //
 // Counters live in express-rate-limit's in-memory store: one window per
-// process, reset on restart. That is deliberate - every request already reads
-// `authSessions` from Atlas, and a Mongo-backed counter would add a write per
-// request just to protect the API from abuse. A separate store (Redis,
-// rate-limit-mongo) is only needed if the backend ever runs as more than one
-// process.
+// process, reset on restart. That is deliberate - JWT auth needs no per-request
+// session read, and a Mongo-backed counter would add a write per request just
+// to protect the API from abuse. A separate store (Redis, rate-limit-mongo) is
+// only needed if the backend ever runs as more than one process.
 //
 // Disable with RATE_LIMIT_ENABLED=0 (contract tests do this). Limits are
 // configured in server/src/config/env.js and documented in .env.example.
@@ -44,7 +43,7 @@ function positiveInt(value, fallback) {
  */
 function clientKey(name) {
   return (req) => {
-    const user = req.session && req.session.user;
+    const user = req.authUser;
     if (user && user.id) return `${name}:user:${String(user.id)}`;
     return `${name}:ip:${ipKeyGenerator(req.ip)}`;
   };
@@ -122,7 +121,7 @@ export function createRateLimiters(config = resolveRateLimitConfig()) {
       // Signed-in staff use the same guest routes for reference lookups; brute
       // force protection is for anonymous visitors, so let staff through (the
       // api/writes budgets still apply to them).
-      skip: (req) => Boolean(req.session && req.session.user),
+      skip: (req) => Boolean(req.authUser),
     }),
   };
 }

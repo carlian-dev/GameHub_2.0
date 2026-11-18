@@ -45,24 +45,6 @@
           "updatedBy": null
         },
         {
-          "key": "paymongo",
-          "name": "PayMongo",
-          "description": "GCash checkout for closed session bills",
-          "available": true,
-          "enabled": false,
-          "updatedAt": null,
-          "updatedBy": null
-        },
-        {
-          "key": "gemini",
-          "name": "Google Gemini AI",
-          "description": "AI assistance and intelligent automation services",
-          "available": true,
-          "enabled": false,
-          "updatedAt": null,
-          "updatedBy": null
-        },
-        {
           "key": "receiptPdf",
           "name": "PDF Receipt Export",
           "description": "Customer receipt PDF preview and download",
@@ -77,15 +59,6 @@
           "description": "Income report CSV download on the Transactions page",
           "available": true,
           "enabled": true,
-          "updatedAt": null,
-          "updatedBy": null
-        },
-        {
-          "key": "otp",
-          "name": "OTP / email codes",
-          "description": "Email verification codes (planned)",
-          "available": false,
-          "enabled": false,
           "updatedAt": null,
           "updatedBy": null
         }

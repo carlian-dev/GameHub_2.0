@@ -19,6 +19,7 @@ const ACTION_LABELS = {
   paymongo_checkout_expire: "PayMongo link expired",
   reservation_accept: "Reservation accepted",
   reservation_reject: "Reservation rejected",
+  reservation_check_in: "Reservation checked in",
   fnb_order_add: "F&B added",
   fnb_order_update: "F&B quantity changed",
   fnb_order_remove: "F&B removed",
@@ -39,6 +40,7 @@ const ACTION_TONES = {
   paymongo_checkout_expire: "closed",
   reservation_accept: "available",
   reservation_reject: "declined",
+  reservation_check_in: "occupied",
   fnb_order_add: "reserved",
   fnb_order_update: "pending",
   fnb_order_remove: "declined",
@@ -147,7 +149,7 @@ function detailsOf(log) {
     return `${m.productName || "F&B item"} × ${m.qty ?? "?"}`;
   }
 
-  if (action === "reservation_accept" || action === "reservation_reject" || action === "reservation_create") {
+  if (action === "reservation_accept" || action === "reservation_reject" || action === "reservation_create" || action === "reservation_check_in") {
     return log.target ? `Ref ${log.target}` : "—";
   }
 

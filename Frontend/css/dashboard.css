@@ -914,6 +914,8 @@ a.dash-stat:hover {
 .res-card.status-reserved { border-left: 3px solid var(--d-gold); }
 .res-card.status-accepted { border-left: 3px solid #16A34A; }
 .res-card.status-rejected { border-left: 3px solid var(--d-red); }
+.res-card.status-checked-in { border-left: 3px solid var(--d-gold-ink); }
+.res-card.status-completed { border-left: 3px solid var(--d-border); }
 .res-card.is-busy { opacity: 0.6; pointer-events: none; }
 .res-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .res-card-ref {
@@ -965,6 +967,18 @@ a.dash-stat:hover {
 .res-btn-accept:hover { filter: brightness(1.12); }
 .res-btn-reject { background: transparent; border-color: var(--d-border); color: var(--d-muted); }
 .res-btn-reject:hover { background: rgba(220, 38, 38, 0.06); border-color: var(--d-red); color: var(--d-red); }
+.res-btn-start { background: var(--d-gold); color: #231a02; }
+.res-btn-start:hover { filter: brightness(1.06); }
+.res-btn-view {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border-color: var(--d-border);
+  color: var(--d-green-soft);
+  text-decoration: none;
+}
+.res-btn-view:hover { border-color: var(--d-green-soft); background: var(--d-tint-green, rgba(20, 90, 66, 0.06)); }
 .res-card-decision { color: var(--d-muted); font-size: 12px; font-weight: 600; }
 .res-skel { gap: 12px; pointer-events: none; border-left: 3px solid var(--d-border); }
 .res-skel-line { height: 12px; border-radius: 6px; }

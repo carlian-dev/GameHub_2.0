@@ -491,99 +491,8 @@ describe("export integrations", () => {
   });
 });
 
-describe("gemini integration settings", () => {
-  const ENV_KEYS = ["GEMINI_API_KEY", "GEMINI_API_KEY_OVERRIDE"];
-  const saved = {};
-
-  beforeEach(() => {
-    for (const k of ENV_KEYS) {
-      saved[k] = process.env[k];
-      delete process.env[k];
-    }
-  });
-
-  afterEach(() => {
-    for (const k of ENV_KEYS) {
-      if (saved[k] === undefined) delete process.env[k];
-      else process.env[k] = saved[k];
-    }
-  });
-
-  it("validates Gemini API key format (rejects spaces or short keys)", () => {
-    const svc = settingsService({
-      settingsModel: { findMany: async () => ({}) },
-      db: null,
-      mongoClient: null,
-    });
-
-    assert.throws(
-      () => svc.validateCredential("gemini", "apiKey", "too-short"),
-      (err) => err.status === 422 && /at least 20 characters/i.test(err.message)
-    );
-
-    assert.throws(
-      () => svc.validateCredential("gemini", "apiKey", "key with space in the middle 1234567"),
-      (err) => err.status === 422 && /whitespace/i.test(err.message)
-    );
-
-    // Empty value is allowed (for clearing)
-    assert.doesNotThrow(() => svc.validateCredential("gemini", "apiKey", ""));
-
-    // Valid format key is allowed
-    assert.doesNotThrow(() =>
-      svc.validateCredential("gemini", "apiKey", "AIzaSyValidGeminiKey1234567890abcdef")
-    );
-  });
-
-  it("exposes gemini in superAdminIntegrations and uses env fallback", async () => {
-    process.env.GEMINI_API_KEY = "AIzaSyBaseKey12345678901234567890";
-    const svc = settingsService({
-      settingsModel: { findMany: async () => ({}) },
-      db: null,
-      mongoClient: null,
-    });
-
-    const data = await svc.superAdminIntegrations();
-    const gemini = data.integrations.find((i) => i.key === "gemini");
-    assert.ok(gemini, "gemini must be present in registry");
-    assert.strictEqual(gemini.name, "Google Gemini AI");
-    assert.strictEqual(gemini.enabled, true);
-
-    const apiKeyCred = gemini.credentials.find((c) => c.name === "apiKey");
-    assert.ok(apiKeyCred);
-    assert.strictEqual(apiKeyCred.configured, true);
-    assert.strictEqual(apiKeyCred.source, "env");
-    assert.ok(apiKeyCred.masked.endsWith("7890"));
-  });
-
-  it("rejects super admin enabling gemini when apiKey is missing", async () => {
-    const mockDb = {
-      collection: () => ({
-        findOne: async () => null,
-        insertOne: async () => {},
-      }),
-    };
-    const svc = settingsService({
-      settingsModel: { findMany: async () => ({}) },
-      db: mockDb,
-      mongoClient: null,
-    });
-
-    await assert.rejects(
-      () => svc.update("gemini", { enabled: true }, { role: "super_admin" }),
-      (err) =>
-        err.status === 422 &&
-        /cannot enable this integration without its required credential/i.test(
-          err.message
-        )
-    );
-  });
-});
-
 describe("provider validation of new credentials", () => {
   const ENV_KEYS = [
-    "GEMINI_API_KEY",
-    "GEMINI_API_KEY_OVERRIDE",
     "GOOGLE_CALENDAR_ID",
     "GOOGLE_CALENDAR_ID_OVERRIDE",
     "GOOGLE_CALENDAR_CLIENT_EMAIL",
@@ -653,11 +562,11 @@ describe("provider validation of new credentials", () => {
   }
 
   it("refuses to save a credential its provider rejects", async () => {
-    const { db, state } = trackingDb({ key: "gemini", enabled: false, credentials: {} });
+    const { db, state } = trackingDb({ key: "googleMaps", enabled: false, credentials: {} });
     const svc = serviceWith(db, {
       async verify() {
         const err = new Error(
-          "Gemini API key is not valid — Google rejected it. Nothing was saved."
+          "Google Maps API key is not valid — Google rejected it. Nothing was saved."
         );
         err.status = 422;
         throw err;
@@ -667,7 +576,7 @@ describe("provider validation of new credentials", () => {
     await assert.rejects(
       () =>
         svc.update(
-          "gemini",
+          "googleMaps",
           { credentials: { apiKey: "AIzaSyBadKey12345678901234567890" }, code: "123456" },
           { role: "super_admin", id: "super-1" }
         ),
@@ -714,14 +623,14 @@ describe("provider validation of new credentials", () => {
 
   it("returns which provider accepted the value", async () => {
     const { db } = trackingDb({
-      key: "gemini",
+      key: "googleMaps",
       enabled: true,
       credentials: { apiKey: { value: "old-key-12345678901234567890", last4: "7890" } },
     });
     const svc = serviceWith(db, {
       async verify() {
         return {
-          provider: "Google Gemini",
+          provider: "Google Maps",
           credentials: ["apiKey"],
           notes: ["Saved after a live check."],
         };
@@ -729,13 +638,13 @@ describe("provider validation of new credentials", () => {
     });
 
     const shaped = await svc.update(
-      "gemini",
+      "googleMaps",
       { credentials: { apiKey: "new-key-123456789012345678901" }, code: "123456" },
       { role: "super_admin", id: "super-1" }
     );
 
     assert.deepStrictEqual(shaped.verification, {
-      provider: "Google Gemini",
+      provider: "Google Maps",
       credentials: ["apiKey"],
       notes: ["Saved after a live check."],
     });
@@ -743,7 +652,7 @@ describe("provider validation of new credentials", () => {
 
   it("does not call the provider when a credential is cleared", async () => {
     const { db } = trackingDb({
-      key: "gemini",
+      key: "googleMaps",
       enabled: true,
       credentials: { apiKey: { value: "old-key-12345678901234567890", last4: "7890" } },
     });
@@ -756,7 +665,7 @@ describe("provider validation of new credentials", () => {
     });
 
     await svc.update(
-      "gemini",
+      "googleMaps",
       { credentials: { apiKey: "" }, code: "123456" },
       { role: "super_admin", id: "super-1" }
     );
@@ -780,8 +689,6 @@ describe("provider validation of new credentials", () => {
 
 describe("reset integrations to .env defaults", () => {
   const ENV_KEYS = [
-    "GEMINI_API_KEY",
-    "GEMINI_API_KEY_OVERRIDE",
     "RECAPTCHA_SITE_KEY",
     "RECAPTCHA_SITE_KEY_OVERRIDE",
     "RECAPTCHA_SECRET_KEY",
@@ -876,14 +783,22 @@ describe("reset integrations to .env defaults", () => {
   };
 
   it("clears the override and saved value so the original .env key applies", async () => {
-    process.env.GEMINI_API_KEY = "AIzaSyOriginalDefaultKey1234567890ab";
-    process.env.GEMINI_API_KEY_OVERRIDE = "AIzaSyReplacedBySuperAdmin1234561111";
+    process.env.RECAPTCHA_SITE_KEY = "base-site-123456789012345678901234";
+    process.env.RECAPTCHA_SECRET_KEY = "base-secret-123456789012345678901234";
+    process.env.RECAPTCHA_SITE_KEY_OVERRIDE = "override-site-123456789012345678901111";
     const { svc, state, persisted } = service([
       {
-        key: "gemini",
+        key: "recaptcha",
         enabled: true,
         credentials: {
-          apiKey: { value: "AIzaSyReplacedBySuperAdmin1234561111", last4: "1111" },
+          siteKey: {
+            value: "override-site-123456789012345678901111",
+            last4: "1111",
+          },
+          secretKey: {
+            value: "saved-secret-123456789012345678901234",
+            last4: "1234",
+          },
         },
       },
     ]);
@@ -892,29 +807,33 @@ describe("reset integrations to .env defaults", () => {
 
     assert.ok(
       persisted.some(
-        ([key, value]) => key === "GEMINI_API_KEY_OVERRIDE" && value === ""
+        ([key, value]) => key === "RECAPTCHA_SITE_KEY_OVERRIDE" && value === ""
       ),
-      "the Gemini override must be cleared"
+      "the reCAPTCHA override must be cleared"
     );
     assert.strictEqual(state.docs[0].credentials, undefined);
     assert.strictEqual(state.docs[0].enabled, true);
-    const gemini = result.integrations.find((i) => i.key === "gemini");
-    assert.strictEqual(gemini.enabled, true);
-    assert.strictEqual(gemini.credentials[0].source, "env");
-    assert.ok(gemini.credentials[0].masked.endsWith("90ab"));
-    assert.ok(result.clearedOverrides.includes("GEMINI_API_KEY_OVERRIDE"));
+    const recaptcha = result.integrations.find((i) => i.key === "recaptcha");
+    const site = recaptcha.credentials.find((c) => c.name === "siteKey");
+    assert.strictEqual(recaptcha.enabled, true);
+    assert.strictEqual(site.source, "env");
+    assert.ok(site.masked.endsWith("1234"));
+    assert.ok(result.clearedOverrides.includes("RECAPTCHA_SITE_KEY_OVERRIDE"));
     assert.strictEqual(state.logs[0].action, "integration_reset_default");
     assert.strictEqual(state.logs[0].meta.role, "super_admin");
   });
 
   it("turns an integration off when no original .env key exists", async () => {
-    process.env.GEMINI_API_KEY_OVERRIDE = "AIzaSyOnlyASavedOverride1234567890";
+    process.env.RECAPTCHA_SITE_KEY_OVERRIDE = "override-site-123456789012345678901111";
     const { svc, state } = service([
       {
-        key: "gemini",
+        key: "recaptcha",
         enabled: true,
         credentials: {
-          apiKey: { value: "AIzaSyOnlyASavedOverride1234567890", last4: "7890" },
+          siteKey: {
+            value: "override-site-123456789012345678901111",
+            last4: "1111",
+          },
         },
       },
     ]);
@@ -922,10 +841,11 @@ describe("reset integrations to .env defaults", () => {
     const result = await svc.resetToDefaults(actor, "123456");
 
     assert.strictEqual(state.docs[0].enabled, false);
-    const gemini = result.integrations.find((i) => i.key === "gemini");
-    assert.strictEqual(gemini.enabled, false);
-    assert.strictEqual(gemini.credentials[0].configured, false);
-    assert.strictEqual(gemini.credentials[0].source, "");
+    const recaptcha = result.integrations.find((i) => i.key === "recaptcha");
+    assert.strictEqual(recaptcha.enabled, false);
+    const site = recaptcha.credentials.find((c) => c.name === "siteKey");
+    assert.strictEqual(site.configured, false);
+    assert.strictEqual(site.source, "");
   });
 
   it("rejects a non-super-admin", async () => {
@@ -938,7 +858,7 @@ describe("reset integrations to .env defaults", () => {
 
   it("requires a current authenticator code before clearing anything", async () => {
     const { svc, state } = service([
-      { key: "gemini", enabled: true, credentials: {} },
+      { key: "recaptcha", enabled: true, credentials: {} },
     ]);
     await assert.rejects(
       () => svc.resetToDefaults(actor, ""),

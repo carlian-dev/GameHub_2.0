@@ -5,6 +5,7 @@
 // which caused issues with Express 5).
 import { Router } from "express";
 import { superAdminScope } from "../middleware/auth.js";
+import { rateLimiters } from "../middleware/rateLimit.js";
 import { registerPublicRoutes } from "./public.routes.js";
 import { registerAuthRoutes } from "./auth.routes.js";
 import { registerAdminRoutes } from "./admin.routes.js";
@@ -15,12 +16,20 @@ import { registerTransactionRoutes } from "./transaction.routes.js";
 import { registerReportRoutes } from "./report.routes.js";
 import { registerProductRoutes } from "./products.routes.js";
 import { registerOrderRoutes } from "./orders.routes.js";
-import { registerPaymongoRoutes } from "./paymongo.routes.js";
 
-export default function apiRoutes({ controllers }) {
+export default function apiRoutes({ controllers, authenticate }) {
   const router = Router();
 
-  // Least privilege for super admins: their session only unlocks /me, /logout,
+  // Resolve the JWT cookie into req.authUser before any limiter or route sees
+  // it. Verification also re-checks the user's status and tokenVersion, so a
+  // logout or archived account cannot keep using an old token.
+  router.use(authenticate);
+
+  // Signed-in writes are keyed by user id so one cafe IP with several cashiers
+  // does not share a bucket; anonymous traffic falls back to IP keying.
+  router.use(rateLimiters.writes);
+
+  // Least privilege for super admins: their token only unlocks /me, /logout,
   // and the super-admin integration routes. Public routes ignore the session,
   // so landing-page config keeps working. Operational /admin and /cashier
   // endpoints (sessions, billing, reservations, reports) are off limits even
@@ -72,9 +81,6 @@ export default function apiRoutes({ controllers }) {
 
   // Transaction routes (auth required).
   registerTransactionRoutes(router, { transactionController: controllers.transaction });
-
-  // PayMongo hosted checkout + signed webhook.
-  registerPaymongoRoutes(router, { transactionController: controllers.transaction });
 
   // Report routes (admin only).
   registerReportRoutes(router, { reportController: controllers.report });

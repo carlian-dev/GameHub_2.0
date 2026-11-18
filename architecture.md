@@ -27,7 +27,7 @@ Onboarding document for the team. For setup and daily commands, see
 
 * The Frontend is static files (no framework, no build step) served by any
   static server. It never contacts MongoDB or Google directly for data —
-  every protected call goes to the Node API with the session cookie.
+  every protected call goes to the Node API with the JWT auth cookie.
 * The Backend is a single-entry Node/Express application (`server/src/server.js`):
   every request is routed from `server/src/routes/index.js` to route groups,
   then to controllers, services, and models.
@@ -82,14 +82,14 @@ per-request queries.
 ### 2.1 Admin settings and integration endpoints
 
 - `GET /api/config` is public and exposes feature state only:
-  `{"ok":true,"integrations":{"googleAuth":{"enabled":true,"clientId":"..."},"googleMaps":{"enabled":false,"apiKey":""}}}`.
-  Both settings documents are read in one query; disabled integrations expose
+  `{"ok":true,"integrations":{"googleAuth":{"enabled":true,"clientId":"..."},"googleMaps":{"enabled":false,"apiKey":""},"recaptcha":{"enabled":false,"siteKey":""}},"exports":{"receiptPdf":true,"csvExport":true}}`.
+  The settings documents are read in one query; disabled integrations expose
   empty credential strings, never stored values. A settings read failure fails
-  closed for both integrations (HTTP 200 with both disabled). Each credential
+  closed for every integration (HTTP 200 with all disabled). Each credential
   resolves in this order: matching `*_OVERRIDE` env field (written by the
   super-admin Settings page), the normal env key, then the settings document. This means a
   seeded settings document no longer hides `RECAPTCHA_*`, `GOOGLE_CLIENT_ID`,
-  `GEMINI_API_KEY`, or the Calendar defaults.
+  or the Calendar defaults.
 - `GET /api/admin/settings/integrations` requires an admin session and returns
   read-only cards: `key`, `name`, `description`, `available`, `enabled`,
   `updatedAt`, `updatedBy`. Credentials are never included, so this role can
@@ -112,21 +112,19 @@ per-request queries.
   values to the matching `*_OVERRIDE` keys in `server/.env`.
 - A credential that is added or replaced is first proved against the provider
   that issues it (`server/src/services/integrationValidation.service.js`, wired
-  into `settings.update()`): Gemini's model list, `GET /v1/payments` for
-  PayMongo, Maps Geocoding, the Google OAuth authorize endpoint for a client ID,
-  and a service-account JWT exchange plus one `events.list` read for Calendar.
-  A rejected value answers HTTP 422 with the provider's own reason and is never
-  written — no settings document change and no `.env` change — so the card can
-  keep the editor open with the error under the field. An unreachable provider
-  answers 502 instead of storing an unproven key. Google has no server-side way
-  to judge a reCAPTCHA site key or secret (`siteverify` blames the missing
-  visitor token, not the secret), so both reCAPTCHA values — like the PayMongo
-  webhook signing secret and a Calendar triple that is still partial — are
-  stored with an explanatory `verification.notes` entry; clearing a value needs
-  no check. Provider text is scrubbed of token-shaped strings before it is
-  echoed, and the update response carries
-  `verification: {provider, credentials, notes}` (never a secret) so the UI can
-  confirm "verified with …".
+  into `settings.update()`): Maps Geocoding, the Google OAuth authorize endpoint
+  for a client ID, and a service-account JWT exchange plus one `events.list`
+  read for Calendar. A rejected value answers HTTP 422 with the provider's own
+  reason and is never written — no settings document change and no `.env`
+  change — so the card can keep the editor open with the error under the field.
+  An unreachable provider answers 502 instead of storing an unproven key. Google
+  has no server-side way to judge a reCAPTCHA site key or secret (`siteverify`
+  blames the missing visitor token, not the secret), so both reCAPTCHA values —
+  like a Calendar triple that is still partial — are stored with an explanatory
+  `verification.notes` entry; clearing a value needs no check. Provider text is
+  scrubbed of token-shaped strings before it is echoed, and the update response
+  carries `verification: {provider, credentials, notes}` (never a secret) so the
+  UI can confirm "verified with …".
 - The `settings` collection owns activation state (`unique key`) and stores the
   encrypted copy of super-admin credentials. Credential resolution additionally
   consults the `*_OVERRIDE` env fields and the normal env defaults as described
@@ -175,10 +173,13 @@ administrator, both created directly in the database):
   reservation list for this role, so endpoints that only check for a login
   cannot be reached either. The service layer enforces the split even if a
   route guard is bypassed.
-* Sessions are server-side `express-session` stored in MongoDB
-  `authSessions` collection (not `sessions`, to avoid collision with
-  billing sessions). Cookie `gh_session` is `httpOnly`, `sameSite=lax`,
-  `path=/`, `secure` in production, rolling 12h TTL.
+* Authentication is stateless JWT (HS256 signed with `JWT_SECRET`). Login and
+  Google sign-in return the token and set it as the `AUTH_COOKIE_NAME`
+  (`gh_token`) HttpOnly cookie — `sameSite=lax`, `path=/`, `secure` in
+  production, `JWT_TTL_SECONDS` (12h default). `Authorization: Bearer` is
+  accepted as well. Nothing is stored server-side: logout clears the cookie and
+  bumps `users.tokenVersion`, and the middleware rejects any token whose `ver`
+  claim is older.
 * `GET /api/me` re-reads the account from Atlas on every guarded page load,
   so an archive or role change takes effect immediately.
 
@@ -192,9 +193,8 @@ administrator, both created directly in the database):
 | `sessions` | tableId, tableName, customerName, cashierId, cashierName, startTime, endTime, plannedMinutes, status, pricePerHour, rateType, closedAt, createdAt, updatedAt | unique partial `tableId` where `status="active"` |
 | `transactions` | ref (unique GH-YYYYMMDD-XXXX), sessionId (unique), tableId, tableName, customerName, cashierId, cashierName, minutes, billedHours, pricePerHour, rateType, total, method, received, change, paidAt, createdAt | unique `ref`, unique `sessionId`, compound `{paidAt, method}` |
 | `activityLogs` | actorId, action, target, at, meta | `{at}` |
-| `settings` | key (`googleAuth`, `googleMaps`, `recaptcha`, `otp`), enabled, credentials, updatedAt, updatedBy | unique `key` |
+| `settings` | key (`googleAuth`, `googleMaps`, `googleCalendar`, `recaptcha`, `receiptPdf`, `csvExport`), enabled, credentials, updatedAt, updatedBy | unique `key` |
 | `healthcheck` | heartbeat document | — |
-| `authSessions` | session store (express-session) | TTL native |
 
 Index strategy: uniqueness where identity demands it, and compound filters
 matching the list endpoints (`{role,status}`, `{status,archived}`). At current
@@ -209,12 +209,12 @@ Frontend/
   login/index.html         Redirect so bare /login resolves
   src/function/auth/       Login (single step + Google), cashier signup form
   src/function/admin/      Admin dashboard, staff, credentials, operations
-  src/function/super-admin/ Integration on/off control (no credentials)
+  src/function/super-admin/ Integration activation and credentials
   src/function/cashiers/   Cashier dashboard
   src/function/tables/     Tables, rates page, sessions view
   src/function/shared/     Landing status logic
   js/config.js             Single Backend base URL
-  js/api.js                One fetch wrapper per endpoint (session cookie always sent)
+  js/api.js                One fetch wrapper per endpoint (auth cookie always sent)
   js/dash.js               Shell behavior, admin settings gear menu, shared dialogs
   css/styles.css           Landing + auth theme
   css/dashboard.css        Staff shell theme (tokens, sidebar, cards, tables, badges, dialogs)
@@ -237,8 +237,9 @@ Frontend/
 
 1. Secrets live only in `server/.env` (ignored by git). The Frontend must
    never see connection strings, mail passwords, or hashes.
-2. Every state-changing and every listing endpoint re-checks the session
-   server-side; role is taken from the session, never from request data.
+2. Every state-changing and every listing endpoint re-checks the JWT and the
+   live user document server-side; role comes from the verified claims plus
+   that document, never from request data.
    Integration credentials are admin-only and activation is super-admin-only;
    neither role can exercise the other's capability.
 3. Passwords are bcrypt-hashed and invite tokens are SHA-256-hashed; plain
@@ -250,7 +251,7 @@ Frontend/
    and sign-out is logged too. Admins read the trail at
    `GET /api/admin/activity-logs` (page `Frontend/src/function/admin/activity.html`).
 5. CORS allows exactly one configured Frontend origin with credentials;
-   Frontend and Backend share the `localhost` host so session cookies apply.
+   Frontend and Backend share the `localhost` host so the JWT auth cookie applies.
 6. Validation is allow-list style per endpoint (roles, statuses, name and
    username shapes, positive prices); unknown fields are ignored, never stored.
 7. Rate limiting protects every `/api` request (`express-rate-limit`, in-memory

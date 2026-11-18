@@ -38,5 +38,19 @@ export function reservationModel({ db }) {
       if (!oid) return null;
       return await coll.updateOne({ _id: oid }, { $set: set });
     },
+    /**
+     * Conditional transition (e.g. accepted -> checked-in). Returns true only
+     * for the request that actually moved the document, so two cashiers
+     * clicking "Start session" can never open two sessions.
+     */
+    async claim(id, fromStatus, set) {
+      const oid = toObjectId(id);
+      if (!oid) return false;
+      const res = await coll.updateOne(
+        { _id: oid, status: fromStatus },
+        { $set: set }
+      );
+      return res.modifiedCount === 1;
+    },
   };
 }

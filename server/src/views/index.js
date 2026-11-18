@@ -79,6 +79,7 @@ export function meView({
   role,
   status,
   displayName,
+  avatarUrl,
   authProvider,
   createdAt,
   googleLinked,
@@ -91,6 +92,7 @@ export function meView({
     role,
     status,
     displayName: displayName ?? "",
+    avatarUrl: avatarUrl ?? null,
     authProvider,
     createdAt,
     googleLinked,
@@ -98,10 +100,11 @@ export function meView({
   };
 }
 
-export function profileView({ displayName }) {
+export function profileView({ displayName, avatarUrl }) {
   return {
     ok: true,
     displayName: displayName ?? "",
+    avatarUrl: avatarUrl ?? null,
   };
 }
 

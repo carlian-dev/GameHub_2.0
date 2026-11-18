@@ -185,10 +185,14 @@ export async function wireApp() {
   services.auth = authService({
     userModel: models.user,
     settingsModel: models.settings,
+    invitationModel: models.invitation,
     db,
     googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
     googleAuthConfigProvider: () => settingsSvc.googleAuthConfig(),
     recaptchaService: recaptcha,
+    mailer,
+    frontendUrl: env.FRONTEND_URL,
+    mailerDryRun: env.MAIL_DRY_RUN,
   });
 
   // Calendar sync is DB-backed (settings.googleCalendar), with env fallback

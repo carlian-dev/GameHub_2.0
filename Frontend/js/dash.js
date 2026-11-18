@@ -734,3 +734,225 @@ function dashEditCashier({ message = "", displayName = "", schedule = "", title 
     dashModalOpen(m, nameInput);
   });
 }
+
+// ---- Profile avatar & edit modal (all roles) ----
+function dashRenderAvatar(containerOrId, { name = "", avatarUrl = null, fallbackLetter = "" } = {}) {
+  const el = typeof containerOrId === "string" ? document.getElementById(containerOrId) : containerOrId;
+  if (!el) return;
+  const initial = fallbackLetter || (String(name || "").trim().charAt(0).toUpperCase()) || "U";
+  if (avatarUrl) {
+    el.innerHTML = "";
+    const img = document.createElement("img");
+    img.src = avatarUrl;
+    img.alt = name ? `${name} profile photo` : "Profile photo";
+    img.className = "avatar-img";
+    img.onerror = () => {
+      el.textContent = initial;
+    };
+    el.appendChild(img);
+  } else {
+    el.textContent = initial;
+  }
+}
+
+let dashProfileModalEl = null;
+function dashProfileModal() {
+  if (dashProfileModalEl) return dashProfileModalEl;
+  dashProfileModalEl = document.createElement("div");
+  dashProfileModalEl.className = "dash-modal";
+  dashProfileModalEl.setAttribute("role", "dialog");
+  dashProfileModalEl.setAttribute("aria-modal", "true");
+  dashProfileModalEl.setAttribute("aria-labelledby", "dashProfileModalTitle");
+  dashProfileModalEl.innerHTML =
+    '<div class="dash-modal-box sheet edit-profile-box" tabindex="-1" style="max-width:480px; text-align:left;">' +
+      '<h3 class="dash-modal-title" id="dashProfileModalTitle">Edit Profile</h3>' +
+      '<p class="dash-modal-msg" style="margin-bottom:16px;">You can change your nickname and profile picture only. Other account details are managed by the system.</p>' +
+      '<div class="edit-avatar-group">' +
+        '<span class="avatar-circle edit-avatar-preview" id="dashEditAvatarPreview"></span>' +
+        '<div class="edit-avatar-actions">' +
+          '<label class="btn btn-ghost btn-sm" style="cursor:pointer;" for="dashAvatarFileInput">' +
+            'Change photo' +
+            '<input type="file" id="dashAvatarFileInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden />' +
+          '</label>' +
+          '<button type="button" class="btn btn-ghost btn-sm danger" id="dashRemoveAvatarBtn">Remove photo</button>' +
+          '<span class="edit-avatar-hint">PNG, JPG or WebP (max 5MB, auto-resized)</span>' +
+        '</div>' +
+      '</div>' +
+      '<label class="field" for="dashEditDisplayName">' +
+        '<span class="field-label">Nickname / Profile name</span>' +
+        '<input id="dashEditDisplayName" type="text" minlength="2" maxlength="60" required autocomplete="nickname" placeholder="e.g. Juan Dela Cruz" />' +
+        '<span class="field-hint" id="dashEditDisplayNameHint">2–60 characters. Shown across the dashboard, activity logs and receipts.</span>' +
+      '</label>' +
+      '<p class="dash-msg" id="dashEditProfileMsg" hidden style="margin-top:12px;"></p>' +
+      '<div class="modal-actions" style="margin-top:20px; justify-content:flex-end;">' +
+        '<button type="button" class="btn btn-ghost dash-profile-cancel">Cancel</button>' +
+        '<button type="button" class="btn btn-solid dash-profile-save">Save changes</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(dashProfileModalEl);
+  return dashProfileModalEl;
+}
+
+function dashEditProfile({ user = {}, onSave } = {}) {
+  return new Promise((resolve) => {
+    const m = dashProfileModal();
+    const nameInput = m.querySelector("#dashEditDisplayName");
+    const nameHint = m.querySelector("#dashEditDisplayNameHint");
+    const fileInput = m.querySelector("#dashAvatarFileInput");
+    const removeBtn = m.querySelector("#dashRemoveAvatarBtn");
+    const previewEl = m.querySelector("#dashEditAvatarPreview");
+    const msgEl = m.querySelector("#dashEditProfileMsg");
+    const saveBtn = m.querySelector(".dash-profile-save");
+    const cancelBtn = m.querySelector(".dash-profile-cancel");
+
+    const currentDisplayName = user.displayName || user.email || user.username || "";
+    let pendingAvatar = user.avatarUrl || null;
+    const initialLetter = (String(currentDisplayName || "").trim().charAt(0).toUpperCase()) || "U";
+
+    nameInput.value = user.displayName || "";
+    nameInput.classList.remove("invalid");
+    nameHint.classList.remove("err");
+    nameHint.textContent = "2–60 characters. Shown across the dashboard, activity logs and receipts.";
+    msgEl.hidden = true;
+    msgEl.textContent = "";
+
+    function updatePreview() {
+      dashRenderAvatar(previewEl, {
+        name: nameInput.value || currentDisplayName,
+        avatarUrl: pendingAvatar,
+        fallbackLetter: initialLetter,
+      });
+      removeBtn.hidden = !pendingAvatar;
+    }
+
+    updatePreview();
+
+    function setMsg(text, kind = "") {
+      if (!text) {
+        msgEl.hidden = true;
+        msgEl.textContent = "";
+        msgEl.className = "dash-msg";
+      } else {
+        msgEl.hidden = false;
+        msgEl.textContent = text;
+        msgEl.className = `dash-msg${kind ? ` ${kind}` : ""}`;
+      }
+    }
+
+    const onFileChange = (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        setMsg("Please choose an image file (PNG, JPG, WebP).", "err");
+        fileInput.value = "";
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setMsg("Image is too large (max 5MB).", "err");
+        fileInput.value = "";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const maxDim = 256;
+          const w = img.width;
+          const h = img.height;
+          const size = Math.min(w, h);
+          const sx = (w - size) / 2;
+          const sy = (h - size) / 2;
+          canvas.width = maxDim;
+          canvas.height = maxDim;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, sx, sy, size, size, 0, 0, maxDim, maxDim);
+          pendingAvatar = canvas.toDataURL("image/jpeg", 0.88);
+          updatePreview();
+          setMsg("", "");
+          fileInput.value = "";
+        };
+        img.onerror = () => {
+          setMsg("Could not load image.", "err");
+          fileInput.value = "";
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    fileInput.onchange = onFileChange;
+
+    removeBtn.onclick = () => {
+      pendingAvatar = null;
+      updatePreview();
+      setMsg("", "");
+    };
+
+    nameInput.oninput = () => {
+      nameInput.classList.remove("invalid");
+      nameHint.classList.remove("err");
+      nameHint.textContent = "2–60 characters. Shown across the dashboard, activity logs and receipts.";
+      if (!pendingAvatar) {
+        updatePreview();
+      }
+    };
+
+    const cleanup = () => {
+      fileInput.onchange = null;
+      removeBtn.onclick = null;
+      nameInput.oninput = null;
+      saveBtn.onclick = null;
+      cancelBtn.onclick = null;
+      document.removeEventListener("keydown", onKey);
+      m.removeEventListener("click", onBackdrop);
+      dashModalClose(m);
+    };
+
+    const done = (val) => {
+      cleanup();
+      resolve(val);
+    };
+
+    const onKey = (e) => {
+      if (e.key === "Escape") done(null);
+    };
+    const onBackdrop = (e) => {
+      if (e.target === m) done(null);
+    };
+
+    cancelBtn.onclick = () => done(null);
+    m.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
+
+    saveBtn.onclick = async () => {
+      const trimmed = nameInput.value.trim();
+      if (trimmed.length < 2 || trimmed.length > 60) {
+        nameInput.classList.add("invalid");
+        nameHint.classList.add("err");
+        nameHint.textContent = "Please use 2 to 60 characters for your nickname.";
+        nameInput.focus();
+        return;
+      }
+
+      saveBtn.disabled = true;
+      saveBtn.classList.add("busy");
+      setMsg("Saving profile…", "loading");
+
+      try {
+        if (onSave) {
+          await onSave({ displayName: trimmed, avatarUrl: pendingAvatar });
+        }
+        done({ displayName: trimmed, avatarUrl: pendingAvatar });
+      } catch (err) {
+        setMsg(err.message || "Failed to update profile", "err");
+        saveBtn.disabled = false;
+        saveBtn.classList.remove("busy");
+      }
+    };
+
+    saveBtn.disabled = false;
+    saveBtn.classList.remove("busy");
+    dashModalOpen(m, nameInput);
+  });
+}

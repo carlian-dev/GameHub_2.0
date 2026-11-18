@@ -30,13 +30,16 @@ export function reservationModel({ db }) {
       return await coll.find(filter).toArray();
     },
     async create(doc) {
-      const res = await coll.insertOne(doc);
+      const res = await coll.insertOne({ version: 1, ...doc });
       return res.insertedId;
     },
     async update(id, set) {
       const oid = toObjectId(id);
       if (!oid) return null;
-      return await coll.updateOne({ _id: oid }, { $set: set });
+      return await coll.updateOne(
+        { _id: oid },
+        { $set: set, $inc: { version: 1 } }
+      );
     },
     /**
      * Conditional transition (e.g. accepted -> checked-in). Returns true only
@@ -48,7 +51,7 @@ export function reservationModel({ db }) {
       if (!oid) return false;
       const res = await coll.updateOne(
         { _id: oid, status: fromStatus },
-        { $set: set }
+        { $set: set, $inc: { version: 1 } }
       );
       return res.modifiedCount === 1;
     },

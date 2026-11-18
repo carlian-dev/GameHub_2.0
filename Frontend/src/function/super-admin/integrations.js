@@ -745,8 +745,7 @@
       }
       const displayName = me.displayName || me.email || me.username || "Super admin";
       document.getElementById("who").textContent = displayName;
-      document.getElementById("avatar").textContent =
-        String(displayName).trim().charAt(0).toUpperCase() || "S";
+      dashRenderAvatar("avatar", { name: displayName, avatarUrl: me.avatarUrl, fallbackLetter: "S" });
       setMsg("");
       await load();
       await loadSecurity();

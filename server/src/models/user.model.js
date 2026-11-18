@@ -17,6 +17,9 @@ export function userModel({ db }) {
         role: "cashier",
       });
     },
+    async findByResetTokenHash(tokenHash) {
+      return await coll.findOne({ "resetPassword.tokenHash": tokenHash });
+    },
     async findById(id) {
       const oid = toObjectId(id);
       if (!oid) return null;

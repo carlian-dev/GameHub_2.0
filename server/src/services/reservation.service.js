@@ -35,6 +35,7 @@ function shape(doc) {
       doc.sessionEndsAt instanceof Date ? doc.sessionEndsAt.toISOString() : null,
     completedAt:
       doc.completedAt instanceof Date ? doc.completedAt.toISOString() : null,
+    version: Number(doc.version || 1),
   };
 }
 

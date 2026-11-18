@@ -5,7 +5,6 @@
 // from that document — never from request data.
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
-import { invitationModel } from "../models/invitation.model.js";
 import { toObjectId } from "../models/bson.js";
 import { isValidGoogleClientId } from "../utils/google.js";
 import { signAuthToken } from "../utils/authToken.js";
@@ -13,10 +12,14 @@ import { signAuthToken } from "../utils/authToken.js";
 export function authService({
   userModel,
   settingsModel,
+  invitationModel,
   db,
   googleClientIdFromEnv = "",
   googleAuthConfigProvider = null,
   recaptchaService = null,
+  mailer = null,
+  frontendUrl = "",
+  mailerDryRun = false,
 }) {
   const usersColl = db.collection("users");
   const activityLogsColl = db.collection("activityLogs");
@@ -167,6 +170,7 @@ export function authService({
         role: user.role,
         status: user.status,
         displayName: user.displayName ?? "",
+        avatarUrl: user.avatarUrl ?? null,
         authProvider: provider,
         createdAt: createdAtIso,
         googleLinked: googleSub !== "",
@@ -176,10 +180,11 @@ export function authService({
     },
 
     /**
-     * PUT /api/me/profile — a cashier may change only their own display name.
+     * PUT /api/me/profile — self-service display name and profile picture.
+     * Allowed for all active roles (cashier, admin, super_admin).
      * Email, username, role and password are never accepted here.
      */
-    async updateProfile(userId, { displayName } = {}) {
+    async updateProfile(userId, { displayName, avatarUrl } = {}) {
       const user = await userModel.findById(userId);
       if (!user) {
         throw statusError(401, "not logged in");
@@ -187,42 +192,97 @@ export function authService({
       if (user.status !== "active") {
         throw statusError(403, "account is not active");
       }
-      if (user.role !== "cashier") {
-        throw statusError(403, "cashier only");
-      }
 
-      const name = typeof displayName === "string" ? displayName.trim() : "";
-      if (name.length < 2 || name.length > 60) {
+      if (displayName === undefined && avatarUrl === undefined) {
         throw statusError(422, "display name must be 2-60 characters");
       }
 
-      const before = String(user.displayName ?? "").trim();
-      if (name === before) {
-        return { displayName: name };
+      const setFields = {};
+      let nameChanged = false;
+      let avatarChanged = false;
+
+      const beforeName = String(user.displayName ?? "").trim();
+      const beforeAvatar = user.avatarUrl ?? null;
+
+      let finalName = user.displayName ?? "";
+      let finalAvatar = user.avatarUrl ?? null;
+
+      if (displayName !== undefined) {
+        const name = typeof displayName === "string" ? displayName.trim() : "";
+        if (name.length < 2 || name.length > 60) {
+          throw statusError(422, "display name must be 2-60 characters");
+        }
+        finalName = name;
+        if (name !== beforeName) {
+          setFields.displayName = name;
+          nameChanged = true;
+        }
+      }
+
+      if (avatarUrl !== undefined) {
+        let avatarVal = null;
+        if (avatarUrl !== null && avatarUrl !== "") {
+          if (typeof avatarUrl !== "string") {
+            throw statusError(422, "invalid avatar image");
+          }
+          const trimmed = avatarUrl.trim();
+          if (trimmed !== "") {
+            if (trimmed.length > 2 * 1024 * 1024) {
+              throw statusError(422, "avatar image is too large (max 2MB)");
+            }
+            if (
+              !/^data:image\/(png|jpeg|jpg|webp|gif);base64,/i.test(trimmed) &&
+              !/^https?:\/\//i.test(trimmed)
+            ) {
+              throw statusError(422, "invalid image format");
+            }
+            avatarVal = trimmed;
+          }
+        }
+        finalAvatar = avatarVal;
+        if (avatarVal !== beforeAvatar) {
+          setFields.avatarUrl = avatarVal;
+          avatarChanged = true;
+        }
+      }
+
+      if (!nameChanged && !avatarChanged) {
+        return { displayName: finalName, avatarUrl: finalAvatar };
       }
 
       await usersColl.updateOne(
         { _id: user._id },
-        { $set: { displayName: name } }
+        { $set: setFields }
       );
 
       try {
+        const meta = {};
+        if (nameChanged && !avatarChanged) {
+          meta.field = "displayName";
+          meta.oldValue = beforeName || null;
+          meta.newValue = finalName;
+        } else if (avatarChanged && !nameChanged) {
+          meta.field = "avatarUrl";
+          meta.oldValue = beforeAvatar ? "configured" : null;
+          meta.newValue = finalAvatar ? "configured" : null;
+        } else {
+          meta.field = "profile";
+          meta.oldValue = beforeName || null;
+          meta.newValue = finalName;
+          meta.avatarChanged = true;
+        }
         await activityLogsColl.insertOne({
           actorId: String(user._id),
           action: "profile_update",
           target: String(user._id),
-          meta: {
-            field: "displayName",
-            oldValue: before || null,
-            newValue: name,
-          },
+          meta,
           at: new Date(),
         });
       } catch {
         // Audit is best-effort, like sign-in/sign-out logging.
       }
 
-      return { displayName: name };
+      return { displayName: finalName, avatarUrl: finalAvatar };
     },
 
     /** Invitation-only registration. Role forced to cashier, status active. */
@@ -452,6 +512,179 @@ export function authService({
       }
 
       return completeLogin(user, "google");
+    },
+
+    /**
+     * Request a password reset link.
+     * Generates a single-use token with 1-hour TTL, saves SHA-256 hash to user,
+     * and sends the reset link via mailer.
+     * Returns a generic message to avoid leaking whether the email exists.
+     */
+    async forgotPassword({ email, recaptchaToken }, req) {
+      const lowerEmail = String(email || "").toLowerCase().trim();
+      if (!lowerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lowerEmail)) {
+        const err = new Error("valid email is required");
+        err.status = 422;
+        throw err;
+      }
+
+      if (recaptchaService && typeof recaptchaService.verify === "function") {
+        await recaptchaService.verify(recaptchaToken, req && req.ip);
+      }
+
+      const genericResponse = {
+        ok: true,
+        message: "If an account with that email exists, a password reset link has been sent.",
+      };
+
+      const user = await userModel.findByEmail(lowerEmail);
+      if (!user || user.status !== "active") {
+        return genericResponse;
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await usersColl.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            resetPassword: {
+              tokenHash,
+              expiresAt,
+              requestedAt: new Date(),
+            },
+          },
+        }
+      );
+
+      const base = String(frontendUrl || "").replace(/\/$/, "");
+      const link = `${base}/src/function/auth/reset-password.html?token=${token}`;
+
+      try {
+        if (mailerDryRun) {
+          // eslint-disable-next-line no-console
+          console.log(`[forgot-password] DRY-RUN reset mail to ${lowerEmail}: ${link}`);
+        } else if (mailer && typeof mailer.sendPasswordReset === "function") {
+          await mailer.sendPasswordReset(lowerEmail, link);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`[forgot-password] failed to send email to ${lowerEmail}:`, err);
+        const error = new Error("failed to send password reset email. Please try again later.");
+        error.status = 500;
+        throw error;
+      }
+
+      try {
+        await activityLogsColl.insertOne({
+          actorId: String(user._id),
+          action: "password_reset_request",
+          target: String(user._id),
+          meta: { email: lowerEmail, role: user.role },
+          at: new Date(),
+        });
+      } catch {
+        // Audit log is best-effort
+      }
+
+      return genericResponse;
+    },
+
+    /** Check whether a password reset token is valid and unexpired. */
+    async verifyResetToken(token) {
+      if (!token) {
+        const err = new Error("reset token is required");
+        err.status = 400;
+        throw err;
+      }
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const user = await userModel.findByResetTokenHash(tokenHash);
+      if (!user || !user.resetPassword) {
+        const err = new Error("invalid or expired password reset link");
+        err.status = 404;
+        throw err;
+      }
+      const now = new Date();
+      if (user.resetPassword.expiresAt && now > user.resetPassword.expiresAt) {
+        const err = new Error("password reset link has expired");
+        err.status = 410;
+        throw err;
+      }
+      if (user.status !== "active") {
+        const err = new Error("account is not active");
+        err.status = 403;
+        throw err;
+      }
+      return { valid: true, email: user.email };
+    },
+
+    /**
+     * Complete password reset with a valid token.
+     * Sets new password, clears the reset token, bumps tokenVersion to revoke
+     * all active sessions, and logs the event in activityLogs.
+     */
+    async resetPassword({ token, password, recaptchaToken }, req) {
+      if (!token) {
+        const err = new Error("reset token is required");
+        err.status = 400;
+        throw err;
+      }
+      if (!password || password.length < 8) {
+        const err = new Error("password must be at least 8 characters");
+        err.status = 422;
+        throw err;
+      }
+      if (recaptchaService && typeof recaptchaService.verify === "function") {
+        await recaptchaService.verify(recaptchaToken, req && req.ip);
+      }
+
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      const user = await userModel.findByResetTokenHash(tokenHash);
+      if (!user || !user.resetPassword) {
+        const err = new Error("invalid or expired password reset link");
+        err.status = 404;
+        throw err;
+      }
+      const now = new Date();
+      if (user.resetPassword.expiresAt && now > user.resetPassword.expiresAt) {
+        const err = new Error("password reset link has expired");
+        err.status = 410;
+        throw err;
+      }
+      if (user.status !== "active") {
+        const err = new Error("account is not active");
+        err.status = 403;
+        throw err;
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      await usersColl.updateOne(
+        { _id: user._id },
+        {
+          $set: { passwordHash },
+          $unset: { resetPassword: "" },
+          $inc: { tokenVersion: 1 },
+        }
+      );
+
+      try {
+        await activityLogsColl.insertOne({
+          actorId: String(user._id),
+          action: "password_reset",
+          target: String(user._id),
+          meta: { email: user.email, role: user.role },
+          at: new Date(),
+        });
+      } catch {
+        // Audit log is best-effort
+      }
+
+      return {
+        ok: true,
+        message: "Password has been reset successfully. You can now log in.",
+      };
     },
   };
 }

@@ -1291,6 +1291,50 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   color: var(--cream-dim);
   margin-bottom: 9px;
 }
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+.field-label-row > span {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cream-dim);
+  margin-bottom: 0;
+}
+.auth-alt-link {
+  font-size: 11px;
+  color: var(--brass);
+  text-decoration: none;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  transition: color 0.2s ease, text-decoration 0.2s ease;
+}
+.auth-alt-link:hover {
+  color: var(--brass-bright);
+  text-decoration: underline;
+}
+.auth-back-row {
+  text-align: center;
+  margin-top: 18px;
+}
+.auth-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cream-faint);
+  font-size: 12px;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.auth-back-link:hover {
+  color: var(--brass-bright);
+}
 .field input {
   width: 100%;
   height: 52px;

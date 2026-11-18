@@ -81,29 +81,13 @@
               <h2 id="profileName">Loading…</h2>
               <p id="profileEmail"></p>
             </div>
-          </div>
-
-          <form id="profileForm" class="settings-form" novalidate>
-            <label class="field" for="displayName">
-              <span class="field-label">Profile name / nickname</span>
-              <input
-                id="displayName"
-                name="displayName"
-                type="text"
-                minlength="2"
-                maxlength="60"
-                autocomplete="nickname"
-                placeholder="e.g. Juan Dela Cruz"
-                aria-describedby="displayNameHint"
-                required
-              />
-              <span class="field-hint" id="displayNameHint">Use your name or a nickname. This is shown across the dashboard, activity log and receipts.</span>
-            </label>
-            <div class="settings-form-actions">
-              <button class="btn btn-solid" type="submit" id="saveProfile">Save changes</button>
-              <button class="btn btn-ghost" type="button" id="resetProfile">Reset</button>
+            <div class="settings-ident-actions">
+              <button type="button" class="btn btn-ghost btn-edit-profile" id="editProfileBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="width:16px;height:16px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Edit profile
+              </button>
             </div>
-          </form>
+          </div>
 
           <dl class="settings-fields">
             <div class="settings-field">

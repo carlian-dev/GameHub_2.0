@@ -16,7 +16,13 @@ async function cashierGuard() {
   const who = document.getElementById("who");
   if (who) who.textContent = name;
   const avatar = document.getElementById("avatar");
-  if (avatar) avatar.textContent = name.charAt(0).toUpperCase();
+  if (avatar) {
+    if (typeof dashRenderAvatar === "function") {
+      dashRenderAvatar(avatar, { name, avatarUrl: me.avatarUrl, fallbackLetter: "C" });
+    } else {
+      avatar.textContent = name.charAt(0).toUpperCase();
+    }
+  }
   return me;
 }
 

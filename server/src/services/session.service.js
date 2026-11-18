@@ -251,7 +251,7 @@ export function sessionService({
       });
       await tablesColl.updateOne(
         { _id: oid },
-        { $set: { status: "occupied" } }
+        { $set: { status: "occupied" }, $inc: { version: 1 } }
       );
       await activityLogs.insertOne({
         actorId,
@@ -450,6 +450,7 @@ export function sessionService({
           autoEnded: true,
           updatedAt: now,
         },
+        $inc: { version: 1 },
       }
     );
     if (res.modifiedCount !== 1) return false;
@@ -478,6 +479,7 @@ export function sessionService({
             completedAt: when instanceof Date ? when : new Date(),
             updatedAt: new Date(),
           },
+          $inc: { version: 1 },
         }
       );
     } catch (e) {
@@ -494,7 +496,10 @@ export function sessionService({
     try {
       await reservationsColl.updateOne(
         { ref: doc.reservationRef, status: "checked-in" },
-        { $set: { sessionEndsAt: newEnd, updatedAt: new Date() } }
+        {
+          $set: { sessionEndsAt: newEnd, updatedAt: new Date() },
+          $inc: { version: 1 },
+        }
       );
     } catch (e) {
       // eslint-disable-next-line no-console
@@ -518,6 +523,7 @@ export function sessionService({
             sessionId: "",
             sessionEndsAt: "",
           },
+          $inc: { version: 1 },
         }
       );
     } catch (e) {
@@ -538,7 +544,10 @@ export function sessionService({
     const t = await tablesColl.findOne({ _id: tableId });
     if (!t || t.archived) return;
     if (t.status === "occupied") {
-      await tablesColl.updateOne({ _id: tableId }, { $set: { status: "available" } });
+      await tablesColl.updateOne(
+        { _id: tableId },
+        { $set: { status: "available" }, $inc: { version: 1 } }
+      );
     }
   }
 
@@ -563,6 +572,7 @@ export function sessionService({
       reservationRef: doc.reservationRef ?? null,
       fnbTotal: fnbTotalOf(doc),
       fnbLineCount: Array.isArray(doc.fnbOrders) ? doc.fnbOrders.length : 0,
+      version: Number(doc.version || 1),
     };
   }
 }

@@ -85,6 +85,21 @@ async function loginWithGoogle(idToken) {
     body: JSON.stringify({ idToken }),
   });
 }
+async function forgotPassword(email, recaptchaToken = "") {
+  return api("/api/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email, recaptchaToken }),
+  });
+}
+async function checkResetToken(token) {
+  return api(`/api/reset-password/${encodeURIComponent(token)}`);
+}
+async function resetPassword(token, password, recaptchaToken = "") {
+  return api("/api/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password, recaptchaToken }),
+  });
+}
 async function getAppConfig() {
   return api("/api/config");
 }
@@ -94,11 +109,12 @@ async function logout() {
 async function getMe() {
   return api("/api/me");
 }
-// Cashier self-service profile: display name only (email stays read-only).
-async function updateMyProfile(displayName) {
+// Self-service profile: display name and profile picture only (email stays read-only).
+async function updateMyProfile(payload) {
+  const body = typeof payload === "string" ? { displayName: payload } : payload;
   return api("/api/me/profile", {
     method: "PUT",
-    body: JSON.stringify({ displayName }),
+    body: JSON.stringify(body),
   });
 }
 

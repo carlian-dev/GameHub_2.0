@@ -64,7 +64,7 @@ describe("authService.updateProfile", () => {
       displayName: "  Kuya J  ",
     });
 
-    assert.deepStrictEqual(result, { displayName: "Kuya J" });
+    assert.deepStrictEqual(result, { displayName: "Kuya J", avatarUrl: null });
     assert.strictEqual(user.displayName, "Kuya J");
     assert.strictEqual(activityLogs.length, 1);
 
@@ -130,20 +130,59 @@ describe("authService.updateProfile", () => {
       displayName: "  Same Name  ",
     });
 
-    assert.deepStrictEqual(result, { displayName: "Same Name" });
+    assert.deepStrictEqual(result, { displayName: "Same Name", avatarUrl: null });
     assert.strictEqual(activityLogs.length, 0);
   });
 
-  it("rejects non-cashiers and inactive accounts", async () => {
-    const admin = seedUser({ role: "admin" });
-    const archived = seedUser({ status: "archived" });
+  it("allows admin and super_admin to update their profile", async () => {
+    const admin = seedUser({ role: "admin", displayName: "Old Admin" });
+    const superAdmin = seedUser({ role: "super_admin", displayName: "Old Super" });
+
+    const adminRes = await makeService(admin).service.updateProfile(String(admin._id), {
+      displayName: "New Admin",
+    });
+    assert.strictEqual(adminRes.displayName, "New Admin");
+
+    const superRes = await makeService(superAdmin).service.updateProfile(String(superAdmin._id), {
+      displayName: "New Super",
+    });
+    assert.strictEqual(superRes.displayName, "New Super");
+  });
+
+  it("allows setting, updating and clearing profile picture (avatarUrl)", async () => {
+    const user = seedUser();
+    const { service, activityLogs } = makeService(user);
+    const dataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+    const res1 = await service.updateProfile(String(user._id), {
+      avatarUrl: dataUrl,
+    });
+    assert.strictEqual(res1.avatarUrl, dataUrl);
+    assert.strictEqual(user.avatarUrl, dataUrl);
+    assert.strictEqual(activityLogs.length, 1);
+    assert.strictEqual(activityLogs[0].meta.field, "avatarUrl");
+
+    // Clear avatar
+    const res2 = await service.updateProfile(String(user._id), {
+      avatarUrl: null,
+    });
+    assert.strictEqual(res2.avatarUrl, null);
+    assert.strictEqual(user.avatarUrl, null);
+    assert.strictEqual(activityLogs.length, 2);
+  });
+
+  it("rejects invalid avatar image format", async () => {
+    const user = seedUser();
+    const { service } = makeService(user);
 
     await assert.rejects(
-      makeService(admin).service.updateProfile(String(admin._id), {
-        displayName: "Nope",
-      }),
-      (err) => err.status === 403
+      service.updateProfile(String(user._id), { avatarUrl: "not-an-image" }),
+      (err) => err.status === 422
     );
+  });
+
+  it("rejects inactive accounts", async () => {
+    const archived = seedUser({ status: "archived" });
 
     await assert.rejects(
       makeService(archived).service.updateProfile(String(archived._id), {

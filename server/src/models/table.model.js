@@ -18,13 +18,16 @@ export function tableModel({ db }) {
       return await coll.findOne({ name });
     },
     async create(doc) {
-      const res = await coll.insertOne(doc);
+      const res = await coll.insertOne({ version: 1, ...doc });
       return res.insertedId;
     },
     async update(id, set) {
       const oid = toObjectId(id);
       if (!oid) return null;
-      return await coll.updateOne({ _id: oid }, { $set: set });
+      return await coll.updateOne(
+        { _id: oid },
+        { $set: set, $inc: { version: 1 } }
+      );
     },
   };
 }

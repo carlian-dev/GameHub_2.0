@@ -242,9 +242,9 @@ async function load() {
       location.href = staffHome(me.role);
       return;
     }
-    const name = me.email || "admin";
+    const name = me.displayName || me.email || me.username || "admin";
     document.getElementById("who").textContent = name;
-    document.getElementById("avatar").textContent = name.charAt(0).toUpperCase();
+    dashRenderAvatar("avatar", { name, avatarUrl: me.avatarUrl, fallbackLetter: "A" });
     await load();
     startTick();
   } catch (e) {

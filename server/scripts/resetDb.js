@@ -78,9 +78,9 @@ async function main() {
 
     // Tables: available / occupied / archived.
     await db.collection("tables").insertMany([
-      { name: "Table 1", status: "available", archived: false, createdAt: now },
-      { name: "Table 2", status: "occupied", archived: false, createdAt: now },
-      { name: "Table 3", status: "available", archived: true, createdAt: now },
+      { name: "Table 1", status: "available", archived: false, createdAt: now, version: 1 },
+      { name: "Table 2", status: "occupied", archived: false, createdAt: now, version: 1 },
+      { name: "Table 3", status: "available", archived: true, createdAt: now, version: 1 },
     ]);
 
     // Rates: one-time seed defaults (regular 140, special 180).

@@ -408,7 +408,7 @@ export function authController({ authService }) {
       res.status(200).json(meView(result));
     }),
 
-    /** PUT /api/me/profile — cashier self-service display name. */
+    /** PUT /api/me/profile — self-service display name and avatar. */
     updateProfile: asyncHandler(async (req, res) => {
       const userId = req.authUser ? req.authUser.id : null;
       if (!userId) {
@@ -416,6 +416,7 @@ export function authController({ authService }) {
       }
       const result = await authService.updateProfile(userId, {
         displayName: req.body?.displayName,
+        avatarUrl: req.body?.avatarUrl,
       });
       res.status(200).json(profileView(result));
     }),
@@ -441,6 +442,30 @@ export function authController({ authService }) {
         remoteIp: req.ip,
       });
       res.status(200).json(loginView(result.user || result));
+    }),
+
+    forgotPassword: asyncHandler(async (req, res) => {
+      const { email, recaptchaToken } = req.body || {};
+      const result = await authService.forgotPassword(
+        { email, recaptchaToken },
+        req
+      );
+      res.status(200).json(result);
+    }),
+
+    verifyResetToken: asyncHandler(async (req, res) => {
+      const { token } = req.params;
+      const result = await authService.verifyResetToken(token);
+      res.status(200).json(result);
+    }),
+
+    resetPassword: asyncHandler(async (req, res) => {
+      const { token, password, recaptchaToken } = req.body || {};
+      const result = await authService.resetPassword(
+        { token, password, recaptchaToken },
+        req
+      );
+      res.status(200).json(result);
     }),
   };
 }

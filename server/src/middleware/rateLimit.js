@@ -122,7 +122,7 @@ export function createRateLimiters(config = resolveRateLimitConfig()) {
       // force protection is for anonymous visitors, so let staff through (the
       // api/writes budgets still apply to them).
       skip: (req) => Boolean(req.authUser),
-    }),
+     }),
   };
 }
 

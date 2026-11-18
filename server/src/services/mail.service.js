@@ -137,6 +137,78 @@ export function reservationAcceptedMail(reservation = {}) {
   };
 }
 
+/** Pure builder for password reset email so it can be tested without SMTP. */
+export function passwordResetMail({ email, link } = {}) {
+  const to = String(email || "").trim();
+  const resetLink = String(link || "");
+
+  const text = [
+    "Hello,",
+    "",
+    "We received a request to reset the password for your GameHub staff account.",
+    "",
+    `Reset your password: ${resetLink}`,
+    "",
+    "This link is valid for 1 hour and can only be used once.",
+    "",
+    "If you did not request a password reset, you can safely ignore this email.",
+    "",
+    ADDRESS,
+    HOURS,
+  ].join("\n");
+
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:28px 14px;background:#F5F3ED;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#374151;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;border-collapse:separate;border-spacing:0;background:#ffffff;border:1px solid #E5E7EB;border-radius:18px;overflow:hidden;">
+            <tr>
+              <td style="background:#0B3D2E;padding:22px 26px;">
+                <span style="display:block;color:#F5F3ED;font-size:18px;font-weight:700;letter-spacing:-0.02em;">GameHub</span>
+                <span style="display:block;color:#D4AF37;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-top:2px;">Billiard &amp; More</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:26px;">
+                <p style="margin:0 0 14px;font-size:15px;color:#202522;">Hello,</p>
+                <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#374151;">
+                  We received a request to reset the password for your GameHub staff account. Click the button below to choose a new password:
+                </p>
+                <div style="text-align:center;margin:28px 0;">
+                  <a href="${esc(resetLink)}" style="display:inline-block;background:#0B3D2E;color:#F5F3ED;text-decoration:none;font-weight:600;font-size:15px;padding:12px 28px;border-radius:8px;">Reset Password</a>
+                </div>
+                <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#64748B;">
+                  This link expires in 1 hour and can only be used once.<br />
+                  If you didn't request a password reset, you can safely ignore this email.
+                </p>
+                <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:#94A3B8;word-break:break-all;">
+                  Button not working? Copy and paste this URL into your browser:<br />
+                  <a href="${esc(resetLink)}" style="color:#0B3D2E;">${esc(resetLink)}</a>
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 26px;background:#F9F8F4;border-top:1px solid #E5E7EB;">
+                <p style="margin:0;color:#64748B;font-size:12px;line-height:1.6;">${esc(ADDRESS)}<br />${esc(HOURS)}</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  return {
+    to,
+    subject: "Reset your GameHub password",
+    text,
+    html,
+  };
+}
+
 export function mailService({
   user = "",
   pass = "",
@@ -196,6 +268,9 @@ export function mailService({
           `<p><a href="${esc(link)}">Set up your account</a></p>` +
           `<p style="color:#64748B;font-size:13px;">This link expires in 24 hours and can be used once.</p>`,
       });
+    },
+    sendPasswordReset(email, link) {
+      return deliver(passwordResetMail({ email, link }));
     },
     sendReservationAccepted(reservation) {
       return deliver(reservationAcceptedMail(reservation));

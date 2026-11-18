@@ -260,6 +260,7 @@ export function transactionService({
           paidTransactionRef: insertedRef,
           updatedAt: now,
         },
+        $inc: { version: 1 },
       }
     );
     await activityLogs.insertOne({

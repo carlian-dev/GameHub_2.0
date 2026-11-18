@@ -165,33 +165,45 @@
         return;
       }
 
-      const displayName = me.displayName || me.email || me.username || "Admin";
-      const initial = String(displayName).trim().charAt(0).toUpperCase() || "A";
-      const signedIn = me.authProvider === "google" ? "Google" : "Local";
+      function paint() {
+        const displayName = me.displayName || me.email || me.username || "Admin";
+        const signedIn = me.authProvider === "google" ? "Google" : "Local";
 
-      setText("who", displayName);
-      setText("avatar", initial);
-      setText("profileAvatar", initial);
-      setText("profileName", displayName);
-      setText("profileEmail", me.email || "");
-      setText("pfEmail", me.email || "—");
-      setText("pfUsername", me.username || "—");
-      setText(
-        "pfRole",
-        me.role === "admin"
-          ? "Administrator"
-          : me.role === "super_admin"
-            ? "Super administrator"
-            : (me.role || "—")
-      );
-      setText("pfProvider", signedIn);
-      setText("pfGoogle", me.googleLinked ? "Linked" : "Not linked");
-      setText("pfCreated", formatDate(me.createdAt));
+        setText("who", displayName);
+        dashRenderAvatar("avatar", { name: displayName, avatarUrl: me.avatarUrl, fallbackLetter: "A" });
+        dashRenderAvatar("profileAvatar", { name: displayName, avatarUrl: me.avatarUrl, fallbackLetter: "A" });
+        setText("profileName", displayName);
+        setText("profileEmail", me.email || "");
+        setText("pfEmail", me.email || "—");
+        setText("pfUsername", me.username || "—");
+        setText("pfRole", "Administrator");
+        setText("pfProvider", signedIn);
+        setText("pfGoogle", me.googleLinked ? "Linked" : "Not linked");
+        setText("pfCreated", formatDate(me.createdAt));
 
-      const status = document.getElementById("pfStatus");
-      if (status) {
-        status.textContent = me.status || "unknown";
-        status.className = `settings-badge is-${me.status || "unknown"}`;
+        const status = document.getElementById("pfStatus");
+        if (status) {
+          status.textContent = me.status || "unknown";
+          status.className = `settings-badge is-${me.status || "unknown"}`;
+        }
+      }
+
+      paint();
+
+      const editBtn = document.getElementById("editProfileBtn");
+      if (editBtn) {
+        editBtn.addEventListener("click", () => {
+          dashEditProfile({
+            user: me,
+            onSave: async ({ displayName, avatarUrl }) => {
+              const res = await updateMyProfile({ displayName, avatarUrl });
+              me.displayName = res.displayName || displayName;
+              me.avatarUrl = res.avatarUrl !== undefined ? res.avatarUrl : avatarUrl;
+              paint();
+              dashToast("Profile updated.", "ok");
+            },
+          });
+        });
       }
 
       if (msg) {

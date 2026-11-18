@@ -34,7 +34,7 @@ app.use(
 app.use("/api", rateLimiters.api);
 
 // JSON only: the frontend always sends application/json.
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 // Normalize missing bodies to {} so handlers can destructure safely.
 app.use((req, res, next) => {
   if (req.body == null) req.body = {};

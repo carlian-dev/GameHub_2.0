@@ -155,6 +155,17 @@ const ENV_CREDENTIALS = {
   },
 };
 
+/** Every `*_OVERRIDE` field Settings > API can write, with its integration. */
+function overrideEnvFields() {
+  const fields = [];
+  for (const [key, credentials] of Object.entries(ENV_CREDENTIALS)) {
+    for (const name of Object.keys(credentials)) {
+      fields.push({ key, name, override: credentials[name].override });
+    }
+  }
+  return fields;
+}
+
 // Secret credentials (`secret: true`) are stored encrypted with AES-256-GCM.
 // The box is created once per service factory call; a bad key fails startup
 // loudly instead of silently storing plaintext.
@@ -277,6 +288,47 @@ function effectiveDoc(key, doc) {
   };
 }
 
+/**
+ * Default on/off state when no settings document exists.
+ * `baseOnly` ignores the `*_OVERRIDE` values written by Settings > API, so
+ * "restore defaults" can rebuild the state from the original .env keys.
+ */
+function defaultEnabled(key, { baseOnly = false } = {}) {
+  const envValue = baseOnly ? baseEnvValue : resolvedEnvValue;
+  if (key === "googleMaps") return true;
+  // The built-in exports need no credentials, so they ship on. Turning one off
+  // is an explicit super-admin decision stored in the settings document.
+  if (key === "receiptPdf" || key === "csvExport") return true;
+  if (key === "googleAuth") {
+    // GOOGLE_CLIENT_ID (or its admin override) is the default client ID
+    // (parity with the archived PHP settings_default()). Without this the
+    // login page never shows the Google button on a fresh database. Only a
+    // well-formed client ID is published.
+    return isValidGoogleClientId(envValue("googleAuth", "clientId"));
+  }
+  if (key === "googleCalendar") {
+    return Boolean(
+      envValue("googleCalendar", "calendarId") &&
+        envValue("googleCalendar", "clientEmail") &&
+        envValue("googleCalendar", "privateKey")
+    );
+  }
+  if (key === "recaptcha") {
+    return Boolean(
+      envValue("recaptcha", "siteKey") && envValue("recaptcha", "secretKey")
+    );
+  }
+  if (key === "paymongo") {
+    // A secret key in .env is enough to make a fresh database usable; an
+    // existing settings document still owns the on/off switch.
+    return Boolean(envValue("paymongo", "secretKey"));
+  }
+  if (key === "gemini") {
+    return Boolean(envValue("gemini", "apiKey"));
+  }
+  return false;
+}
+
 function defaultDoc(key) {
   const reg = REGISTRY.find((r) => r.key === key);
   if (!reg) return { enabled: false, credentials: {} };
@@ -284,39 +336,7 @@ function defaultDoc(key) {
   for (const cred of reg.credentials) {
     credentials[cred.name] = { value: "", last4: "", source: "" };
   }
-  let enabled = false;
-  if (key === "googleMaps") enabled = true;
-  // The built-in exports need no credentials, so they ship on. Turning one off
-  // is an explicit super-admin decision stored in the settings document.
-  if (key === "receiptPdf" || key === "csvExport") enabled = true;
-  if (key === "googleAuth") {
-    // GOOGLE_CLIENT_ID (or its admin override) is the default client ID
-    // (parity with the archived PHP settings_default()). Without this the
-    // login page never shows the Google button on a fresh database. Only a
-    // well-formed client ID is published.
-    const cid = resolvedEnvValue("googleAuth", "clientId");
-    if (isValidGoogleClientId(cid)) enabled = true;
-  }
-  if (key === "googleCalendar") {
-    const calendarId = resolvedEnvValue("googleCalendar", "calendarId");
-    const clientEmail = resolvedEnvValue("googleCalendar", "clientEmail");
-    const privateKey = resolvedEnvValue("googleCalendar", "privateKey");
-    if (calendarId && clientEmail && privateKey) enabled = true;
-  }
-  if (key === "recaptcha") {
-    const siteKey = resolvedEnvValue("recaptcha", "siteKey");
-    const secretKey = resolvedEnvValue("recaptcha", "secretKey");
-    if (siteKey && secretKey) enabled = true;
-  }
-  if (key === "paymongo") {
-    // A secret key in .env is enough to make a fresh database usable; an
-    // existing settings document still owns the on/off switch.
-    if (resolvedEnvValue("paymongo", "secretKey")) enabled = true;
-  }
-  if (key === "gemini") {
-    if (resolvedEnvValue("gemini", "apiKey")) enabled = true;
-  }
-  return { enabled, credentials };
+  return { enabled: defaultEnabled(key), credentials };
 }
 
 function credentialHint(key, name, value) {
@@ -937,6 +957,125 @@ export function settingsService({
         };
       }
       return shaped;
+    },
+
+    /**
+     * Restore every integration to its .env defaults.
+     * Clears the `*_OVERRIDE` fields written by Settings > API and removes the
+     * credentials and on/off state saved in the settings collection, so the
+     * original env keys decide the values and the default state again.
+     * Destructive, so it uses the same authenticator step-up as a credential
+     * change.
+     */
+    async resetToDefaults(actor = {}, codeInput = "") {
+      const actorRole = actor && actor.role;
+      if (actorRole !== "super_admin") {
+        const err = new Error("super administrator only");
+        err.status = 403;
+        throw err;
+      }
+      if (!twoFactorService || typeof twoFactorService.verifyStepUp !== "function") {
+        const err = new Error(
+          "two-factor verification is unavailable; credential changes are blocked"
+        );
+        err.status = 503;
+        throw err;
+      }
+      const actorId = actor && actor.id ? String(actor.id) : null;
+      if (!actorId) {
+        const err = new Error("super administrator only");
+        err.status = 403;
+        throw err;
+      }
+      const code = String(codeInput ?? "").replace(/\s+/g, "");
+      if (!/^\d{6}$/.test(code)) {
+        const err = new Error(
+          "enter the 6-digit code from your authenticator app to restore default API keys"
+        );
+        err.status = 422;
+        throw err;
+      }
+      await twoFactorService.verifyStepUp(actorId, code);
+
+      const settingsColl = db.collection("settings");
+      const activityLogs = db.collection("activityLogs");
+      const adminEmail = actor && actor.email ? actor.email : null;
+      const now = new Date();
+      const keys = REGISTRY.filter((reg) => reg.available).map((reg) => reg.key);
+
+      // Existing documents keep their key and audit fields, but lose every
+      // saved credential and return to the base-env default on/off state.
+      const operations = keys.map((key) => ({
+        updateOne: {
+          filter: { key },
+          update: {
+            $unset: { credentials: "" },
+            $set: {
+              enabled: defaultEnabled(key, { baseOnly: true }),
+              updatedAt: now,
+              updatedBy: adminEmail,
+            },
+          },
+        },
+      }));
+
+      const apply = async (session) => {
+        if (operations.length > 0) {
+          await settingsColl.bulkWrite(operations, { session });
+        }
+        await activityLogs.insertOne(
+          {
+            actorId,
+            action: "integration_reset_default",
+            target: "all",
+            meta: {
+              role: actorRole,
+              integrations: keys.length,
+            },
+            at: now,
+          },
+          { session }
+        );
+      };
+
+      if (await hasTransactionSupport(mongoClient)) {
+        const session = mongoClient.startSession();
+        try {
+          await session.withTransaction(() => apply(session));
+        } finally {
+          await session.endSession();
+        }
+      } else {
+        await apply(null);
+      }
+
+      // Only after the settings documents committed: clear the values written
+      // by Settings > API so the normal env keys apply again. persistEnvValue
+      // updates process.env immediately; a failed disk write is logged but the
+      // running server still falls back to the default value.
+      const cleared = [];
+      for (const { override } of overrideEnvFields()) {
+        if (!String(process.env[override] || "").trim()) continue;
+        cleared.push(override);
+        if (typeof persistEnvValue !== "function") {
+          process.env[override] = "";
+          continue;
+        }
+        try {
+          await persistEnvValue(override, "");
+        } catch (err) {
+          process.env[override] = "";
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[gamehub] could not clear ${override} in .env: ${
+              err && err.message ? err.message : err
+            }`
+          );
+        }
+      }
+
+      const data = await this.superAdminIntegrations();
+      return { ...data, clearedOverrides: cleared };
     },
 
     /** Shape for admins: activation state, never credentials. */

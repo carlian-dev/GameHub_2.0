@@ -159,8 +159,13 @@ GameHub_2.0/
   the credentials on Admin > Settings > API but cannot send the on/off flag;
   the server rejects it. Super-admin sign-in is single-step; an authenticator
   app (TOTP) is only required to add, replace or clear an integration
-  credential. A lost phone is recovered by clearing the account's `twoFactor`
-  fields in Atlas and pairing a new app from Settings > API (see AGENTS.md).
+  credential. Up to five devices can be paired at once (Settings > API >
+  Security): each has its own secret and any one can approve a change, so a
+  backup phone keeps working if the first is lost. Remove a single device in
+  that panel. If every device is lost, run `npm run reset:2fa -- --email
+  <super-admin email> --yes` from `server/` (dry run without `--yes`), reload
+  the Security panel, and pair a new app — no old code is required. There is no
+  in-app bypass by design (see AGENTS.md).
 * One-time email codes protect account creation verification and
   destructive approvals (archiving). Day-to-day login is direct session
   authentication after the status gates.
@@ -231,6 +236,7 @@ link releases the bill lock after asking PayMongo to expire the session.
 | `npm run setup:settings` | Idempotent settings document seed (test DB only) |
 | `npm run setup:indexes` | One-time index creation (test DB only) |
 | `npm run verify:indexes` | Read-only index verification (test DB only) |
+| `npm run reset:2fa -- --email <email> [--yes]` | Operator recovery for a lost super-admin authenticator (run in `server/`; writes the configured DB, dry run without `--yes`) |
 | `npm run test:unit` | Unit tests |
 | `npm run test:contract` | Contract tests against Node backend |
 

@@ -166,7 +166,10 @@ administrator, both created directly in the database):
   integration (a current authenticator code is required for any credential
   change; a toggle needs none). The app is paired from the Security panel
   through its own `/api/super-admin/2fa` endpoints, and credential changes
-  stay blocked until it is. Every regular `/api/admin/`
+  stay blocked until it is. Up to five devices can be paired at once, each
+  with its own encrypted secret; a code from any of them is accepted, and a
+  device can be removed individually (the last one only by turning 2FA off).
+  Every regular `/api/admin/`
   endpoint treats it as unauthorized. A global `superAdminScope` middleware
   additionally rejects `/api/admin/*`, `/api/cashier/*`, and the full
   reservation list for this role, so endpoints that only check for a login

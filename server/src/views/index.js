@@ -26,6 +26,9 @@ export function twoFactorSetupView({
   qrDataUrl,
   issuer,
   account,
+  label,
+  deviceCount,
+  deviceLimit,
   digits,
   period,
 }) {
@@ -36,18 +39,37 @@ export function twoFactorSetupView({
     qrDataUrl,
     issuer,
     account,
+    label: label ?? null,
+    deviceCount: deviceCount ?? 0,
+    deviceLimit: deviceLimit ?? null,
     digits,
     period,
   };
 }
 
-export function twoFactorStatusView({ enabled, method, enrolledAt, lastUsedAt }) {
+export function twoFactorStatusView({
+  enabled,
+  method,
+  devices,
+  deviceLimit,
+  enrolledAt,
+  lastUsedAt,
+  pending,
+}) {
   return {
     ok: true,
     enabled: !!enabled,
     method: method || "totp",
+    devices: (Array.isArray(devices) ? devices : []).map((device) => ({
+      id: String(device?.id || ""),
+      label: device?.label ?? null,
+      createdAt: device?.createdAt ?? null,
+      lastUsedAt: device?.lastUsedAt ?? null,
+    })),
+    deviceLimit: deviceLimit ?? null,
     enrolledAt: enrolledAt ?? null,
     lastUsedAt: lastUsedAt ?? null,
+    pending: !!pending,
   };
 }
 

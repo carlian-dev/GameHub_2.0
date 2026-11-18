@@ -777,3 +777,175 @@ describe("provider validation of new credentials", () => {
     );
   });
 });
+
+describe("reset integrations to .env defaults", () => {
+  const ENV_KEYS = [
+    "GEMINI_API_KEY",
+    "GEMINI_API_KEY_OVERRIDE",
+    "RECAPTCHA_SITE_KEY",
+    "RECAPTCHA_SITE_KEY_OVERRIDE",
+    "RECAPTCHA_SECRET_KEY",
+    "RECAPTCHA_SECRET_KEY_OVERRIDE",
+  ];
+  const saved = {};
+
+  beforeEach(() => {
+    for (const key of ENV_KEYS) {
+      saved[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const key of ENV_KEYS) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  });
+
+  /**
+   * Settings collection that mirrors bulkWrite updates and records audit logs.
+   * findMany returns the mutated documents, like the real model.
+   */
+  function fixture(docs = []) {
+    const state = {
+      docs: docs.map((doc) => ({
+        ...doc,
+        credentials: { ...(doc.credentials || {}) },
+      })),
+      logs: [],
+      writes: 0,
+    };
+    const db = {
+      collection(name) {
+        if (name === "settings") {
+          return {
+            async bulkWrite(operations) {
+              state.writes += 1;
+              for (const { updateOne } of operations) {
+                const doc = state.docs.find(
+                  (candidate) => candidate.key === updateOne.filter.key
+                );
+                if (!doc) continue;
+                for (const path of Object.keys(updateOne.update.$unset || {})) {
+                  if (path === "credentials") delete doc.credentials;
+                }
+                Object.assign(doc, updateOne.update.$set || {});
+              }
+            },
+          };
+        }
+        if (name === "activityLogs") {
+          return {
+            async insertOne(log) {
+              state.logs.push(log);
+            },
+          };
+        }
+        throw new Error(`unexpected collection ${name}`);
+      },
+    };
+    return { db, state };
+  }
+
+  function service(docs = []) {
+    const { db, state } = fixture(docs);
+    const persisted = [];
+    const svc = settingsService({
+      settingsModel: {
+        async findMany() {
+          return Object.fromEntries(state.docs.map((doc) => [doc.key, doc]));
+        },
+      },
+      db,
+      mongoClient: null,
+      settingsEncryptionKey: "",
+      twoFactorService: twoFactorStub(),
+      persistEnvValue: async (key, value) => {
+        persisted.push([key, value]);
+        process.env[key] = value;
+      },
+    });
+    return { svc, state, persisted };
+  }
+
+  const actor = {
+    role: "super_admin",
+    id: "super-1",
+    email: "superadmin@example.com",
+  };
+
+  it("clears the override and saved value so the original .env key applies", async () => {
+    process.env.GEMINI_API_KEY = "AIzaSyOriginalDefaultKey1234567890ab";
+    process.env.GEMINI_API_KEY_OVERRIDE = "AIzaSyReplacedBySuperAdmin1234561111";
+    const { svc, state, persisted } = service([
+      {
+        key: "gemini",
+        enabled: true,
+        credentials: {
+          apiKey: { value: "AIzaSyReplacedBySuperAdmin1234561111", last4: "1111" },
+        },
+      },
+    ]);
+
+    const result = await svc.resetToDefaults(actor, "123456");
+
+    assert.ok(
+      persisted.some(
+        ([key, value]) => key === "GEMINI_API_KEY_OVERRIDE" && value === ""
+      ),
+      "the Gemini override must be cleared"
+    );
+    assert.strictEqual(state.docs[0].credentials, undefined);
+    assert.strictEqual(state.docs[0].enabled, true);
+    const gemini = result.integrations.find((i) => i.key === "gemini");
+    assert.strictEqual(gemini.enabled, true);
+    assert.strictEqual(gemini.credentials[0].source, "env");
+    assert.ok(gemini.credentials[0].masked.endsWith("90ab"));
+    assert.ok(result.clearedOverrides.includes("GEMINI_API_KEY_OVERRIDE"));
+    assert.strictEqual(state.logs[0].action, "integration_reset_default");
+    assert.strictEqual(state.logs[0].meta.role, "super_admin");
+  });
+
+  it("turns an integration off when no original .env key exists", async () => {
+    process.env.GEMINI_API_KEY_OVERRIDE = "AIzaSyOnlyASavedOverride1234567890";
+    const { svc, state } = service([
+      {
+        key: "gemini",
+        enabled: true,
+        credentials: {
+          apiKey: { value: "AIzaSyOnlyASavedOverride1234567890", last4: "7890" },
+        },
+      },
+    ]);
+
+    const result = await svc.resetToDefaults(actor, "123456");
+
+    assert.strictEqual(state.docs[0].enabled, false);
+    const gemini = result.integrations.find((i) => i.key === "gemini");
+    assert.strictEqual(gemini.enabled, false);
+    assert.strictEqual(gemini.credentials[0].configured, false);
+    assert.strictEqual(gemini.credentials[0].source, "");
+  });
+
+  it("rejects a non-super-admin", async () => {
+    const { svc } = service([]);
+    await assert.rejects(
+      () => svc.resetToDefaults({ role: "admin", id: "admin-1" }, "123456"),
+      (err) => err.status === 403 && /super administrator/i.test(err.message)
+    );
+  });
+
+  it("requires a current authenticator code before clearing anything", async () => {
+    const { svc, state } = service([
+      { key: "gemini", enabled: true, credentials: {} },
+    ]);
+    await assert.rejects(
+      () => svc.resetToDefaults(actor, ""),
+      (err) =>
+        err.status === 422 && /6-digit code from your authenticator app/i.test(err.message)
+    );
+    assert.strictEqual(state.writes, 0);
+    assert.strictEqual(state.logs.length, 0);
+  });
+});

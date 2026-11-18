@@ -127,19 +127,32 @@ async function updateSuperAdminIntegration(key, fields) {
     body: JSON.stringify(fields || {}),
   });
 }
+/** Clear every saved API key/override and fall back to server/.env defaults. */
+async function resetSuperAdminIntegrations(code) {
+  return api("/api/super-admin/settings/integrations/reset", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
 
 // --- Super admin authenticator app (TOTP) ---
 async function getSuperAdminTwoFactor() {
   return api("/api/super-admin/2fa");
 }
-async function setupSuperAdminTwoFactor(code = "") {
+async function setupSuperAdminTwoFactor(code = "", label = "") {
   return api("/api/super-admin/2fa/setup", {
     method: "POST",
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, label }),
   });
 }
 async function enableSuperAdminTwoFactor(code) {
   return api("/api/super-admin/2fa/enable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+async function removeSuperAdminTwoFactorDevice(id, code) {
+  return api(`/api/super-admin/2fa/devices/${encodeURIComponent(id)}/remove`, {
     method: "POST",
     body: JSON.stringify({ code }),
   });

@@ -408,6 +408,22 @@ export function settingsController({ settingsService }) {
       });
       res.status(200).json({ ok: true, integration: shaped });
     }),
+    /**
+     * Super admin: restore every integration to its `.env` defaults. Clears the
+     * `*_OVERRIDE` values and saved credentials/toggles, so the same 6-digit
+     * authenticator step-up as a credential change is required.
+     */
+    superAdminReset: asyncHandler(async (req, res) => {
+      const user = req.session && req.session.user;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const data = await settingsService.resetToDefaults(
+        { id: user.id, email: user.email ?? null, role: user.role },
+        req.body && req.body.code
+      );
+      res.status(200).json({ ok: true, ...data });
+    }),
   };
 }
 
@@ -492,12 +508,17 @@ export function twoFactorController({ twoFactorService }) {
       res.status(200).json(twoFactorStatusView(result));
     }),
 
-    /** Re-enroll / first-time setup from the security panel. Replacing a paired app also needs its current code. */
+    /**
+     * Start pairing another device from the security panel. Adding to an
+     * existing setup also needs a current code from an already-paired device.
+     * The `label` names the device so it can be told apart in the list.
+     */
     setup: asyncHandler(async (req, res) => {
       const user = requireActor(req);
       const result = await twoFactorService.beginEnrollment(
         user.id,
-        req.body?.code
+        req.body?.code,
+        req.body?.label
       );
       res.status(200).json(twoFactorSetupView(result));
     }),
@@ -509,6 +530,20 @@ export function twoFactorController({ twoFactorService }) {
       }
       const user = requireActor(req);
       const result = await twoFactorService.completeEnrollment(user.id, code);
+      res.status(200).json(twoFactorStatusView(result));
+    }),
+
+    removeDevice: asyncHandler(async (req, res) => {
+      const { code } = req.body || {};
+      if (!code) {
+        throw new HttpError(422, "enter the 6-digit code from your authenticator app");
+      }
+      const user = requireActor(req);
+      const result = await twoFactorService.removeDevice(
+        user.id,
+        req.params?.id,
+        code
+      );
       res.status(200).json(twoFactorStatusView(result));
     }),
 

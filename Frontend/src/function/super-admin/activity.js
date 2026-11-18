@@ -8,16 +8,26 @@ const ACTION_LABELS = {
   login: "Signed in",
   logout: "Signed out",
   two_factor_enabled: "2FA enabled",
+  two_factor_device_added: "Authenticator device added",
+  two_factor_device_removed: "Authenticator device removed",
   two_factor_disabled: "2FA disabled",
+  two_factor_reset: "2FA reset by operator",
   integration_toggle: "API integration toggled",
+  integration_settings_update: "API settings updated",
+  integration_reset_default: "API defaults restored",
 };
 
 const ACTION_TONES = {
   login: "active",
   logout: "archived",
   two_factor_enabled: "active",
+  two_factor_device_added: "active",
+  two_factor_device_removed: "pending",
   two_factor_disabled: "pending",
+  two_factor_reset: "pending",
   integration_toggle: "pending",
+  integration_settings_update: "pending",
+  integration_reset_default: "pending",
 };
 
 let allRows = [];
@@ -95,8 +105,44 @@ function detailsOf(log) {
     return [log.target, state].filter(Boolean).join(" · ") || "—";
   }
 
+  if (action === "integration_settings_update") {
+    const changed = Array.isArray(m.changed) ? m.changed.join(", ") : "";
+    return [log.target, changed ? `changed ${changed}` : ""].filter(Boolean).join(" · ") || "—";
+  }
+
+  if (action === "integration_reset_default") {
+    return "All integrations · .env defaults";
+  }
+
   if (action === "two_factor_enabled" || action === "two_factor_disabled") {
-    return m.reenrolled === true ? "Authenticator re-enrolled" : "Authenticator app";
+    if (m.reenrolled === true) return "Authenticator re-enrolled";
+    const count = Number(m.deviceCount);
+    return Number.isFinite(count) && count > 0
+      ? `Authenticator app · ${count} device${count === 1 ? "" : "s"}`
+      : "Authenticator app";
+  }
+
+  if (action === "two_factor_device_added") {
+    const count = Number(m.deviceCount);
+    return [
+      m.label ? `“${m.label}”` : "Authenticator device",
+      Number.isFinite(count) && count > 0 ? `${count} total` : "",
+    ].filter(Boolean).join(" · ");
+  }
+
+  if (action === "two_factor_device_removed") {
+    const count = Number(m.deviceCount);
+    return [
+      m.label ? `“${m.label}”` : "Authenticator device",
+      Number.isFinite(count) ? `${count} remaining` : "",
+    ].filter(Boolean).join(" · ");
+  }
+
+  if (action === "two_factor_reset") {
+    const count = Number(m.devicesRemoved);
+    return Number.isFinite(count) && count > 0
+      ? `All paired devices cleared · ${count} removed`
+      : "Pending setup cleared";
   }
 
   const extra = Object.entries(m)

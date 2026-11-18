@@ -197,6 +197,32 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
+.api-reset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 16px 0 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius);
+  background: var(--d-surface);
+  box-shadow: var(--d-shadow-sm);
+}
+.api-reset-copy { min-width: 0; }
+.api-reset-copy strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--d-text);
+}
+.api-reset-copy p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--d-muted);
+}
+.api-reset-btn { flex-shrink: 0; }
 .api-card {
   display: flex;
   flex-direction: column;
@@ -464,6 +490,46 @@
 }
 .security-actions .btn { min-height: 40px; padding: 0 16px; font-size: 13px; }
 .security-danger:hover { border-color: var(--d-red); color: var(--d-red); }
+.security-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.security-device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-sm);
+  background: var(--d-surface-2);
+}
+.security-device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.security-device-info strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--d-text);
+  overflow-wrap: anywhere;
+}
+.security-device-info span {
+  font-size: 12px;
+  color: var(--d-muted);
+}
+.security-device-remove {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
 .security-setup {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -552,6 +618,10 @@
     grid-column: 1 / -1;
     grid-row: auto;
     justify-content: flex-start;
+  }
+  .api-reset {
+    flex-direction: column;
+    align-items: flex-start;
   }
   .security-setup { grid-template-columns: 1fr; }
   .security-qr img { width: 170px; height: 170px; }

@@ -36,8 +36,12 @@ const ACTION_LABELS = {
   fnb_order_remove: "F&B removed",
   integration_settings_update: "API settings updated",
   integration_toggle: "API integration toggled",
+  integration_reset_default: "API defaults restored",
   two_factor_enabled: "2FA enabled",
+  two_factor_device_added: "Authenticator device added",
+  two_factor_device_removed: "Authenticator device removed",
   two_factor_disabled: "2FA disabled",
+  two_factor_reset: "2FA reset by operator",
 };
 
 const ACTION_TONES = {
@@ -70,8 +74,12 @@ const ACTION_TONES = {
   fnb_order_remove: "declined",
   integration_settings_update: "pending",
   integration_toggle: "pending",
+  integration_reset_default: "pending",
   two_factor_enabled: "active",
+  two_factor_device_added: "active",
+  two_factor_device_removed: "pending",
   two_factor_disabled: "pending",
+  two_factor_reset: "pending",
 };
 
 let allRows = [];
@@ -207,8 +215,39 @@ function detailsOf(log) {
     return [log.target, state].filter(Boolean).join(" · ") || "—";
   }
 
+  if (action === "integration_reset_default") {
+    return "All integrations · .env defaults";
+  }
+
   if (action === "two_factor_enabled" || action === "two_factor_disabled") {
-    return m.reenrolled === true ? "Authenticator re-enrolled" : "Authenticator app";
+    if (m.reenrolled === true) return "Authenticator re-enrolled";
+    const count = Number(m.deviceCount);
+    return Number.isFinite(count) && count > 0
+      ? `Authenticator app · ${count} device${count === 1 ? "" : "s"}`
+      : "Authenticator app";
+  }
+
+  if (action === "two_factor_device_added") {
+    const count = Number(m.deviceCount);
+    return [
+      m.label ? `“${m.label}”` : "Authenticator device",
+      Number.isFinite(count) && count > 0 ? `${count} total` : "",
+    ].filter(Boolean).join(" · ");
+  }
+
+  if (action === "two_factor_device_removed") {
+    const count = Number(m.deviceCount);
+    return [
+      m.label ? `“${m.label}”` : "Authenticator device",
+      Number.isFinite(count) ? `${count} remaining` : "",
+    ].filter(Boolean).join(" · ");
+  }
+
+  if (action === "two_factor_reset") {
+    const count = Number(m.devicesRemoved);
+    return Number.isFinite(count) && count > 0
+      ? `All paired devices cleared · ${count} removed`
+      : "Pending setup cleared";
   }
 
   const extra = Object.entries(m)

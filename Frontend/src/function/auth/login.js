@@ -27,11 +27,106 @@ function welcomeAndGo(data) {
   location.href = staffHome(data.role);
 }
 
+let loginCooldownUntil = 0;
+let loginCooldownTimer = null;
+let googleLoginAvailable = false;
+
+function updateLoginCooldown() {
+  const remaining = Math.max(0, Math.ceil((loginCooldownUntil - Date.now()) / 1000));
+  const cooldown = document.getElementById("loginCooldown");
+  if (!remaining) {
+    clearInterval(loginCooldownTimer);
+    loginCooldownTimer = null;
+    loginCooldownUntil = 0;
+    cooldown.hidden = true;
+    cooldown.textContent = "";
+    document.getElementById("go").disabled = false;
+    if (googleLoginAvailable) {
+      document.querySelector(".auth-divider").hidden = false;
+      document.getElementById("gbtn").hidden = false;
+    }
+    const msg = document.getElementById("msg");
+    msg.textContent = "You can try signing in again.";
+    msg.className = "";
+    const attempts = document.getElementById("loginAttempts");
+    attempts.hidden = true;
+    attempts.textContent = "";
+    attempts.className = "login-attempts";
+    return;
+  }
+
+  cooldown.hidden = false;
+  cooldown.textContent =
+    `Retry available in ${Math.floor(remaining / 60)}:` +
+    `${String(remaining % 60).padStart(2, "0")}`;
+}
+
+function startLoginCooldown(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return false;
+  loginCooldownUntil = Date.now() + Math.ceil(seconds) * 1000;
+  document.getElementById("go").disabled = true;
+  if (googleLoginAvailable) {
+    document.querySelector(".auth-divider").hidden = true;
+    document.getElementById("gbtn").hidden = true;
+  }
+  clearInterval(loginCooldownTimer);
+  updateLoginCooldown();
+  loginCooldownTimer = setInterval(updateLoginCooldown, 1000);
+  return true;
+}
+
+function showRateLimit(error) {
+  if (!error || error.status !== 429) return false;
+  const msg = document.getElementById("msg");
+  msg.textContent = "Too many requests. Please wait before trying to sign in again.";
+  msg.className = "err";
+  startLoginCooldown(error.retryAfterSeconds);
+  return true;
+}
+
+function showAttemptsRemaining(error) {
+  const attempts = document.getElementById("loginAttempts");
+  if (!Number.isInteger(error && error.authAttemptsRemaining)) {
+    attempts.hidden = true;
+    attempts.textContent = "";
+    return;
+  }
+
+  const remaining = error.authAttemptsRemaining;
+  attempts.hidden = false;
+  if (remaining === 0) {
+    attempts.textContent =
+      "No failed authentication attempts remain for this IP. Sign-in is temporarily paused.";
+    attempts.classList.add("is-exhausted");
+    if (error.status !== 429) {
+      startLoginCooldown(
+        error.authAttemptsResetSeconds || error.retryAfterSeconds
+      );
+    }
+    return;
+  }
+
+  attempts.classList.remove("is-exhausted");
+  attempts.textContent =
+    `${remaining} unsuccessful authentication ` +
+    `${remaining === 1 ? "request remains" : "requests remain"} for this IP before temporary lockout.`;
+}
+
+function showLoginError(error) {
+  if (!showRateLimit(error)) {
+    const msg = document.getElementById("msg");
+    msg.textContent = error.message;
+    msg.className = "err";
+  }
+  showAttemptsRemaining(error);
+}
+
 async function submitLogin() {
   const msg = document.getElementById("msg");
   const emailEl = document.getElementById("email");
   const pwEl = document.getElementById("password");
   const go = document.getElementById("go");
+  if (loginCooldownUntil > Date.now()) return;
   clearErrors();
   let ok = true;
   if (!emailEl.value.trim()) { setFieldError(emailEl, true); ok = false; }
@@ -60,10 +155,9 @@ async function submitLogin() {
   } catch (e) {
     // Tokens are single-use: let the guest retry after any rejected attempt.
     GameHubRecaptcha.reset();
-    msg.textContent = e.message;
-    msg.className = "err";
+    showLoginError(e);
   } finally {
-    go.disabled = false;
+    go.disabled = loginCooldownUntil > Date.now();
   }
 }
 
@@ -132,7 +226,9 @@ async function initGoogleLogin() {
             msg.textContent = "Google account created! Status: pending — awaiting admin approval.";
             msg.className = "ok";
           } else welcomeAndGo(resp);
-        } catch (e) { msg.textContent = e.message; msg.className = "err"; }
+        } catch (e) {
+          showLoginError(e);
+        }
       },
     });
     const card = gbtn.closest(".staff-card");
@@ -153,6 +249,7 @@ async function initGoogleLogin() {
       width: buttonWidth,
     });
     // Reveal only after the button rendered successfully.
+    googleLoginAvailable = true;
     if (divider) divider.hidden = false;
     gbtn.hidden = false;
   } catch { /* Google unavailable/disabled — password form still works */ }

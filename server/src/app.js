@@ -24,7 +24,12 @@ app.use(
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     // Let the frontend read Retry-After on a 429 if it wants to show a wait.
-    exposedHeaders: ["Retry-After"],
+    exposedHeaders: [
+      "Retry-After",
+      "X-Auth-Attempts-Limit",
+      "X-Auth-Attempts-Remaining",
+      "X-Auth-Attempts-Reset",
+    ],
   })
 );
 

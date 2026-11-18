@@ -337,6 +337,26 @@ export function settingsController({ settingsService }) {
       const data = await settingsService.superAdminIntegrations();
       res.status(200).json(adminIntegrationsView(data));
     }),
+    superAdminGetAuthRateLimit: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const data = await settingsService.getAuthRateLimit();
+      res.status(200).json({ ok: true, authRateLimit: data });
+    }),
+    superAdminUpdateAuthRateLimit: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const data = await settingsService.updateAuthRateLimit(req.body, {
+        id: user.id,
+        email: user.email ?? null,
+        role: user.role,
+      });
+      res.status(200).json({ ok: true, authRateLimit: data });
+    }),
     /**
      * Super admin: flip one integration and/or change its credentials. A
      * `credentials` payload must also carry the 6-digit authenticator `code`

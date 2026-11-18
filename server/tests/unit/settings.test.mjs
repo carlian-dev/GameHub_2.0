@@ -869,3 +869,98 @@ describe("reset integrations to .env defaults", () => {
     assert.strictEqual(state.logs.length, 0);
   });
 });
+
+describe("super-admin login rate limit settings", () => {
+  function fixture(initial = null) {
+    const state = { setting: initial, logs: [] };
+    const db = {
+      collection(name) {
+        if (name === "settings") {
+          return {
+            async findOneAndUpdate(filter, update) {
+              assert.equal(filter.key, "authRateLimit");
+              state.setting = { ...state.setting, ...update.$set };
+              return state.setting;
+            },
+          };
+        }
+        if (name === "activityLogs") {
+          return {
+            async insertOne(log) {
+              state.logs.push(log);
+            },
+          };
+        }
+        throw new Error(`unexpected collection ${name}`);
+      },
+    };
+    const applied = [];
+    const svc = settingsService({
+      settingsModel: {
+        async findOne(key) {
+          assert.equal(key, "authRateLimit");
+          return state.setting;
+        },
+      },
+      db,
+      mongoClient: null,
+      defaultAuthRateLimit: { limit: 10, windowMs: 900_000 },
+      configureAuthRateLimit: (config) => applied.push(config),
+    });
+    return { svc, state, applied };
+  }
+
+  const actor = {
+    role: "super_admin",
+    id: "super-1",
+    email: "superadmin@example.com",
+  };
+
+  it("uses env defaults until the super admin saves an override", async () => {
+    const { svc, applied } = fixture();
+    const result = await svc.initializeAuthRateLimit();
+
+    assert.deepEqual(result, {
+      maxAttempts: 10,
+      windowMinutes: 15,
+      enabled: true,
+      updatedAt: null,
+      updatedBy: null,
+    });
+    assert.deepEqual(applied, [{ limit: 10, windowMs: 900_000 }]);
+  });
+
+  it("persists, audits and immediately applies new values", async () => {
+    const { svc, state, applied } = fixture();
+    const result = await svc.updateAuthRateLimit(
+      { maxAttempts: 6, windowMinutes: 20 },
+      actor
+    );
+
+    assert.equal(result.maxAttempts, 6);
+    assert.equal(result.windowMinutes, 20);
+    assert.equal(state.setting.key, "authRateLimit");
+    assert.equal(state.setting.updatedBy, actor.email);
+    assert.deepEqual(applied, [{ limit: 6, windowMs: 1_200_000 }]);
+    assert.equal(state.logs[0].action, "auth_rate_limit_update");
+    assert.deepEqual(state.logs[0].meta, { maxAttempts: 6, windowMinutes: 20 });
+  });
+
+  it("rejects non-super-admins and out-of-range values", async () => {
+    const { svc, state } = fixture();
+    await assert.rejects(
+      () => svc.updateAuthRateLimit({ maxAttempts: 6, windowMinutes: 20 }, { role: "admin" }),
+      (err) => err.status === 403
+    );
+    await assert.rejects(
+      () => svc.updateAuthRateLimit({ maxAttempts: 0, windowMinutes: 20 }, actor),
+      (err) => err.status === 422
+    );
+    await assert.rejects(
+      () => svc.updateAuthRateLimit({ maxAttempts: 6, windowMinutes: 1441 }, actor),
+      (err) => err.status === 422
+    );
+    assert.equal(state.setting, null);
+    assert.equal(state.logs.length, 0);
+  });
+});

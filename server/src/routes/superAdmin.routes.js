@@ -14,6 +14,16 @@ export function registerSuperAdminRoutes(
     requireSuperAdmin,
     settingsController.superAdminIntegrations
   );
+  router.get(
+    "/super-admin/settings/login-protection",
+    requireSuperAdmin,
+    settingsController.superAdminGetAuthRateLimit
+  );
+  router.put(
+    "/super-admin/settings/login-protection",
+    requireSuperAdmin,
+    settingsController.superAdminUpdateAuthRateLimit
+  );
   // Restore every integration to its base .env values (clears the *_OVERRIDE
   // fields and saved credentials). It verifies an authenticator code, so failed
   // attempts count against the strict auth budget.

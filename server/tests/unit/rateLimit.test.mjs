@@ -96,10 +96,35 @@ describe("createRateLimiters", () => {
     for (let i = 0; i < 4; i += 1) {
       assert.equal((await request(app).post("/login")).status, 200);
     }
-    assert.equal((await request(app).post("/login").set("x-fail", "1")).status, 401);
-    assert.equal((await request(app).post("/login").set("x-fail", "1")).status, 401);
+    const firstFailure = await request(app).post("/login").set("x-fail", "1");
+    assert.equal(firstFailure.status, 401);
+    assert.equal(firstFailure.headers["x-auth-attempts-remaining"], "1");
+    const lastAllowedFailure = await request(app).post("/login").set("x-fail", "1");
+    assert.equal(lastAllowedFailure.status, 401);
+    assert.equal(lastAllowedFailure.headers["x-auth-attempts-remaining"], "0");
+    assert.match(lastAllowedFailure.headers["retry-after"], /^\d+$/);
     const blocked = await request(app).post("/login").set("x-fail", "1");
     assert.equal(blocked.status, 429);
+    assert.equal(blocked.headers["x-auth-attempts-remaining"], "0");
+  });
+
+  it("uses the same IP bucket across users and updates limits without clearing counts", async () => {
+    const limiters = createRateLimiters(config({ auth: { limit: 3, windowMs: 60_000 } }));
+    const app = testApp(limiters);
+
+    assert.equal(
+      (await request(app).post("/login").set("x-user-id", "u1").set("x-fail", "1")).status,
+      401
+    );
+    limiters.configureAuth({ limit: 1, windowMs: 1000 });
+
+    const blocked = await request(app)
+      .post("/login")
+      .set("x-user-id", "u2")
+      .set("x-fail", "1");
+    assert.equal(blocked.status, 429);
+    assert.equal(blocked.headers["x-auth-attempts-limit"], "1");
+    assert.match(blocked.headers["retry-after"], /^\d+$/);
   });
 
   it("throttles anonymous guest reservations but lets signed-in staff through", async () => {

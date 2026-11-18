@@ -108,6 +108,48 @@ const ENV_CREDENTIALS = {
   },
 };
 
+const AUTH_RATE_LIMIT_KEY = "authRateLimit";
+const AUTH_RATE_LIMIT_BOUNDS = {
+  minAttempts: 1,
+  maxAttempts: 100,
+  minWindowMinutes: 1,
+  maxWindowMinutes: 1440,
+};
+
+function authRateLimitError(message) {
+  const err = new Error(message);
+  err.status = 422;
+  return err;
+}
+
+function authRateLimitConfig(doc, defaults) {
+  if (!doc) return { ...defaults };
+  if (
+    !Number.isInteger(doc.maxAttempts) ||
+    doc.maxAttempts < AUTH_RATE_LIMIT_BOUNDS.minAttempts ||
+    doc.maxAttempts > AUTH_RATE_LIMIT_BOUNDS.maxAttempts ||
+    !Number.isInteger(doc.windowMinutes) ||
+    doc.windowMinutes < AUTH_RATE_LIMIT_BOUNDS.minWindowMinutes ||
+    doc.windowMinutes > AUTH_RATE_LIMIT_BOUNDS.maxWindowMinutes
+  ) {
+    throw new Error("stored login rate limit settings are invalid");
+  }
+  return {
+    limit: doc.maxAttempts,
+    windowMs: doc.windowMinutes * 60_000,
+  };
+}
+
+function authRateLimitView(config, doc = null, enabled = true) {
+  return {
+    maxAttempts: config.limit,
+    windowMinutes: config.windowMs / 60_000,
+    enabled,
+    updatedAt: doc && doc.updatedAt ? doc.updatedAt : null,
+    updatedBy: doc && doc.updatedBy ? doc.updatedBy : null,
+  };
+}
+
 /** Every `*_OVERRIDE` field Settings > API can write, with its integration. */
 function overrideEnvFields() {
   const fields = [];
@@ -323,6 +365,9 @@ export function settingsService({
   // tests and callers without network access can skip the live verification.
   integrationValidator = null,
   persistEnvValue = null,
+  defaultAuthRateLimit = { limit: 10, windowMs: 15 * 60_000 },
+  configureAuthRateLimit = null,
+  authRateLimitEnabled = true,
 }) {
   capturedEnv = {
     googleAuth: { clientId: String(googleClientIdFromEnv || "") },
@@ -403,6 +448,98 @@ export function settingsService({
           this.shape(reg.key, effectiveDoc(reg.key, docs[reg.key] || null))
         ),
       };
+    },
+    async initializeAuthRateLimit() {
+      const doc = await settingsModel.findOne(AUTH_RATE_LIMIT_KEY);
+      const config = authRateLimitConfig(doc, defaultAuthRateLimit);
+      if (typeof configureAuthRateLimit === "function") {
+        configureAuthRateLimit(config);
+      }
+      return authRateLimitView(config, doc, authRateLimitEnabled);
+    },
+    async getAuthRateLimit() {
+      const doc = await settingsModel.findOne(AUTH_RATE_LIMIT_KEY);
+      return authRateLimitView(
+        authRateLimitConfig(doc, defaultAuthRateLimit),
+        doc,
+        authRateLimitEnabled
+      );
+    },
+    async updateAuthRateLimit(data, actor = {}) {
+      if (!actor || actor.role !== "super_admin") {
+        const err = new Error("super administrator only");
+        err.status = 403;
+        throw err;
+      }
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        throw authRateLimitError("login rate limit settings must be an object");
+      }
+      const { maxAttempts, windowMinutes } = data;
+      if (
+        !Number.isInteger(maxAttempts) ||
+        maxAttempts < AUTH_RATE_LIMIT_BOUNDS.minAttempts ||
+        maxAttempts > AUTH_RATE_LIMIT_BOUNDS.maxAttempts
+      ) {
+        throw authRateLimitError("maxAttempts must be an integer from 1 to 100");
+      }
+      if (
+        !Number.isInteger(windowMinutes) ||
+        windowMinutes < AUTH_RATE_LIMIT_BOUNDS.minWindowMinutes ||
+        windowMinutes > AUTH_RATE_LIMIT_BOUNDS.maxWindowMinutes
+      ) {
+        throw authRateLimitError("windowMinutes must be an integer from 1 to 1440");
+      }
+
+      const actorId = actor.id ? String(actor.id) : null;
+      const now = new Date();
+      const settingsColl = db.collection("settings");
+      const activityLogs = db.collection("activityLogs");
+      const update = {
+        $set: {
+          key: AUTH_RATE_LIMIT_KEY,
+          maxAttempts,
+          windowMinutes,
+          updatedAt: now,
+          updatedBy: actor.email || null,
+        },
+      };
+      const apply = async (session) => {
+        const doc = await settingsColl.findOneAndUpdate(
+          { key: AUTH_RATE_LIMIT_KEY },
+          update,
+          { upsert: true, returnDocument: "after", session }
+        );
+        if (!doc) throw new Error("login rate limit settings update returned no document");
+        await activityLogs.insertOne(
+          {
+            actorId,
+            action: "auth_rate_limit_update",
+            target: AUTH_RATE_LIMIT_KEY,
+            meta: { maxAttempts, windowMinutes },
+            at: now,
+          },
+          { session }
+        );
+        return doc;
+      };
+
+      let updatedDoc;
+      if (await hasTransactionSupport(mongoClient)) {
+        const session = mongoClient.startSession();
+        try {
+          updatedDoc = await session.withTransaction(() => apply(session));
+        } finally {
+          await session.endSession();
+        }
+      } else {
+        updatedDoc = await apply(null);
+      }
+
+      const config = authRateLimitConfig(updatedDoc, defaultAuthRateLimit);
+      if (typeof configureAuthRateLimit === "function") {
+        configureAuthRateLimit(config);
+      }
+      return authRateLimitView(config, updatedDoc, authRateLimitEnabled);
     },
     async calendarConfig() {
       try {

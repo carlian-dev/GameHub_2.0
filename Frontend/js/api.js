@@ -20,7 +20,33 @@ async function api(path, options = {}) {
       signal: options.signal || controller.signal,
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      const error = new Error(data.error || `HTTP ${res.status}`);
+      error.status = res.status;
+      const retryAfter = Number(res.headers.get("Retry-After"));
+      error.retryAfterSeconds =
+        Number.isFinite(retryAfter) && retryAfter > 0 ? Math.ceil(retryAfter) : 0;
+      const attemptsLimitHeader = res.headers.get("X-Auth-Attempts-Limit");
+      const attemptsRemainingHeader = res.headers.get("X-Auth-Attempts-Remaining");
+      const attemptsResetHeader = res.headers.get("X-Auth-Attempts-Reset");
+      const attemptsLimit = Number(attemptsLimitHeader);
+      const attemptsRemaining = Number(attemptsRemainingHeader);
+      const attemptsReset = Number(attemptsResetHeader);
+      if (Number.isInteger(attemptsLimit) && attemptsLimit > 0) {
+        error.authAttemptsLimit = attemptsLimit;
+      }
+      if (
+        attemptsRemainingHeader !== null &&
+        Number.isInteger(attemptsRemaining) &&
+        attemptsRemaining >= 0
+      ) {
+        error.authAttemptsRemaining = attemptsRemaining;
+      }
+      if (attemptsResetHeader !== null && Number.isFinite(attemptsReset) && attemptsReset > 0) {
+        error.authAttemptsResetSeconds = Math.ceil(attemptsReset);
+      }
+      throw error;
+    }
     return data;
   } catch (e) {
     if (e && e.name === "AbortError") {
@@ -136,6 +162,15 @@ async function getAdminIntegrations() {
 // --- Super admin settings (activation + masked credentials) ---
 async function getSuperAdminIntegrations() {
   return api("/api/super-admin/settings/integrations");
+}
+async function getSuperAdminAuthRateLimit() {
+  return api("/api/super-admin/settings/login-protection");
+}
+async function updateSuperAdminAuthRateLimit(fields) {
+  return api("/api/super-admin/settings/login-protection", {
+    method: "PUT",
+    body: JSON.stringify(fields),
+  });
 }
 async function updateSuperAdminIntegration(key, fields) {
   return api(`/api/super-admin/settings/integrations/${encodeURIComponent(key)}`, {

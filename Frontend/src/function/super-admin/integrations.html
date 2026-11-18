@@ -27,6 +27,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /><path d="M12 7v5l3 2" /></svg>
           <span>Activity</span>
         </a>
+        <a href="#loginProtection">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 20 6v5c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-3Z" /><path d="M9 12h6" /></svg>
+          <span>Login protection</span>
+        </a>
         <a href="#security">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.4-2.9 8.2-7 10-4.1-1.8-7-5.6-7-10V6l7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
           <span>Security</span>
@@ -61,6 +65,28 @@
         <p class="dash-msg" id="msg" role="status">Loading integrations…</p>
 
         <p class="settings-note">You own each integration’s on/off switch and its credentials. Secret values are encrypted at rest and only a masked hint is shown; saving a value also writes the matching <code>*_OVERRIDE</code> field in <code>server/.env</code>. A value you add or replace is sent to its provider for a live check first — a key the provider rejects is never saved, and the reason appears under the field. An integration can only be turned on when its required credentials are present. Adding, replacing or clearing a credential also asks for the current 6-digit code from your authenticator app — pair one in the Security panel first.</p>
+
+        <section class="security-panel" id="loginProtection" aria-labelledby="loginProtectionTitle">
+          <div class="security-panel-head">
+            <div>
+              <h2 id="loginProtectionTitle">Login attempt limit</h2>
+              <p>Set how many unsuccessful authentication requests an IP can make and how long its limit lasts. Settings apply immediately; active IP counters are preserved when you save.</p>
+            </div>
+          </div>
+          <form id="loginProtectionForm" class="login-protection-form" novalidate>
+            <div class="login-protection-field">
+              <label for="authMaxAttempts">Maximum failed attempts</label>
+              <input id="authMaxAttempts" name="maxAttempts" type="number" min="1" max="100" step="1" required />
+            </div>
+            <div class="login-protection-field">
+              <label for="authWindowMinutes">Lockout window (minutes)</label>
+              <input id="authWindowMinutes" name="windowMinutes" type="number" min="1" max="1440" step="1" required />
+            </div>
+            <button type="submit" class="btn btn-solid" id="saveLoginProtection">Save login protection</button>
+          </form>
+          <p class="security-note">The limit is shared by failed login and other authentication requests from the same IP. Successful requests do not count. Allowed range: 1–100 attempts and 1–1,440 minutes.</p>
+          <p class="security-msg" id="loginProtectionMsg" role="status"></p>
+        </section>
 
         <div class="api-reset">
           <div class="api-reset-copy">

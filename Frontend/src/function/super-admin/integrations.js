@@ -464,6 +464,79 @@
     }
   }
 
+  const loginProtectionForm = document.getElementById("loginProtectionForm");
+  const authMaxAttempts = document.getElementById("authMaxAttempts");
+  const authWindowMinutes = document.getElementById("authWindowMinutes");
+  const loginProtectionMsg = document.getElementById("loginProtectionMsg");
+  const saveLoginProtection = document.getElementById("saveLoginProtection");
+
+  function setLoginProtectionMsg(text, kind = "") {
+    if (!loginProtectionMsg) return;
+    loginProtectionMsg.textContent = text || "";
+    loginProtectionMsg.className = `security-msg${kind ? ` is-${kind}` : ""}`;
+  }
+
+  async function loadLoginProtection() {
+    try {
+      const data = await getSuperAdminAuthRateLimit();
+      const settings = data && data.authRateLimit;
+      if (!settings) throw new Error("Login protection settings were not returned.");
+      authMaxAttempts.value = String(settings.maxAttempts);
+      authWindowMinutes.value = String(settings.windowMinutes);
+      setLoginProtectionMsg(
+        settings.enabled
+          ? "Current limits are active."
+          : "Rate limiting is disabled by the server environment; these values will apply when it is enabled."
+      );
+    } catch (e) {
+      setLoginProtectionMsg(e.message, "err");
+      dashToast(e.message, "err");
+    }
+  }
+
+  async function saveLoginProtectionSettings(event) {
+    event.preventDefault();
+    const maxAttempts = Number(authMaxAttempts.value);
+    const windowMinutes = Number(authWindowMinutes.value);
+    if (
+      !Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 100 ||
+      !Number.isInteger(windowMinutes) || windowMinutes < 1 || windowMinutes > 1440
+    ) {
+      setLoginProtectionMsg(
+        "Enter 1–100 attempts and a 1–1,440 minute window.",
+        "err"
+      );
+      return;
+    }
+
+    saveLoginProtection.disabled = true;
+    setLoginProtectionMsg("Saving login protection settings…");
+    try {
+      const data = await updateSuperAdminAuthRateLimit({
+        maxAttempts,
+        windowMinutes,
+      });
+      const settings = data && data.authRateLimit;
+      if (!settings) throw new Error("Updated login protection settings were not returned.");
+      authMaxAttempts.value = String(settings.maxAttempts);
+      authWindowMinutes.value = String(settings.windowMinutes);
+      setLoginProtectionMsg(
+        settings.enabled
+          ? `Saved: ${settings.maxAttempts} failed attempts per ${settings.windowMinutes} minutes.`
+          : "Saved, but rate limiting is disabled by the server environment.",
+        "ok"
+      );
+      dashToast("Login protection settings saved.", "ok");
+    } catch (e) {
+      setLoginProtectionMsg(e.message, "err");
+      dashToast(e.message, "err");
+    } finally {
+      saveLoginProtection.disabled = false;
+    }
+  }
+
+  loginProtectionForm?.addEventListener("submit", saveLoginProtectionSettings);
+
   // --- Authenticator app (2FA) ---
   const tfaStatus = document.getElementById("tfaStatus");
   const tfaNote = document.getElementById("tfaNote");
@@ -748,6 +821,7 @@
       dashRenderAvatar("avatar", { name: displayName, avatarUrl: me.avatarUrl, fallbackLetter: "S" });
       setMsg("");
       await load();
+      await loadLoginProtection();
       await loadSecurity();
     } catch (e) {
       setMsg(`${e.message} - redirecting to login.`, "err");

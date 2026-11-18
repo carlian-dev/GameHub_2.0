@@ -647,6 +647,40 @@
   box-shadow: 0 0 0 3px var(--d-green-glow);
 }
 .security-form .btn { min-height: 40px; padding: 0 16px; font-size: 13px; }
+.login-protection-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 14px;
+  max-width: 620px;
+  margin-top: 16px;
+}
+.login-protection-field { display: grid; gap: 7px; min-width: 0; }
+.login-protection-field label {
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--d-muted);
+}
+.login-protection-field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-sm);
+  background: var(--d-input-bg);
+  color: var(--d-text);
+  font: inherit;
+  font-size: 15px;
+}
+.login-protection-field input:focus {
+  outline: none;
+  border-color: var(--d-green-soft);
+  box-shadow: 0 0 0 3px var(--d-green-glow);
+}
+.login-protection-form > .btn { min-height: 42px; }
 .security-msg {
   min-height: 18px;
   margin: 12px 0 0;
@@ -684,4 +718,5 @@
     gap: 4px;
     align-items: start;
   }
+  .login-protection-form { grid-template-columns: 1fr; }
 }

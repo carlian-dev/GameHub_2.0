@@ -197,7 +197,7 @@ GameHub_2.0/
 | `TRUST_PROXY` | `0`, `1`, or hop count when behind a proxy |
 | `RATE_LIMIT_ENABLED` | `0` disables all request rate limiting (default on) |
 | `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` | Global per-IP `/api` budget (default 300 requests per 60s) |
-| `AUTH_RATE_LIMIT_WINDOW_MS` / `AUTH_RATE_LIMIT_MAX` | Failed login/authenticator/register/invite attempts (default 10 per 15 min) |
+| `AUTH_RATE_LIMIT_WINDOW_MS` / `AUTH_RATE_LIMIT_MAX` | Default failed auth limit (10 per 15 min); Super Admin > Login protection can override it at runtime, per IP |
 | `WRITE_RATE_LIMIT_MAX` | POST/PUT/PATCH/DELETE budget per user/IP per `RATE_LIMIT_WINDOW_MS` (default 60) |
 | `RESERVATION_RATE_LIMIT_WINDOW_MS` / `RESERVATION_RATE_LIMIT_MAX` | Guest reservation create/lookup/cancel per IP (default 10 per 10 min) |
 | `MAIL_DRY_RUN` | `1` to log instead of sending mail (tests) |

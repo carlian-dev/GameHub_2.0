@@ -1282,7 +1282,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .staff-lock svg { width: 13px; height: 13px; }
 .field { display: block; margin-bottom: 18px; }
-.field > span {
+.field > span, .field > label {
   display: block;
   font-size: 10px;
   font-weight: 600;
@@ -1290,21 +1290,6 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   text-transform: uppercase;
   color: var(--cream-dim);
   margin-bottom: 9px;
-}
-.field-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 9px;
-}
-.field-label-row > span {
-  display: block;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--cream-dim);
-  margin-bottom: 0;
 }
 .auth-alt-link {
   font-size: 11px;
@@ -1318,6 +1303,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .auth-alt-link:hover {
   color: var(--brass-bright);
   text-decoration: underline;
+}
+.auth-alt-link-below {
+  display: block;
+  width: fit-content;
+  margin: 8px 0 0 auto;
 }
 .auth-back-row {
   text-align: center;
@@ -1399,6 +1389,28 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 #msg { min-height: 20px; margin-top: 10px; font-size: 12.5px; line-height: 1.55; }
 #msg.ok { color: var(--live-on-night); }
 #msg.err { color: var(--danger-on-night); }
+.login-attempts {
+  margin: 4px 0 0;
+  color: var(--brass-bright);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+.login-attempts.is-exhausted { color: var(--danger-on-night); }
+.login-cooldown {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(216, 182, 92, 0.3);
+  border-radius: var(--radius-sm);
+  background: rgba(216, 182, 92, 0.08);
+  color: var(--brass-bright);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+#loginCooldown[hidden] { display: none; }
+#go:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .auth-divider {
   display: flex;

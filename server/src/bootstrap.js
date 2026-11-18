@@ -6,6 +6,10 @@ import { env, persistEnvValue } from "./config/env.js";
 import { getDb, getMongoClient } from "./config/db.js";
 import { setupRoutes } from "./app.js";
 import { authenticate } from "./middleware/auth.js";
+import {
+  configureAuthRateLimit,
+  resolveRateLimitConfig,
+} from "./middleware/rateLimit.js";
 
 // Models
 import { healthModel } from "./models/health.model.js";
@@ -125,6 +129,7 @@ export async function wireApp() {
   // Settings > API proves every new credential against the service that
   // issues it before the settings document is written.
   const credentialValidator = integrationValidationService();
+  const rateLimitConfig = resolveRateLimitConfig();
   const settingsSvc = settingsService({
     settingsModel: models.settings,
     db,
@@ -148,7 +153,11 @@ export async function wireApp() {
     // Settings > API mirrors admin credentials into server/.env *_OVERRIDE
     // fields; an empty field falls back to the base env value.
     persistEnvValue,
+    defaultAuthRateLimit: rateLimitConfig.auth,
+    configureAuthRateLimit,
+    authRateLimitEnabled: rateLimitConfig.enabled,
   });
+  await settingsSvc.initializeAuthRateLimit();
   const services = {
     health: healthService({ healthModel: models.health, dbName: env.MONGODB_DB }),
     settings: settingsSvc,

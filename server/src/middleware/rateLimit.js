@@ -1,10 +1,13 @@
 // Rate limiting using express-rate-limit (npm).
 //
-// Twelve limiters cover the shapes of traffic this API sees:
+// Thirteen limiters cover the shapes of traffic this API sees:
 //   api               every /api request, per IP (runs before the body parser)
 //   auth              login / authenticator changes / register / invite lookup
 //                     (IP-based; unsuccessful requests count)
 //   writes            POST/PUT/PATCH/DELETE (per user, otherwise per IP)
+//   actions           one mutation per method+path+payload per short window,
+//                     so a double-clicked button cannot fire the same action
+//                     twice
 //   reservations      public booking create/lookup/cancel (guests only)
 //   staffLists        reservation/session/transaction list reads
 //   reports           admin income reports (daily/monthly/income)
@@ -36,6 +39,8 @@ const FALLBACK = {
   authWindowMs: 15 * 60 * 1000,
   authLimit: 10,
   writeLimit: 60,
+  actionWindowMs: 1000,
+  actionLimit: 1,
   reservationWindowMs: 10 * 60 * 1000,
   reservationLimit: 10,
   staffListWindowMs: 60 * 1000,
@@ -76,6 +81,37 @@ function clientKey(name) {
 
 function ipOnlyKey(name) {
   return (req) => `${name}:ip:${ipKeyGenerator(req.ip)}`;
+}
+
+// Per-action key: the same user/IP may not repeat one method+path+payload
+// faster than the configured cooldown. The payload is part of the key so two
+// genuinely different actions on one collection endpoint (e.g. adding two
+// different menu items) are not treated as a double-click.
+const actionClientKey = clientKey("actions");
+function bodyFingerprint(body) {
+  if (!body || typeof body !== "object") return "";
+  let text;
+  try {
+    text = JSON.stringify(body);
+  } catch {
+    return "";
+  }
+  // Huge payloads (profile avatars) are rare; let them share one bucket
+  // rather than hashing megabytes on every request.
+  if (text.length > 2048) return "large";
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function actionKey(req) {
+  const fingerprint = bodyFingerprint(req.body);
+  return `${actionClientKey(req)}:${req.method}:${req.path}${
+    fingerprint ? `:${fingerprint}` : ""
+  }`;
 }
 
 class DynamicWindowStore {
@@ -188,6 +224,13 @@ export function resolveRateLimitConfig(source = env) {
       windowMs: positiveInt(source.RATE_LIMIT_WINDOW_MS, FALLBACK.apiWindowMs),
       limit: positiveInt(source.WRITE_RATE_LIMIT_MAX, FALLBACK.writeLimit),
     },
+    actions: {
+      windowMs: positiveInt(
+        source.ACTION_RATE_LIMIT_WINDOW_MS,
+        FALLBACK.actionWindowMs
+      ),
+      limit: positiveInt(source.ACTION_RATE_LIMIT_MAX, FALLBACK.actionLimit),
+    },
     reservations: {
       windowMs: positiveInt(
         source.RESERVATION_RATE_LIMIT_WINDOW_MS,
@@ -296,6 +339,7 @@ export function createRateLimiters(config = resolveRateLimitConfig()) {
       api: passThrough,
       auth: passThrough,
       writes: passThrough,
+      actions: passThrough,
       reservations: passThrough,
       staffLists: passThrough,
       reports: passThrough,
@@ -333,6 +377,12 @@ export function createRateLimiters(config = resolveRateLimitConfig()) {
     writes: build("writes", config.writes, {
       // Reads are covered by the broader `api` limiter.
       skip: (req) => !WRITE_METHODS.has(req.method),
+    }),
+    // Cooldown after a mutation: a mashed button gets a 429 with Retry-After
+    // instead of executing twice. Reads are skipped (search/polling stay fast).
+    actions: build("actions", config.actions, {
+      skip: (req) => !WRITE_METHODS.has(req.method),
+      keyGenerator: actionKey,
     }),
     reservations: build("reservations", config.reservations, {
       // Signed-in staff use the same guest routes for reference lookups; brute

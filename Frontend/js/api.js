@@ -9,7 +9,111 @@
 // A hung backend/Atlas connection must not leave a page on "Loading…" forever.
 const API_TIMEOUT_MS = 15000;
 
-async function api(path, options = {}) {
+// ---- Global per-action rate limit (client side) ----
+// Every mutation is counted per exact action (method + path + payload). After
+// ACTION_CLICK_LIMIT completions, the same action waits ACTION_COOLDOWN_SECONDS.
+// Two identical mutations already in flight share one request. This is the
+// client half of the server's `actions` limiter: mashing a button (or a page
+// that forgot button.disabled) cannot book/pay twice. The server still
+// enforces the real limit; this only stops the extra request from leaving the
+// browser. `cooldownMs: 0` opts a call out when a flow must repeat itself.
+// ---- CUSTOMIZE THE BUTTON RATE LIMIT HERE ----
+// How many identical clicks/requests are allowed before the cooldown starts.
+const ACTION_CLICK_LIMIT = 5;
+// How many seconds the action stays locked after that many clicks.
+const ACTION_COOLDOWN_SECONDS = 5;
+// -----------------------------------------------
+
+const ACTION_COOLDOWN_MS =
+  Math.max(0, Number(ACTION_COOLDOWN_SECONDS) || 0) * 1000;
+const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const ACTION_PRUNE_MS = 60 * 1000;
+const inFlightActions = new Map();
+const actionHits = new Map(); // key -> completion timestamps inside the window
+const actionCooldowns = new Map(); // key -> explicit lockout from a server 429
+let actionSweep = 0;
+
+// Small non-cryptographic hash so the cooldown is per exact payload: clicking
+// "+1" twice is the same action, while adding two different products is not.
+function hashPayload(text) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function actionKey(method, path, body) {
+  let payload = "";
+  if (typeof body === "string") payload = body;
+  else if (body != null && typeof body === "object") {
+    try {
+      payload = JSON.stringify(body);
+    } catch {
+      payload = String(body);
+    }
+  }
+  return `${method} ${path} ${payload.length}:${hashPayload(payload)}`;
+}
+
+function cooldownError(remainingMs) {
+  const seconds = Math.max(1, Math.ceil(remainingMs / 1000));
+  const error = new Error(
+    `Please wait ${seconds} second${seconds === 1 ? "" : "s"} before using this again.`
+  );
+  error.status = 429;
+  error.retryAfterSeconds = seconds;
+  error.cooldown = true;
+  return error;
+}
+
+function pruneActionState(now) {
+  if (now - actionSweep < ACTION_PRUNE_MS) return;
+  actionSweep = now;
+  for (const [key, hits] of actionHits) {
+    const fresh = hits.filter((stamp) => now - stamp < ACTION_COOLDOWN_MS);
+    if (fresh.length) actionHits.set(key, fresh);
+    else actionHits.delete(key);
+  }
+  for (const [key, until] of actionCooldowns) {
+    if (until <= now) actionCooldowns.delete(key);
+  }
+}
+
+// Returns how long this action must still wait, or 0 when it may run now.
+function actionWaitMs(key, now) {
+  let wait = 0;
+  const until = actionCooldowns.get(key) || 0;
+  if (until > now) wait = until - now;
+  if (ACTION_COOLDOWN_MS > 0) {
+    const hits = actionHits.get(key) || [];
+    // Clicks older than the cooldown no longer count toward the burst.
+    while (hits.length && now - hits[0] >= ACTION_COOLDOWN_MS) hits.shift();
+    const limit = Math.max(1, Math.floor(Number(ACTION_CLICK_LIMIT) || 1));
+    if (hits.length >= limit) {
+      // The cooldown starts after the LAST allowed click, not the first.
+      const last = hits[hits.length - 1];
+      wait = Math.max(wait, ACTION_COOLDOWN_MS - (now - last));
+    }
+  }
+  return Math.max(0, wait);
+}
+
+function recordAction(key) {
+  if (!key || ACTION_COOLDOWN_MS <= 0) return;
+  const hits = actionHits.get(key) || [];
+  hits.push(Date.now());
+  actionHits.set(key, hits);
+}
+
+function startActionCooldown(key, ms) {
+  if (!key || !Number.isFinite(ms) || ms <= 0) return;
+  const until = Date.now() + ms;
+  if (until > (actionCooldowns.get(key) || 0)) actionCooldowns.set(key, until);
+}
+
+async function performApiRequest(path, options = {}) {
   const {
     responseType = "json",
     timeoutMs = API_TIMEOUT_MS,
@@ -82,6 +186,49 @@ async function api(path, options = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function api(path, options = {}) {
+  const { cooldownMs, ...requestOptions } = options;
+  // `cooldownMs: 0` opts this one call out of the client-side guard.
+  const skipCooldown = cooldownMs === 0;
+  const method = String(requestOptions.method || "GET").toUpperCase();
+  const isMutation = MUTATION_METHODS.has(method);
+  const key = isMutation ? actionKey(method, path, requestOptions.body) : "";
+
+  if (isMutation && !skipCooldown) {
+    // A second click while the first request is still moving joins it instead
+    // of sending a duplicate (both callers receive the same result).
+    const pending = inFlightActions.get(key);
+    if (pending) return pending;
+    const now = Date.now();
+    pruneActionState(now);
+    const wait = actionWaitMs(key, now);
+    if (wait > 0) throw cooldownError(wait);
+  }
+
+  const request = performApiRequest(path, requestOptions);
+  if (!isMutation || skipCooldown) return request;
+
+  inFlightActions.set(key, request);
+  const clear = () => {
+    if (inFlightActions.get(key) === request) inFlightActions.delete(key);
+  };
+  const finish = () => {
+    recordAction(key);
+    clear();
+  };
+  request.then(
+    finish,
+    (error) => {
+      // A server-side 429 wins: respect its Retry-After for this action.
+      if (error && error.status === 429 && error.retryAfterSeconds > 0) {
+        startActionCooldown(key, error.retryAfterSeconds * 1000);
+      }
+      finish();
+    }
+  );
+  return request;
 }
 
 // Pull a filename out of `Content-Disposition: attachment; filename="..."`.

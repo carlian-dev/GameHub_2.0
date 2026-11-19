@@ -30,6 +30,12 @@ export default function apiRoutes({ controllers, authenticate, featureAccess }) 
   // does not share a bucket; anonymous traffic falls back to IP keying.
   router.use(rateLimiters.writes);
 
+  // Per-action cooldown (double-click/mash guard): the same user/IP may repeat
+  // one method+path+payload only after ACTION_RATE_LIMIT_WINDOW_MS. Every
+  // mutation route inherits it, so a page that forgets to disable its button is
+  // still protected. Reads keep their own budgets below.
+  router.use(rateLimiters.actions);
+
   // Least privilege for super admins: their token only unlocks /me, /logout,
   // and the super-admin integration routes. Public routes ignore the session,
   // so landing-page config keeps working. Operational /admin and /cashier

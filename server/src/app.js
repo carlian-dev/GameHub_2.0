@@ -1,10 +1,9 @@
 import express from "express";
 import cors from "cors";
-import session from "express-session";
-import MongoStore from "connect-mongo";
 import { validateEnv, env } from "./config/env.js";
 import { notFound } from "./middleware/notFound.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { rateLimiters } from "./middleware/rateLimit.js";
 import apiRoutes from "./routes/index.js";
 
 validateEnv();
@@ -24,39 +23,35 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    // Let the frontend read Retry-After on a 429 if it wants to show a wait,
+    // and the CSV export filename from its blob download.
+    exposedHeaders: [
+      "Retry-After",
+      "Content-Disposition",
+      "X-Auth-Attempts-Limit",
+      "X-Auth-Attempts-Remaining",
+      "X-Auth-Attempts-Reset",
+    ],
   })
 );
 
+// The broad /api budget runs before the JSON body parser on purpose: a flood
+// of malformed bodies must still be throttled, and it is cheap to reject
+// before parsing. Anonymous and signed-in traffic share this per-IP budget.
+app.use("/api", rateLimiters.api);
+
 // JSON only: the frontend always sends application/json.
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 // Normalize missing bodies to {} so handlers can destructure safely.
 app.use((req, res, next) => {
   if (req.body == null) req.body = {};
   next();
 });
 
-app.use(
-  session({
-    name: env.AUTH_COOKIE_NAME,
-    secret: env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    rolling: true,
-    store: MongoStore.create({
-      mongoUrl: env.MONGODB_URI,
-      dbName: env.MONGODB_DB,
-      collectionName: "authSessions", // NOT "sessions"
-      ttl: env.SESSION_TTL_SECONDS,
-      autoRemove: "native",
-    }),
-    cookie: {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: env.NODE_ENV === "production",
-      path: "/",
-    },
-  })
-);
+// Authentication is stateless: the JWT is read from an HttpOnly cookie inside
+// the API router, where the user document can verify tokenVersion/status. The
+// write budget is mounted there too so it can key signed-in traffic by user id
+// instead of sharing one bucket per cafe IP.
 
 // Root service probe (divergence #6: service string says Node).
 app.get("/", (req, res) => {
@@ -69,8 +64,8 @@ app.get("/", (req, res) => {
 });
 
 // Mount API routes once the DB is wired (called from server.js after getDb()).
-export function setupRoutes(controllers) {
-  const routes = apiRoutes({ controllers });
+export function setupRoutes(controllers, { authenticate, featureAccess } = {}) {
+  const routes = apiRoutes({ controllers, authenticate, featureAccess });
   app.use("/api", routes);
 
   // notFound and errorHandler must be mounted AFTER /api routes so they

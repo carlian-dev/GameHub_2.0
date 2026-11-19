@@ -3,7 +3,7 @@
   "route": "PUT /api/admin/cashiers/{id} (admin)",
   "method": "PUT",
   "path": "/api/admin/cashiers/<dyn>",
-  "body": { "displayName": "Updated Name", "schedule": "09:00 - 17:00" },
+  "body": { "displayName": "Updated Name", "schedule": "09:00 - 17:00", "version": "<dyn>" },
   "expect": {
     "status": 200,
     "body": {
@@ -20,7 +20,8 @@
         "displayName": "Updated Name",
         "emailVerified": true,
         "schedule": "09:00 - 17:00",
-        "createdAt": "<dyn>"
+        "createdAt": "<dyn>",
+        "version": "<dyn>"
       }
     }
   }

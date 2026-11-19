@@ -4,24 +4,67 @@
 // fetch() calls in one place. Example: getHealth() asks "GET http://localhost:8000/api/health"
 // and returns {ok:true, db:"gamehub_2_0", ...}. To add login later, add getUsers(), login(), etc. here.
 // Purpose: fetch wrapper. Frontend never talks to MongoDB directly, only to the Express Backend.
-// NOTE: credentials:"include" sends the session cookie, without it login
-// would succeed but the next request would look like a stranger (401).
+// NOTE: credentials:"include" sends the HttpOnly JWT auth cookie, without it
+// login would succeed but the next request would look like a stranger (401).
 // A hung backend/Atlas connection must not leave a page on "Loading…" forever.
 const API_TIMEOUT_MS = 15000;
 
 async function api(path, options = {}) {
+  const {
+    responseType = "json",
+    timeoutMs = API_TIMEOUT_MS,
+    ...fetchOptions
+  } = options;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-      ...options,
-      signal: options.signal || controller.signal,
+      headers: { "Content-Type": "application/json", ...(fetchOptions.headers || {}) },
+      ...fetchOptions,
+      signal: fetchOptions.signal || controller.signal,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    return data;
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const error = new Error(data.error || `HTTP ${res.status}`);
+      error.status = res.status;
+      // Optimistic-concurrency conflict: the server includes the revision the
+      // account moved to. Callers can show it or refresh their cached copy.
+      if (Number.isInteger(data.currentVersion)) {
+        error.currentVersion = data.currentVersion;
+      }
+      const retryAfter = Number(res.headers.get("Retry-After"));
+      error.retryAfterSeconds =
+        Number.isFinite(retryAfter) && retryAfter > 0 ? Math.ceil(retryAfter) : 0;
+      const attemptsLimitHeader = res.headers.get("X-Auth-Attempts-Limit");
+      const attemptsRemainingHeader = res.headers.get("X-Auth-Attempts-Remaining");
+      const attemptsResetHeader = res.headers.get("X-Auth-Attempts-Reset");
+      const attemptsLimit = Number(attemptsLimitHeader);
+      const attemptsRemaining = Number(attemptsRemainingHeader);
+      const attemptsReset = Number(attemptsResetHeader);
+      if (Number.isInteger(attemptsLimit) && attemptsLimit > 0) {
+        error.authAttemptsLimit = attemptsLimit;
+      }
+      if (
+        attemptsRemainingHeader !== null &&
+        Number.isInteger(attemptsRemaining) &&
+        attemptsRemaining >= 0
+      ) {
+        error.authAttemptsRemaining = attemptsRemaining;
+      }
+      if (attemptsResetHeader !== null && Number.isFinite(attemptsReset) && attemptsReset > 0) {
+        error.authAttemptsResetSeconds = Math.ceil(attemptsReset);
+      }
+      throw error;
+    }
+    // File responses (CSV export) ask for a blob; JSON stays the default.
+    if (responseType === "blob") {
+      return {
+        blob: await res.blob(),
+        filename: attachmentFilename(res.headers.get("Content-Disposition")),
+      };
+    }
+    return await res.json().catch(() => ({}));
   } catch (e) {
     if (e && e.name === "AbortError") {
       throw new Error("The server took too long to respond. Please try again.");
@@ -39,6 +82,22 @@ async function api(path, options = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Pull a filename out of `Content-Disposition: attachment; filename="..."`.
+// The server sends a quoted ASCII name; the UTF-8 form is handled too.
+function attachmentFilename(header) {
+  if (!header) return "";
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf8) {
+    try {
+      return decodeURIComponent(utf8[1]);
+    } catch {
+      return "";
+    }
+  }
+  const match = /filename="?([^";]+)"?/i.exec(header);
+  return match ? match[1].trim() : "";
 }
 
 async function getHealth() {
@@ -73,16 +132,31 @@ async function listInvites() {
 async function revokeInvite(id) {
   return api(`/api/admin/invitations/${id}/revoke`, { method: "POST" });
 }
-async function login(email, password) {
+async function login(email, password, recaptchaToken = "") {
   return api("/api/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, recaptchaToken }),
   });
 }
 async function loginWithGoogle(idToken) {
   return api("/api/auth/google", {
     method: "POST",
     body: JSON.stringify({ idToken }),
+  });
+}
+async function forgotPassword(email, recaptchaToken = "") {
+  return api("/api/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email, recaptchaToken }),
+  });
+}
+async function checkResetToken(token) {
+  return api(`/api/reset-password/${encodeURIComponent(token)}`);
+}
+async function resetPassword(token, password, recaptchaToken = "") {
+  return api("/api/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password, recaptchaToken }),
   });
 }
 async function getAppConfig() {
@@ -92,16 +166,156 @@ async function logout() {
   return api("/api/logout", { method: "POST" });
 }
 async function getMe() {
-  return api("/api/me");
+  const me = await api("/api/me");
+  // Super-admin feature matrix: hide switched-off nav entries and leave a
+  // switched-off page before it calls an API that will refuse it.
+  if (!applyFeatureAccess(me)) return new Promise(() => {});
+  return me;
 }
-// --- Admin settings (masked credentials; server is authoritative) ---
+// Self-service profile: display name and profile picture only (email stays
+// read-only). Include the `version` from getMe() so a stale save is a 409.
+async function updateMyProfile(payload) {
+  const body = typeof payload === "string" ? { displayName: payload } : payload;
+  return api("/api/me/profile", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// Landing page for a staff role. Every protected page sits one directory under
+// src/function/, so this relative path works from admin/, cashiers/, tables/,
+// auth/, and super-admin/ pages alike.
+function staffHome(role) {
+  if (role === "super_admin") return "../super-admin/integrations.html";
+  if (role === "admin") return "../admin/admin-dashboard.html";
+  if (role === "cashier") return "../cashiers/cashier-dashboard.html";
+  return "../auth/login.html";
+}
+
+// --- Super admin feature matrix (RBAC) on the client ---
+// Pages that belong to a switchable feature. `GET /api/me` returns the enabled
+// keys; a disabled one is removed from the sidebar and its page is left for
+// the role's dashboard. The server enforces the same matrix, so this is UX
+// only — never the security boundary.
+const FEATURE_PAGES = {
+  "/admin/cashiers.html": "staff",
+  "/tables/tables.html": "tables",
+  "/tables/rates.html": "tables",
+  "/tables/sessions.html": "sessions",
+  "/admin/menu.html": "menu",
+  "/admin/transactions.html": "transactions",
+  "/admin/activity.html": "activity",
+  "/cashiers/cashier-sessions.html": "sessions",
+  "/cashiers/cashier-reservations.html": "reservations",
+  "/cashiers/cashier-tables.html": "tables",
+  "/cashiers/cashier-menu.html": "menu",
+};
+
+function featureForPathname(pathname) {
+  const clean = String(pathname || "").replace(/\/+$/, "");
+  for (const [suffix, key] of Object.entries(FEATURE_PAGES)) {
+    if (clean.endsWith(suffix)) return key;
+  }
+  return "";
+}
+
+function applyFeatureAccess(me) {
+  if (!me || !Array.isArray(me.features)) return true;
+  const allowed = new Set(me.features);
+
+  const here = featureForPathname(location.pathname);
+  if (here && !allowed.has(here)) {
+    location.replace(staffHome(me.role));
+    return false;
+  }
+
+  let removed = false;
+  document.querySelectorAll(".dash-nav a[href]").forEach((link) => {
+    let feature = "";
+    try {
+      feature = featureForPathname(new URL(link.href, location.href).pathname);
+    } catch {
+      return;
+    }
+    if (feature && !allowed.has(feature)) {
+      link.remove();
+      removed = true;
+    }
+  });
+  // The sliding nav pill measures link offsets; re-measure after removal.
+  if (removed) window.dispatchEvent(new Event("resize"));
+  return true;
+}
+
+// --- Admin settings (read-only: integration on/off state only) ---
 async function getAdminIntegrations() {
   return api("/api/admin/settings/integrations");
 }
-async function updateAdminIntegration(key, fields) {
-  return api(`/api/admin/settings/integrations/${encodeURIComponent(key)}`, {
+
+// --- Super admin settings (activation + masked credentials) ---
+async function getSuperAdminIntegrations() {
+  return api("/api/super-admin/settings/integrations");
+}
+async function getSuperAdminAuthRateLimit() {
+  return api("/api/super-admin/settings/login-protection");
+}
+async function updateSuperAdminAuthRateLimit(fields) {
+  return api("/api/super-admin/settings/login-protection", {
     method: "PUT",
     body: JSON.stringify(fields),
+  });
+}
+async function updateSuperAdminIntegration(key, fields) {
+  return api(`/api/super-admin/settings/integrations/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify(fields || {}),
+  });
+}
+/** Clear every saved API key/override and fall back to server/.env defaults. */
+async function resetSuperAdminIntegrations(code) {
+  return api("/api/super-admin/settings/integrations/reset", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+// --- Super admin feature access (RBAC matrix) ---
+async function getSuperAdminFeatureAccess() {
+  return api("/api/super-admin/settings/feature-access");
+}
+async function updateSuperAdminFeatureAccess(features) {
+  return api("/api/super-admin/settings/feature-access", {
+    method: "PUT",
+    body: JSON.stringify({ features: features || {} }),
+  });
+}
+
+// --- Super admin authenticator app (TOTP) ---
+async function getSuperAdminTwoFactor() {
+  return api("/api/super-admin/2fa");
+}
+async function setupSuperAdminTwoFactor(code = "", label = "") {
+  return api("/api/super-admin/2fa/setup", {
+    method: "POST",
+    body: JSON.stringify({ code, label }),
+  });
+}
+async function enableSuperAdminTwoFactor(code) {
+  return api("/api/super-admin/2fa/enable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+async function removeSuperAdminTwoFactorDevice(id, code) {
+  return api(`/api/super-admin/2fa/devices/${encodeURIComponent(id)}/remove`, {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+async function disableSuperAdminTwoFactor(code) {
+  return api("/api/super-admin/2fa/disable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
   });
 }
 
@@ -120,6 +334,25 @@ async function updateCashier(id, fields) {
 }
 async function unarchiveCashier(id) {
   return api(`/api/admin/cashiers/${id}/unarchive`, { method: "POST" });
+}
+
+// --- Admin activity log (AD-026): sign-ins, cashier/session/payment actions ---
+async function listActivityLogs({ actorId = "", action = "", from = "", to = "", limit = 200 } = {}) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (actorId) q.set("actorId", actorId);
+  if (action) q.set("action", action);
+  if (from) q.set("from", from);
+  if (to) q.set("to", to);
+  return api(`/api/admin/activity-logs?${q.toString()}`);
+}
+
+// --- Personal activity log (all roles: cashier, super-admin, admin) ---
+async function listMyActivityLogs({ action = "", from = "", to = "", limit = 200 } = {}) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (action) q.set("action", action);
+  if (from) q.set("from", from);
+  if (to) q.set("to", to);
+  return api(`/api/me/activity-logs?${q.toString()}`);
 }
 
 // --- Sprint 02: tables (AD-008..AD-013) + rates (AD-016/017) + sessions view (AD-014) ---
@@ -290,16 +523,22 @@ async function getIncomeReport(from, to) {
   const qs = q.toString() ? `?${q.toString()}` : "";
   return api(`/api/admin/reports/income${qs}`);
 }
-// Export stays URL-based (CSV download, not JSON): build
-// `${API_BASE_URL}/api/admin/reports/export?format=csv&from&to&method`
-// and navigate via anchor with credentials:include (see transactions.js).
-function exportReportUrl({ from = "", to = "", month = "", method = "all" } = {}) {
+// Export is fetched as a blob (not navigated to via anchor) so the dashboard
+// can show a JSON error as a toast — the export budget returns 429 once the
+// per-admin limit is spent. The CSV can take longer than a normal API call.
+function exportReportPath({ from = "", to = "", month = "", method = "all" } = {}) {
   const q = new URLSearchParams({ format: "csv" });
   if (from) q.set("from", from);
   if (to) q.set("to", to);
   if (month) q.set("month", month);
   if (method && method !== "all") q.set("method", method);
-  return `${API_BASE_URL}/api/admin/reports/export?${q.toString()}`;
+  return `/api/admin/reports/export?${q.toString()}`;
+}
+async function downloadReportExport(params = {}) {
+  return api(exportReportPath(params), {
+    responseType: "blob",
+    timeoutMs: 60000,
+  });
 }
 
 // --- Customer reservations (CU-004..CU-014, guest, no login) ---
@@ -331,4 +570,8 @@ async function acceptReservation(ref) {
 }
 async function rejectReservation(ref) {
   return api(`/api/cashier/reservations/${encodeURIComponent(ref)}/reject`, { method: "POST" });
+}
+// Check in an accepted reservation: starts a session, marks the table occupied.
+async function checkInReservation(ref) {
+  return api(`/api/cashier/reservations/${encodeURIComponent(ref)}/check-in`, { method: "POST" });
 }

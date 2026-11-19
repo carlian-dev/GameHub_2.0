@@ -79,6 +79,7 @@
           <span>Confirm password</span>
           <input id="confirm" name="confirm" type="password" autocomplete="new-password" required />
         </label>
+        <div class="recaptcha-slot" id="recaptchaSlot" data-recaptcha-theme="dark" hidden></div>
         <button id="go" type="submit" class="btn btn-solid btn-block">Create account</button>
       </form>
       <div id="msg" role="status"></div>
@@ -91,6 +92,7 @@
   </main>
   <script src="../../../js/config.js"></script>
   <script src="../../../js/api.js"></script>
+  <script src="../../../js/recaptcha.js"></script>
   <script src="./register.js"></script>
 </body>
 </html>

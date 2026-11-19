@@ -13,6 +13,7 @@ export function tableService({ tableModel, db }) {
     status: doc.status ?? "available",
     archived: !!doc.archived,
     createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : null,
+    version: Number(doc.version || 1),
   });
 
   return {
@@ -141,6 +142,7 @@ export function tableService({ tableModel, db }) {
           id: String(d._id),
           name: d.name ?? "",
           status: d.status ?? "available",
+          version: Number(d.version || 1),
         })),
       };
     },
@@ -158,6 +160,7 @@ export function tableService({ tableModel, db }) {
           id: String(d._id),
           name: d.name ?? "",
           status: d.status ?? "available",
+          version: Number(d.version || 1),
         })),
       };
     },

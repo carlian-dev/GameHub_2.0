@@ -32,6 +32,8 @@ async function boot() {
     inviteEmail = data.email;
     document.getElementById("email").value = inviteEmail;
     document.getElementById("form").hidden = false;
+    // Bot check is optional; the slot stays hidden unless the admin enabled it.
+    GameHubRecaptcha.render(document.getElementById("recaptchaSlot"));
   } catch (e) {
     const m = (e.message || "").toLowerCase();
     if (m.includes("expired")) {
@@ -76,15 +78,26 @@ async function submitRegister() {
     bad[0].focus();
     return;
   }
+  // reCAPTCHA is injected only when the admin enabled it; when off this
+  // resolves immediately and no token is sent.
+  const human = await GameHubRecaptcha.config();
+  const recaptchaToken = human.enabled ? await GameHubRecaptcha.token() : "";
+  if (human.enabled && !recaptchaToken) {
+    msg.textContent = "Please complete the reCAPTCHA check.";
+    msg.className = "err";
+    return;
+  }
+
   msg.textContent = "Sending...";
   msg.className = "";
   go.disabled = true;
   try {
-    await register({ token: inviteToken, firstName: first, lastName: last, username, email: inviteEmail, password: pw });
+    await register({ token: inviteToken, firstName: first, lastName: last, username, email: inviteEmail, password: pw, recaptchaToken });
     msg.textContent = "Created! You can now log in.";
     msg.className = "ok";
     setTimeout(() => { location.href = "./login.html"; }, 1200);
   } catch (e) {
+    GameHubRecaptcha.reset();
     msg.textContent = e.message;
     msg.className = "err";
     go.disabled = false;

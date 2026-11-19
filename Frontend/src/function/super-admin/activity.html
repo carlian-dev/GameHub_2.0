@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Super Admin activity log - personal operational actions, 2FA, and sign-ins. -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Activity log — GameHub super admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600;1,700;1,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../../css/dashboard.css" />
+  <link rel="stylesheet" href="../../../css/settings.css" />
+</head>
+<body class="dash" data-theme="light">
+  <div class="dash-app">
+    <aside class="dash-side" aria-label="Super admin navigation">
+      <a class="dash-brand" href="./integrations.html">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#F4F1E6" stroke-width="2" /><circle cx="16" cy="16" r="4" fill="#D4B44D" /><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="#F4F1E6" stroke-width="2" /></svg>
+        <span class="brand-text"><span class="brand-name">GameHub</span><span class="brand-tag">Billiard Hall and Sport Bar</span></span>
+      </a>
+      <nav class="dash-nav">
+        <a href="./integrations.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v9" /><path d="M6.2 6.2a8 8 0 1 0 11.6 0" /></svg>
+          <span>API Integrations</span>
+        </a>
+        <a href="./access.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h10M4 12h7M4 18h10" /><path d="m17 16 2 2 3-3" /></svg>
+          <span>Feature access</span>
+        </a>
+        <a href="./activity.html" class="active" aria-current="page">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /><path d="M12 7v5l3 2" /></svg>
+          <span>Activity</span>
+        </a>
+        <a href="./login-protection.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 20 6v5c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-3Z" /><path d="M9 12h6" /></svg>
+          <span>Login protection</span>
+        </a>
+        <a href="./security.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v5c0 4.4-2.9 8.2-7 10-4.1-1.8-7-5.6-7-10V6l7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
+          <span>Security</span>
+        </a>
+        <a href="./settings.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+          <span>Profile</span>
+        </a>
+      </nav>
+      <div class="dash-user">
+        <span class="avatar-circle" id="avatar">S</span>
+        <div><strong id="who">Checking...</strong><small>Super Admin</small></div>
+      </div>
+    </aside>
+
+    <div class="dash-main">
+      <header class="dash-top">
+        <button class="dash-iconbtn dash-menu" aria-label="Open menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <div class="dash-top-right">
+          <div data-settings-menu data-settings-url="./settings.html"></div>
+        </div>
+      </header>
+
+      <main class="dash-content">
+        <div class="dash-pagehead">
+          <h1>Activity log</h1>
+          <span class="dash-stamp" id="stamp"></span>
+        </div>
+
+        <section class="dash-panel" aria-labelledby="filter-h">
+          <div class="panel-head">
+            <h2 id="filter-h">Filter</h2>
+          </div>
+          <p>Your sign-ins, sign-outs, 2FA security actions, and API integration toggles are recorded here. Newest first.</p>
+          <form id="filterForm" class="filter-row">
+            <label class="field" for="fAction">
+              <span class="field-label">Action</span>
+              <span class="select-wrap"><select id="fAction"><option value="">All actions</option></select></span>
+            </label>
+            <label class="field" for="fFrom">
+              <span class="field-label">From</span>
+              <input id="fFrom" name="from" type="date" />
+            </label>
+            <label class="field" for="fTo">
+              <span class="field-label">To</span>
+              <input id="fTo" name="to" type="date" />
+            </label>
+            <span class="filter-actions">
+              <button type="submit" class="rowbtn go" id="apply">Apply</button>
+              <button type="button" class="rowbtn" id="reset">Reset</button>
+            </span>
+          </form>
+        </section>
+
+        <section class="dash-panel" aria-labelledby="log-h">
+          <div class="panel-head">
+            <h2 id="log-h">Events</h2>
+          </div>
+          <p class="dash-msg" id="msg" role="status">Loading…</p>
+          <div class="dash-tablewrap">
+            <table id="tbl">
+              <thead><tr><th>When</th><th>Staff</th><th>Action</th><th>Details</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="dash-empty" id="empty" hidden>No activity matches this view.</p>
+          <div class="dash-pager" id="pager" hidden>
+            <span class="pager-info" id="pagerInfo"></span>
+            <span class="pager-btns" id="pagerBtns"></span>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+  <script src="../../../js/config.js"></script>
+  <script src="../../../js/api.js"></script>
+  <script src="../../../js/dash.js"></script>
+  <script src="./activity.js"></script>
+</body>
+</html>

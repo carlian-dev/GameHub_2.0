@@ -4,24 +4,39 @@
 //   GET  /api/admin/invitations              (10) invite_list
 //   POST /api/admin/invitations/{id}/revoke  (11) invite_revoke
 //   GET  /api/admin/settings/integrations    (12) settings_list
-//   PUT  /api/admin/settings/integrations/{key} (13) settings_update
+//   (removed 13) PUT /api/admin/settings/integrations/{key} - super_admin only
 //   GET  /api/admin/cashiers                 (14) cashiers_list
-//   PUT  /api/admin/cashiers/{id}            (15) cashiers_update
+//   PUT  /api/admin/cashiers/{id}            (15) cashiers_update (requires `version`)
 //   POST /api/admin/cashiers/{id}/archive    (16) cashiers_archive
 //   POST /api/admin/cashiers/{id}/unarchive  (17) cashiers_unarchive
-export function registerAdminRoutes(router, { invitationController, settingsController, cashierController }) {
-  // Invitations
-  router.post("/admin/invitations", invitationController.create);
+//   GET  /api/admin/activity-logs            (18) activity_logs_list
+import { rateLimiters } from "../middleware/rateLimit.js";
+
+export function registerAdminRoutes(router, {
+  invitationController,
+  settingsController,
+  cashierController,
+  activityController,
+}) {
+  // Invitations. Creating one deletes prior unused invites and sends mail.
+  router.post(
+    "/admin/invitations",
+    rateLimiters.notifications,
+    invitationController.create
+  );
   router.get("/admin/invitations", invitationController.list);
   router.post("/admin/invitations/:id/revoke", invitationController.revoke);
 
   // Settings integrations
   router.get("/admin/settings/integrations", settingsController.adminIntegrations);
-  router.put("/admin/settings/integrations/:key", settingsController.settingsUpdate);
+  // Read-only: only a super administrator can change integrations.
 
   // Cashiers
   router.get("/admin/cashiers", cashierController.list);
   router.put("/admin/cashiers/:id", cashierController.update);
   router.post("/admin/cashiers/:id/archive", cashierController.archive);
   router.post("/admin/cashiers/:id/unarchive", cashierController.unarchive);
+
+  // Activity log (read-only audit trail)
+  router.get("/admin/activity-logs", rateLimiters.audit, activityController.list);
 }

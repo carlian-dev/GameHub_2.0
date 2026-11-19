@@ -3,10 +3,11 @@
 // Guard: admin-only. One filter form feeds both the income cards and the table:
 // day+month = that date, month only = that month, no month = the whole year.
 // Table = client-side pagination (10/page), method badges, "Updated" stamp.
-// Export downloads CSV via anchor URL (cookies sent, not api() JSON) so the
-// file saves instead of parsing as JSON.
+// Export fetches the CSV as a blob so 403/429 responses surface as a toast
+// instead of downloading a JSON error document.
 
 let allRows = [];
+let csvExportEnabled = true;
 let page = 0;
 const PER_PAGE = 10;
 
@@ -46,7 +47,11 @@ function renderPage() {
     const badge = document.createElement("span");
     const m = String(t.method || "").toLowerCase();
     badge.className = `badge method-${m === "gcash" ? "gcash" : "cash"}`;
-    badge.textContent = t.method || "—";
+    badge.textContent =
+      t.provider === "paymongo"
+        ? "GCash · PayMongo"
+        : t.method || "—";
+    if (t.provider === "paymongo") badge.title = "Paid online via PayMongo";
     tr.children[6].appendChild(badge);
     tr.children[7].textContent = fmtPeso(t.change);
     const link = document.createElement("a");
@@ -232,36 +237,84 @@ document.getElementById("filterForm").addEventListener("submit", (e) => {
   loadIncome();
 });
 
-document.getElementById("export").addEventListener("click", () => {
-  // CSV download: anchor navigation keeps the session cookie (credentials),
-  // while api() would try to parse the CSV as JSON and fail.
+document.getElementById("export").addEventListener("click", async () => {
+  const btn = document.getElementById("export");
+  if (!csvExportEnabled) {
+    dashToast("CSV export is turned off by the super administrator.", "err");
+    return;
+  }
+  if (btn.disabled) return;
+  // CSV download: fetch with credentials so a 403/429 is showable as a toast,
+  // then save the blob with the filename the server chose.
   const f = currentFilter();
   const { from, to } = filterRange();
-  const url = exportReportUrl({ from, to, method: f.method });
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  dashToast(
-    `CSV for ${from === to ? from : `${from} → ${to}`} (${f.method}) is downloading.`,
-    "ok",
-    { title: "Export started" }
-  );
+  btn.disabled = true;
+  try {
+    const { blob, filename } = await downloadReportExport({
+      from,
+      to,
+      method: f.method,
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download =
+      filename || `gamehub-transactions-${from === to ? from : `${from}_to_${to}`}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Give the browser a moment to start saving before freeing the blob.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    dashToast(
+      `CSV for ${from === to ? from : `${from} → ${to}`} (${f.method}) is ready.`,
+      "ok",
+      { title: "Export downloaded" }
+    );
+  } catch (e) {
+    const wait = Number(e.retryAfterSeconds) > 0
+      ? ` Try again in ${e.retryAfterSeconds >= 60
+        ? `${Math.ceil(e.retryAfterSeconds / 60)} minute${Math.ceil(e.retryAfterSeconds / 60) === 1 ? "" : "s"}`
+        : `${e.retryAfterSeconds} second${e.retryAfterSeconds === 1 ? "" : "s"}`}.`
+      : "";
+    dashToast(`Export failed: ${e.message}${wait}`, "err", {
+      title: "Export failed",
+      timeout: 8000,
+    });
+  } finally {
+    btn.disabled = !csvExportEnabled;
+  }
 });
+
+// The super administrator can turn the CSV export off. The server rejects the
+// download either way; this only reflects the state on the button.
+async function applyExportAvailability() {
+  const btn = document.getElementById("export");
+  if (!btn) return;
+  try {
+    const cfg = await getAppConfig();
+    const flags = (cfg && cfg.exports) || {};
+    csvExportEnabled = flags.csvExport !== false;
+  } catch {
+    return;
+  }
+  btn.disabled = !csvExportEnabled;
+  btn.title = csvExportEnabled
+    ? "Download the selected period as CSV"
+    : "CSV export is turned off by the super administrator";
+}
 
 (async () => {
   const msg = document.getElementById("msg");
   try {
     const me = await getMe();
-    if (me.role !== "admin") { location.href = "../auth/login.html"; return; }
-    const name = me.email || "admin";
+    if (me.role !== "admin") { location.href = staffHome(me.role); return; }
+    const name = me.displayName || me.email || me.username || "admin";
     document.getElementById("who").textContent = name;
-    document.getElementById("avatar").textContent = name.charAt(0).toUpperCase();
+    dashRenderAvatar("avatar", { name, avatarUrl: me.avatarUrl, fallbackLetter: "A" });
     populateMonths();
     populateDays();
     populateYears();
+    applyExportAvailability();
     loadIncome();
     await loadTransactions();
   } catch (e) {

@@ -1,31 +1,39 @@
 // src/function/cashiers/cashier-reservations.js - Reservations approval queue.
 // Pair: cashier-reservations.html. Pending guest requests are accepted (slot
 // stays booked + the customer gets an ACCEPTED email) or rejected (slot is
-// released). Shared guard/logout in cashier-common.js; refresh every 30s.
+// released). Accepted requests can be checked in from here: starting the
+// session marks the table occupied (CA-008/CA-015) and links it to the
+// reservation. Shared guard/logout in cashier-common.js; refresh every 30s.
 
 const RES_BADGE = {
   reserved: "pending",
   accepted: "available",
   rejected: "declined",
   cancelled: "archived",
+  "checked-in": "occupied",
+  completed: "closed",
 };
 const RES_LABEL = {
   reserved: "Pending",
   accepted: "Accepted",
   rejected: "Rejected",
   cancelled: "Cancelled",
+  "checked-in": "In play",
+  completed: "Completed",
 };
 
 const RES_FILTERS = {
   pending: (r) => r.status === "reserved",
   all: () => true,
   accepted: (r) => r.status === "accepted",
+  seated: (r) => r.status === "checked-in",
   rejected: (r) => r.status === "rejected",
 };
 const RES_EMPTY = {
   pending: "All caught up — no requests waiting. New guest bookings show up here automatically.",
   all: "No reservations yet. Guest bookings from the landing page show up here.",
-  accepted: "No accepted reservations yet.",
+  accepted: "No accepted reservations waiting for check-in.",
+  seated: "No checked-in reservations in play right now.",
   rejected: "No rejected reservations yet.",
 };
 
@@ -57,11 +65,16 @@ function fmtTimeRange(r) {
   return `${resClock(r.startTime)} – ${resClock(r.endTime)}`;
 }
 
-function durationLabel(r) {
+function durationMinutesOf(r) {
   let minutes = Number(r.durationMinutes || 0);
   if (!minutes && r.startTime && r.endTime) {
     minutes = Math.round((new Date(r.endTime) - new Date(r.startTime)) / 60000);
   }
+  return minutes > 0 ? minutes : 60;
+}
+
+function durationLabel(r) {
+  const minutes = durationMinutesOf(r);
   if (!minutes) return "—";
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
@@ -136,14 +149,36 @@ function buildCard(r) {
     reject.type = "button";
     reject.onclick = () => decideReservation(r, "reject", card);
     actions.append(accept, reject);
-  } else {
+  } else if (r.status === "accepted") {
+    const end = r.endTime ? new Date(r.endTime) : null;
+    if (end && !isNaN(end) && end.getTime() <= Date.now()) {
+      actions.appendChild(
+        el("span", "res-card-decision", "Reservation window has ended")
+      );
+    } else {
+      const start = el("button", "res-btn res-btn-start", "Start session");
+      start.type = "button";
+      start.title = `Check in ${r.customerName || "the guest"} and mark ${r.tableName || "the table"} occupied`;
+      start.onclick = () => startReservationSession(r, card);
+      actions.appendChild(start);
+    }
+  } else if (r.status === "checked-in") {
+    const until = r.sessionEndsAt ? new Date(r.sessionEndsAt) : null;
+    const untilOk = until && !isNaN(until) && until.getTime() > Date.now();
     actions.appendChild(
       el(
         "span",
         "res-card-decision",
-        r.status === "accepted" ? "Slot kept for this guest" : "Slot released"
+        untilOk ? `Table occupied until ${resClock(r.sessionEndsAt)}` : "Session in play"
       )
     );
+    const view = el("a", "res-btn res-btn-view", "View session");
+    view.href = "./cashier-sessions.html";
+    actions.appendChild(view);
+  } else if (r.status === "completed") {
+    actions.appendChild(el("span", "res-card-decision", "Session completed"));
+  } else {
+    actions.appendChild(el("span", "res-card-decision", "Slot released"));
   }
 
   foot.append(booked, actions);
@@ -155,12 +190,14 @@ function updateCounts() {
   const counts = {
     pending: 0,
     accepted: 0,
+    seated: 0,
     rejected: 0,
     all: resState.rows.length,
   };
   for (const r of resState.rows) {
     if (r.status === "reserved") counts.pending += 1;
     else if (r.status === "accepted") counts.accepted += 1;
+    else if (r.status === "checked-in") counts.seated += 1;
     else if (r.status === "rejected") counts.rejected += 1;
   }
   const set = (id, n) => {
@@ -170,6 +207,7 @@ function updateCounts() {
   set("resPendingCount", counts.pending);
   set("resAllCount", counts.all);
   set("resAcceptedCount", counts.accepted);
+  set("resSeatedCount", counts.seated);
   set("resRejectedCount", counts.rejected);
 }
 
@@ -228,11 +266,18 @@ function renderList() {
 
 function updateSummaryMessage() {
   const pending = resState.rows.filter((r) => r.status === "reserved").length;
+  const seated = resState.rows.filter((r) => r.status === "checked-in").length;
   const total = resState.rows.length;
+  const bits = [];
+  if (pending > 0) {
+    bits.push(`${pending} request${pending === 1 ? "" : "s"} waiting for approval`);
+  }
+  if (seated > 0) {
+    bits.push(`${seated} session${seated === 1 ? "" : "s"} in play`);
+  }
+  if (!bits.length) bits.push("All caught up — no requests waiting");
   setResMsg(
-    pending > 0
-      ? `${pending} request${pending === 1 ? "" : "s"} waiting for approval · ${total} reservation${total === 1 ? "" : "s"} total.`
-      : `All caught up — no requests waiting · ${total} reservation${total === 1 ? "" : "s"} total.`,
+    `${bits.join(" · ")} · ${total} reservation${total === 1 ? "" : "s"} total.`,
     pending > 0 ? "" : "ok"
   );
 }
@@ -291,6 +336,77 @@ async function decideReservation(r, mode, card) {
     });
     setResMsg(e.message, "err");
     dashToast(e.message, "err", { title: `${verb} failed` });
+  }
+}
+
+// Check in an accepted reservation: the server opens a session for this
+// table/customer, which marks the table occupied. The session is linked to the
+// reservation and completes when the session ends.
+async function startReservationSession(r, card) {
+  const scheduled = r.startTime ? new Date(r.startTime) : null;
+  const scheduledOk = scheduled && !isNaN(scheduled);
+  const when = scheduledOk
+    ? scheduled.toLocaleString([], {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "the scheduled slot";
+  const early = scheduledOk && scheduled.getTime() > Date.now() + 5 * 60000;
+  const minutes = durationMinutesOf(r);
+  const expectedEnd = new Date(Date.now() + minutes * 60000).toLocaleTimeString(
+    [],
+    { hour: "numeric", minute: "2-digit" }
+  );
+  const message =
+    `Start the session for ${r.customerName} on ${r.tableName}?\n\n` +
+    `Reservation ${r.ref} · ${when} · ${durationLabel(r)}.\n` +
+    (early
+      ? "This booking is in the future — starting now opens the table early.\n"
+      : "") +
+    `${r.tableName} will be marked occupied until about ${expectedEnd}.`;
+
+  const yes = await dashConfirm(message, "Start session");
+  if (!yes) return;
+
+  card.classList.add("is-busy");
+  card.querySelectorAll("button").forEach((btn) => {
+    btn.disabled = true;
+  });
+
+  try {
+    const result = await checkInReservation(r.ref);
+    const session = result && result.session;
+    const ends = session && session.endTime ? resClock(session.endTime) : "";
+    dashToast(
+      `${r.customerName || "Customer"} is now playing on ${r.tableName || "the table"}` +
+        (ends ? ` — occupied until ${ends}.` : "."),
+      "ok",
+      { title: "Session started" }
+    );
+
+    const updated = resState.rows.find((x) => x.ref === r.ref);
+    if (updated) {
+      updated.status = "checked-in";
+      if (result && result.reservation) {
+        updated.checkedInAt = result.reservation.checkedInAt;
+        updated.sessionId = result.reservation.sessionId;
+        updated.sessionEndsAt = result.reservation.sessionEndsAt;
+      }
+    }
+    updateCounts();
+    renderList();
+    updateSummaryMessage();
+    await loadReservations(true);
+  } catch (e) {
+    card.classList.remove("is-busy");
+    card.querySelectorAll("button").forEach((btn) => {
+      btn.disabled = false;
+    });
+    setResMsg(e.message, "err");
+    dashToast(e.message, "err", { title: "Couldn't start session" });
   }
 }
 

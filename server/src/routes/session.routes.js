@@ -6,9 +6,13 @@
 //   POST   /api/cashier/sessions/{id}/extend    (29)  sessions_extend (auth)
 //   POST   /api/cashier/sessions/{id}/end       (30)  sessions_end (auth)
 //   POST   /api/cashier/sessions/{id}/cancel    (31)  sessions_cancel (auth)
+import { rateLimiters } from "../middleware/rateLimit.js";
+
 export function registerSessionRoutes(router, { sessionController }) {
-  router.get("/admin/sessions", sessionController.list);
-  router.get("/cashier/sessions", sessionController.list);
+  // Both lists run the expiry sweep and join table/cashier names, and
+  // dashboards poll them every 30s: give them the staff-list budget.
+  router.get("/admin/sessions", rateLimiters.staffLists, sessionController.list);
+  router.get("/cashier/sessions", rateLimiters.staffLists, sessionController.list);
   router.post("/cashier/sessions", sessionController.start);
   router.post("/cashier/sessions/:id/extend", sessionController.extend);
   router.post("/cashier/sessions/:id/end", sessionController.end);

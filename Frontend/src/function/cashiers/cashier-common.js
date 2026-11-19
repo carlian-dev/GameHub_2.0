@@ -1,25 +1,32 @@
 // src/function/cashiers/cashier-common.js - shared cashier shell helpers.
 // Pages: cashier-dashboard.html (start), cashier-sessions.html (lifecycle +
 // billing), cashier-reservations.html (accept/reject requests),
-// cashier-tables.html (read-only). Pair: js/dash.js (shell) + js/api.js
-// (endpoints). Guard + identity + timers live here so the pages stay 1:1 with
-// their HTML without duplicating auth logic.
+// cashier-tables.html (read-only), cashier-settings.html (profile name).
+// Pair: js/dash.js (shell) + js/api.js (endpoints). Guard + identity + timers
+// live here so the pages stay 1:1 with their HTML without duplicating auth logic.
 
-/** Cashier-only guard. Sets #who/#avatar, binds #out. Returns `me` or redirects. */
+/** Cashier-only guard. Sets #who/#avatar from the profile name. Returns `me` or redirects. */
 async function cashierGuard() {
   const me = await getMe();
   if (me.role !== "cashier") {
-    location.href = me.role === "admin" ? "../admin/admin-dashboard.html" : "../auth/login.html";
+    location.href = staffHome(me.role);
     throw new Error("redirect");
   }
-  const name = me.email || me.username || "cashier";
+  const name = me.displayName || me.email || me.username || "cashier";
   const who = document.getElementById("who");
   if (who) who.textContent = name;
   const avatar = document.getElementById("avatar");
-  if (avatar) avatar.textContent = name.charAt(0).toUpperCase();
+  if (avatar) {
+    if (typeof dashRenderAvatar === "function") {
+      dashRenderAvatar(avatar, { name, avatarUrl: me.avatarUrl, fallbackLetter: "C" });
+    } else {
+      avatar.textContent = name.charAt(0).toUpperCase();
+    }
+  }
   return me;
 }
 
+/** Legacy inline logout button; cashier pages now use the settings gear menu. */
 function bindCashierLogout() {
   document.getElementById("out")?.addEventListener("click", async () => {
     try { await logout(); } catch { /* still leave */ }
@@ -50,15 +57,34 @@ let sessionExpiryHandler = null;
 let sessionExpiryTimer = null;
 const sessionExpirySeen = new WeakSet();
 
+/** Create a standalone remaining time progress bar (no numbers/percentage, just the bar). */
+function createSessionBar(startTime, endTime, plannedMinutes = 60) {
+  const track = document.createElement("div");
+  track.className = "session-bar-track";
+  track.setAttribute("aria-hidden", "true");
+
+  const fill = document.createElement("div");
+  fill.className = "session-bar-fill bar-green";
+  if (startTime) fill.setAttribute("data-bar-start", startTime);
+  if (endTime) fill.setAttribute("data-bar-end", endTime);
+  if (plannedMinutes) fill.setAttribute("data-bar-planned", String(plannedMinutes));
+  fill.style.width = "100%";
+
+  track.appendChild(fill);
+  return track;
+}
+
 /** Register the page's refresh function; called when a countdown hits 0:00. */
 function setSessionExpiryHandler(fn) {
   sessionExpiryHandler = typeof fn === "function" ? fn : null;
 }
 
-/** Recompute every countdown cell from its session endTime (called each second). */
+/** Recompute every countdown cell and progress bar from session endTime (called each second). */
 function tickTimers() {
   const now = Date.now();
   let hitZero = false;
+
+  // 1. Text countdown timers
   document.querySelectorAll("[data-end]").forEach((el) => {
     const raw = el.getAttribute("data-end");
     if (!raw) return;
@@ -71,6 +97,51 @@ function tickTimers() {
     if (ms <= 0 && !sessionExpirySeen.has(el)) {
       sessionExpirySeen.add(el);
       hitZero = true;
+    }
+  });
+
+  // 2. Standalone visual progress bars (green -> yellow -> red as time is almost done)
+  document.querySelectorAll("[data-bar-end]").forEach((barFill) => {
+    const endRaw = barFill.getAttribute("data-bar-end");
+    if (!endRaw) return;
+    const end = new Date(endRaw).getTime();
+    if (isNaN(end)) return;
+
+    const startRaw = barFill.getAttribute("data-bar-start");
+    let totalMs = 0;
+    if (startRaw) {
+      const start = new Date(startRaw).getTime();
+      if (!isNaN(start) && end > start) {
+        totalMs = end - start;
+      }
+    }
+    if (!totalMs) {
+      const planned = Number(barFill.getAttribute("data-bar-planned"));
+      totalMs = (Number.isFinite(planned) && planned > 0 ? planned : 60) * 60000;
+    }
+
+    const remainingMs = Math.max(0, end - now);
+    const ratio = Math.max(0, Math.min(1, remainingMs / totalMs));
+    const pct = Math.round(ratio * 100);
+
+    let tone = "bar-green";
+    let color = "#10B981";
+
+    if (remainingMs <= 5 * 60000 || ratio <= 0.20) {
+      tone = "bar-red";
+      color = "#EF4444";
+    } else if (remainingMs <= 15 * 60000 || ratio <= 0.50) {
+      tone = "bar-yellow";
+      color = "#F59E0B";
+    }
+
+    barFill.style.width = `${pct}%`;
+    barFill.style.backgroundColor = color;
+    barFill.className = `session-bar-fill ${tone}`;
+
+    const track = barFill.parentElement;
+    if (track) {
+      track.title = `${fmtLeft(remainingMs)} remaining (${pct}%)`;
     }
   });
   if (

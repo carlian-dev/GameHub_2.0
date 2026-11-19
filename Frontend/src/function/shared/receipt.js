@@ -19,6 +19,7 @@ function clipText(value, max) {
 }
 
 let lastDoc = null;
+let pdfEnabled = true;
 let lastRef = "";
 let lastUrl = "";
 
@@ -66,7 +67,7 @@ function buildPdf(t, ref) {
     ["Time played", `${t.minutes || 0} min`],
     ["Billed", `${billedHrs} hr`],
     ["Rate", rateLabel],
-    ["Method", String(t.method || "-")],
+    ["Method", t.provider === "paymongo" ? "GCash (PayMongo)" : String(t.method || "-")],
     ["Received", php(t.received)],
   ];
 
@@ -201,6 +202,21 @@ function showPreview() {
   }
   try {
     await getMe();
+    try {
+      const cfg = await getAppConfig();
+      pdfEnabled = !(cfg && cfg.exports && cfg.exports.receiptPdf === false);
+    } catch {
+      // The flag is only a hint; the bill details still load.
+    }
+    if (!pdfEnabled) {
+      const dl = document.getElementById("download");
+      if (dl) {
+        dl.disabled = true;
+        dl.hidden = true;
+      }
+      const wrap = document.querySelector(".pdf-wrap");
+      if (wrap) wrap.hidden = true;
+    }
   } catch {
     location.href = "../auth/login.html";
     return;
@@ -223,7 +239,8 @@ function showPreview() {
     document.getElementById("rRate").textContent = t.rateType
       ? `${peso(t.pricePerHour)}/hr (${t.rateType})`
       : `${peso(t.pricePerHour)}/hr`;
-    document.getElementById("rMethod").textContent = t.method || "—";
+    document.getElementById("rMethod").textContent =
+      t.provider === "paymongo" ? "GCash (PayMongo)" : t.method || "—";
     document.getElementById("rReceived").textContent = peso(t.received);
 
     const items = Array.isArray(t.items) ? t.items : [];
@@ -253,6 +270,11 @@ function showPreview() {
     document.getElementById("rTbl").hidden = false;
     document.title = `Receipt ${t.ref} — GameHub`;
 
+    if (!pdfEnabled) {
+      msg.textContent = "PDF receipts are turned off by the super administrator.";
+      msg.className = "dash-msg err";
+      return;
+    }
     if (!window.jspdf || !window.jspdf.jsPDF) {
       msg.textContent = "PDF library failed to load (js/vendor/jspdf.umd.min.js). Details above still valid.";
       msg.className = "dash-msg err";

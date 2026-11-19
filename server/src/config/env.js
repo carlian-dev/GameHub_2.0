@@ -3,11 +3,27 @@ import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { configureDns } from "./dns.js";
+import { createEnvFileStore } from "./envFile.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(__dirname, "..", "..");
+const envPath = path.join(serverRoot, ".env");
 
-dotenv.config({ path: path.join(serverRoot, ".env") });
+dotenv.config({ path: envPath });
+
+// Settings > API writes admin credentials to the matching *_OVERRIDE keys.
+// Keeping this here means the HTTP server, scripts and tests all resolve the
+// same file.
+const envFile = createEnvFileStore({ filePath: envPath });
+
+export function persistEnvValue(key, value) {
+  return envFile.set(key, value);
+}
+
+/** Add a missing key without touching an existing value (used by setup). */
+export function ensureEnvValue(key, value = "") {
+  return envFile.ensure(key, value);
+}
 
 // Applied here so every entry point (server, scripts, tests) resolves Atlas SRV
 // records the same way before a MongoClient is created.
@@ -23,19 +39,86 @@ export const env = {
   // Optional: resolver(s) Node uses for Atlas SRV lookups, e.g. "8.8.8.8,1.1.1.1".
   MONGODB_DNS_SERVERS: process.env.MONGODB_DNS_SERVERS || "",
   FRONTEND_URL: process.env.FRONTEND_URL || "",
+  // SESSION_SECRET is still required: it derives the authenticator (TOTP)
+  // encryption key when SETTINGS_ENCRYPTION_KEY is blank.
   SESSION_SECRET: process.env.SESSION_SECRET || "",
-  SESSION_TTL_SECONDS: Number(process.env.SESSION_TTL_SECONDS || 43200),
-  AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME || "gh_session",
+  // Stateless JWT auth. JWT_SECRET falls back to SESSION_SECRET so existing
+  // deployments keep working; set a dedicated value in production so rotating
+  // one secret does not affect the other.
+  JWT_SECRET: process.env.JWT_SECRET || process.env.SESSION_SECRET || "",
+  JWT_TTL_SECONDS: Number(
+    process.env.JWT_TTL_SECONDS || process.env.SESSION_TTL_SECONDS || 43200
+  ),
+  AUTH_COOKIE_NAME: process.env.AUTH_COOKIE_NAME || "gh_token",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "",
+  // Admin overrides written by Settings > API. Empty = use the default above.
+  GOOGLE_AUTH_CLIENT_ID_OVERRIDE: process.env.GOOGLE_AUTH_CLIENT_ID_OVERRIDE || "",
+  // Optional: location map on the public landing page.
+  GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY || "",
+  GOOGLE_MAPS_API_KEY_OVERRIDE: process.env.GOOGLE_MAPS_API_KEY_OVERRIDE || "",
   // Optional: accepted reservations become events on this shared calendar.
   GOOGLE_CALENDAR_ID: process.env.GOOGLE_CALENDAR_ID || "",
+  GOOGLE_CALENDAR_ID_OVERRIDE: process.env.GOOGLE_CALENDAR_ID_OVERRIDE || "",
   GOOGLE_CALENDAR_CLIENT_EMAIL: process.env.GOOGLE_CALENDAR_CLIENT_EMAIL || "",
+  GOOGLE_CALENDAR_CLIENT_EMAIL_OVERRIDE:
+    process.env.GOOGLE_CALENDAR_CLIENT_EMAIL_OVERRIDE || "",
   GOOGLE_CALENDAR_PRIVATE_KEY: process.env.GOOGLE_CALENDAR_PRIVATE_KEY || "",
+  GOOGLE_CALENDAR_PRIVATE_KEY_OVERRIDE:
+    process.env.GOOGLE_CALENDAR_PRIVATE_KEY_OVERRIDE || "",
   MAIL_USER: process.env.MAIL_USER || "",
   MAIL_PASS: process.env.MAIL_PASS || "",
   MAIL_FROM: process.env.MAIL_FROM || "GameHub",
   MAIL_DRY_RUN: process.env.MAIL_DRY_RUN === "1",
+  // Optional reCAPTCHA defaults. Used whenever the matching admin value is
+  // empty, even when a `settings.recaptcha` document exists.
+  RECAPTCHA_SITE_KEY: process.env.RECAPTCHA_SITE_KEY || "",
+  RECAPTCHA_SITE_KEY_OVERRIDE: process.env.RECAPTCHA_SITE_KEY_OVERRIDE || "",
+  RECAPTCHA_SECRET_KEY: process.env.RECAPTCHA_SECRET_KEY || "",
+  RECAPTCHA_SECRET_KEY_OVERRIDE: process.env.RECAPTCHA_SECRET_KEY_OVERRIDE || "",
+  // Optional: encrypts `secret: true` settings credentials at rest (AES-256-GCM).
+  // Required before an admin can save a reCAPTCHA secret key or Calendar key.
+  SETTINGS_ENCRYPTION_KEY: process.env.SETTINGS_ENCRYPTION_KEY || "",
   TRUST_PROXY: process.env.TRUST_PROXY || "0",
+  // In-process rate limiting (express-rate-limit). RATE_LIMIT_ENABLED=0 turns
+  // every limiter into a pass-through (contract tests use this). Window values
+  // are milliseconds; invalid/zero values fall back to the defaults in
+  // middleware/rateLimit.js.
+  RATE_LIMIT_ENABLED: process.env.RATE_LIMIT_ENABLED !== "0",
+  RATE_LIMIT_WINDOW_MS: process.env.RATE_LIMIT_WINDOW_MS || "60000",
+  RATE_LIMIT_MAX: process.env.RATE_LIMIT_MAX || "300",
+  AUTH_RATE_LIMIT_WINDOW_MS: process.env.AUTH_RATE_LIMIT_WINDOW_MS || "900000",
+  AUTH_RATE_LIMIT_MAX: process.env.AUTH_RATE_LIMIT_MAX || "10",
+  WRITE_RATE_LIMIT_MAX: process.env.WRITE_RATE_LIMIT_MAX || "60",
+  RESERVATION_RATE_LIMIT_WINDOW_MS:
+    process.env.RESERVATION_RATE_LIMIT_WINDOW_MS || "600000",
+  RESERVATION_RATE_LIMIT_MAX: process.env.RESERVATION_RATE_LIMIT_MAX || "10",
+  // Expensive staff reads (reservation/session/transaction lists).
+  STAFF_LIST_RATE_LIMIT_WINDOW_MS:
+    process.env.STAFF_LIST_RATE_LIMIT_WINDOW_MS || "60000",
+  STAFF_LIST_RATE_LIMIT_MAX: process.env.STAFF_LIST_RATE_LIMIT_MAX || "60",
+  // Admin income reports (daily/monthly/income).
+  REPORT_RATE_LIMIT_WINDOW_MS: process.env.REPORT_RATE_LIMIT_WINDOW_MS || "60000",
+  REPORT_RATE_LIMIT_MAX: process.env.REPORT_RATE_LIMIT_MAX || "20",
+  // CSV report generation.
+  EXPORT_RATE_LIMIT_WINDOW_MS: process.env.EXPORT_RATE_LIMIT_WINDOW_MS || "600000",
+  EXPORT_RATE_LIMIT_MAX: process.env.EXPORT_RATE_LIMIT_MAX || "5",
+  // Activity-log reads (admin audit trail and self activity).
+  AUDIT_RATE_LIMIT_WINDOW_MS: process.env.AUDIT_RATE_LIMIT_WINDOW_MS || "60000",
+  AUDIT_RATE_LIMIT_MAX: process.env.AUDIT_RATE_LIMIT_MAX || "20",
+  // Reservation accept (calendar + mail) and admin invitations.
+  NOTIFICATION_RATE_LIMIT_WINDOW_MS:
+    process.env.NOTIFICATION_RATE_LIMIT_WINDOW_MS || "600000",
+  NOTIFICATION_RATE_LIMIT_MAX: process.env.NOTIFICATION_RATE_LIMIT_MAX || "10",
+  // Super-admin provider validation on credential changes.
+  INTEGRATION_RATE_LIMIT_WINDOW_MS:
+    process.env.INTEGRATION_RATE_LIMIT_WINDOW_MS || "900000",
+  INTEGRATION_RATE_LIMIT_MAX: process.env.INTEGRATION_RATE_LIMIT_MAX || "10",
+  // Self-service profile updates (2MB avatar payloads).
+  PROFILE_RATE_LIMIT_WINDOW_MS: process.env.PROFILE_RATE_LIMIT_WINDOW_MS || "60000",
+  PROFILE_RATE_LIMIT_MAX: process.env.PROFILE_RATE_LIMIT_MAX || "5",
+  // Public health probe (counts a DB read per call).
+  HEALTH_RATE_LIMIT_WINDOW_MS: process.env.HEALTH_RATE_LIMIT_WINDOW_MS || "60000",
+  HEALTH_RATE_LIMIT_MAX: process.env.HEALTH_RATE_LIMIT_MAX || "30",
 };
 
 export function validateEnv() {

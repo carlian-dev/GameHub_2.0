@@ -1,6 +1,12 @@
 // Cashier service — admin staff management.
 // migration.md §13.1 / admin cashiers: archive/unarchive only, admins protected,
 // activityLogs on archive/unarchive.
+import {
+  parseUserVersion,
+  userVersion,
+  versionConflict,
+} from "../utils/concurrency.js";
+
 export function cashierService({ cashierModel, db }) {
   const activityLogs = db.collection("activityLogs");
 
@@ -18,6 +24,8 @@ export function cashierService({ cashierModel, db }) {
     schedule: doc.schedule ?? "",
     createdAt:
       doc.createdAt instanceof Date ? doc.createdAt.toISOString() : null,
+    // Revision for optimistic concurrency; the edit form sends it back.
+    version: userVersion(doc),
   });
 
   return {
@@ -36,7 +44,7 @@ export function cashierService({ cashierModel, db }) {
       return { ok: true, cashiers: docs.map(shape) };
     },
 
-    async update(id, { displayName, schedule }) {
+    async update(id, { displayName, schedule, version }) {
       const set = {};
       if (displayName !== undefined) {
         set.displayName = String(displayName).trim();
@@ -63,7 +71,24 @@ export function cashierService({ cashierModel, db }) {
         throw err;
       }
 
-      await cashierModel.update(id, set);
+      // OCC: the admin must send the version from the row they opened. A
+      // mismatch means another admin (or the cashier) edited in between.
+      const expectedVersion = parseUserVersion(version);
+      if (expectedVersion !== userVersion(user)) {
+        throw versionConflict(userVersion(user));
+      }
+
+      const updateResult = await cashierModel.update(id, expectedVersion, set);
+      if (!updateResult || updateResult.matchedCount === 0) {
+        const fresh = await cashierModel.findById(id);
+        if (!fresh) {
+          const err = new Error("cashier not found");
+          err.status = 404;
+          throw err;
+        }
+        throw versionConflict(userVersion(fresh));
+      }
+
       const fresh = await cashierModel.findById(id);
       return { ok: true, cashier: shape(fresh) };
     },

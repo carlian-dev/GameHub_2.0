@@ -12,6 +12,22 @@
 let tab = "all";
 let lastRows = [];
 let lastSessions = [];
+function createSessionBar(startTime, endTime, plannedMinutes = 60) {
+  const track = document.createElement("div");
+  track.className = "session-bar-track";
+  track.setAttribute("aria-hidden", "true");
+
+  const fill = document.createElement("div");
+  fill.className = "session-bar-fill bar-green";
+  if (startTime) fill.setAttribute("data-bar-start", startTime);
+  if (endTime) fill.setAttribute("data-bar-end", endTime);
+  if (plannedMinutes) fill.setAttribute("data-bar-planned", String(plannedMinutes));
+  fill.style.width = "100%";
+
+  track.appendChild(fill);
+  return track;
+}
+
 const pendingIds = new Set();
 
 function setMsg(t, kind = "") {
@@ -53,10 +69,10 @@ function done(id) { pendingIds.delete(id); }
 async function guard() {
   try {
     const me = await getMe();
-    if (me.role !== "admin") { location.href = "../auth/login.html"; return null; }
-    const name = me.email || "admin";
+    if (me.role !== "admin") { location.href = staffHome(me.role); return null; }
+    const name = me.displayName || me.email || me.username || "admin";
     document.getElementById("who").textContent = name;
-    document.getElementById("avatar").textContent = name.charAt(0).toUpperCase();
+    dashRenderAvatar("avatar", { name, avatarUrl: me.avatarUrl, fallbackLetter: "A" });
     return me;
   } catch { location.href = "../auth/login.html"; return null; }
 }
@@ -65,7 +81,20 @@ function row(t) {
   const tr = document.createElement("tr");
   if (t.archived || busy(t.id)) tr.classList.add("dim");
   tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td>";
-  tr.children[0].textContent = t.name;
+
+  // Current session + live countdown (joined from active admin sessions).
+  const session = t.archived ? null : lastSessions.find((s) => String(s.tableId) === String(t.id));
+
+  const tblWrap = document.createElement("div");
+  tblWrap.className = "session-table-cell";
+  const nameEl = document.createElement("strong");
+  nameEl.className = "session-table-name";
+  nameEl.textContent = t.name;
+  tblWrap.appendChild(nameEl);
+  if (session && session.endTime) {
+    tblWrap.appendChild(createSessionBar(session.startTime, session.endTime, session.plannedMinutes));
+  }
+  tr.children[0].appendChild(tblWrap);
 
   const statusTd = tr.children[1];
   const badge = document.createElement("span");
@@ -73,11 +102,10 @@ function row(t) {
   badge.textContent = t.archived ? "archived" : t.status;
   statusTd.appendChild(badge);
 
-  // Current session + live countdown (joined from active admin sessions).
-  const session = t.archived ? null : lastSessions.find((s) => String(s.tableId) === String(t.id));
   tr.children[2].textContent = session
     ? `${session.customerName || "Customer"} · since ${session.startTime ? new Date(session.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}`
     : "—";
+
   if (session && session.endTime) {
     const timer = document.createElement("span");
     timer.className = "timer";
@@ -207,12 +235,17 @@ async function load() {
   }
 }
 
-// Per-second local countdowns for any [data-end] timer cells.
+// Per-second local countdowns for any [data-end] timer cells and session bars.
 function tickTimers() {
+  const now = Date.now();
+
+  // 1. Text countdown timers
   document.querySelectorAll("[data-end]").forEach((el) => {
-    const t = new Date(el.getAttribute("data-end")).getTime();
+    const raw = el.getAttribute("data-end");
+    if (!raw) return;
+    const t = new Date(raw).getTime();
     if (isNaN(t)) return;
-    const left = t - Date.now();
+    const left = t - now;
     const a = Math.max(0, left);
     const h = Math.floor(a / 3600000);
     const m = Math.floor((a % 3600000) / 60000);
@@ -222,6 +255,51 @@ function tickTimers() {
       : `${m}:${String(s).padStart(2, "0")}`;
     el.classList.toggle("warn", left > 0 && left < 600000);
     el.classList.remove("over");
+  });
+
+  // 2. Standalone visual progress bars (green -> yellow -> red as time is almost done)
+  document.querySelectorAll("[data-bar-end]").forEach((barFill) => {
+    const endRaw = barFill.getAttribute("data-bar-end");
+    if (!endRaw) return;
+    const end = new Date(endRaw).getTime();
+    if (isNaN(end)) return;
+
+    const startRaw = barFill.getAttribute("data-bar-start");
+    let totalMs = 0;
+    if (startRaw) {
+      const start = new Date(startRaw).getTime();
+      if (!isNaN(start) && end > start) {
+        totalMs = end - start;
+      }
+    }
+    if (!totalMs) {
+      const planned = Number(barFill.getAttribute("data-bar-planned"));
+      totalMs = (Number.isFinite(planned) && planned > 0 ? planned : 60) * 60000;
+    }
+
+    const remainingMs = Math.max(0, end - now);
+    const ratio = Math.max(0, Math.min(1, remainingMs / totalMs));
+    const pct = Math.round(ratio * 100);
+
+    let tone = "bar-green";
+    let color = "#10B981";
+
+    if (remainingMs <= 5 * 60000 || ratio <= 0.20) {
+      tone = "bar-red";
+      color = "#EF4444";
+    } else if (remainingMs <= 15 * 60000 || ratio <= 0.50) {
+      tone = "bar-yellow";
+      color = "#F59E0B";
+    }
+
+    barFill.style.width = `${pct}%`;
+    barFill.style.backgroundColor = color;
+    barFill.className = `session-bar-fill ${tone}`;
+
+    const track = barFill.parentElement;
+    if (track) {
+      track.title = `${remainingMs > 0 ? `${Math.ceil(remainingMs / 60000)}m remaining` : "0m remaining"} (${pct}%)`;
+    }
   });
 }
 setInterval(() => {

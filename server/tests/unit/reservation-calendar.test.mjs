@@ -5,6 +5,10 @@ import assert from "node:assert/strict";
 import { reservationService } from "../../src/services/reservation.service.js";
 
 function makeEnv() {
+  // Keep the booking in the future so cancel() is allowed regardless of when
+  // the suite runs (fixed dates went stale once that day passed).
+  const startTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
   const docs = [
     {
       _id: "id-1",
@@ -13,8 +17,8 @@ function makeEnv() {
       tableName: "Table 3",
       customerName: "Maria Cruz",
       contactNumber: "09171234567",
-      startTime: new Date("2026-11-05T11:00:00Z"),
-      endTime: new Date("2026-11-05T13:00:00Z"),
+      startTime,
+      endTime,
       durationMinutes: 120,
       status: "reserved",
       createdAt: new Date(),

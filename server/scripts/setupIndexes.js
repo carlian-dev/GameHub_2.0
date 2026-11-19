@@ -6,7 +6,8 @@
 //   transactions {paidAt, method} compound,
 //   products unique nameKey + {archived, category, name} menu read,
 //   sessions {tableId:1} unique partial {status:"active"} (optional, duplicate-checked),
-//   sessions {status:1, endTime:1} for the auto-end sweeper.
+//   sessions {status:1, endTime:1} for the auto-end sweeper,
+//   activityLogs {at:-1} for the admin activity viewer.
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,6 +72,10 @@ async function main() {
     await db.collection("sessions").createIndex(
       { status: 1, endTime: 1 },
       { name: "idx_sessions_status_endTime" }
+    );
+    await db.collection("activityLogs").createIndex(
+      { at: -1 },
+      { name: "idx_activity_at" }
     );
 
     // Optional active-session index: only create if no duplicates already exist.

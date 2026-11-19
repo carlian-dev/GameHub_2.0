@@ -67,10 +67,10 @@ function done(id) { pendingIds.delete(id); }
 async function guard() {
   try {
     const me = await getMe();
-    if (me.role !== "admin") { location.href = "../auth/login.html"; return null; }
-    const name = me.email || "admin";
+    if (me.role !== "admin") { location.href = staffHome(me.role); return null; }
+    const name = me.displayName || me.email || me.username || "admin";
     document.getElementById("who").textContent = name;
-    document.getElementById("avatar").textContent = name.charAt(0).toUpperCase();
+    dashRenderAvatar("avatar", { name, avatarUrl: me.avatarUrl, fallbackLetter: "A" });
     return me;
   } catch { location.href = "../auth/login.html"; return null; }
 }
@@ -108,11 +108,19 @@ function row(c) {
     if (r === null) return;
     const undo = patchRow(c.id, { displayName: r.displayName, schedule: r.schedule });
     try {
-      await updateCashier(c.id, { displayName: r.displayName, schedule: r.schedule });
+      // version = the row this edit came from. If another admin changed the
+      // account in the meantime the server answers 409 and nothing is written.
+      await updateCashier(c.id, { displayName: r.displayName, schedule: r.schedule, version: c.version });
       done(c.id);
       load();
       dashToast(`${c.username || c.email} updated.`, "ok", { title: "Saved" });
-    } catch (err) { undo(); setMsg(err.message, "err"); dashToast(err.message, "err", { title: "Update failed" }); }
+    } catch (err) {
+      undo();
+      // A conflict means the cached row is stale: fetch the server truth.
+      if (err.status === 409) load();
+      setMsg(err.message, "err");
+      dashToast(err.message, "err", { title: "Update failed" });
+    }
   };
   act.appendChild(e);
   // AD-006.1: Archive hidden on admin rows — admins can never be archived.

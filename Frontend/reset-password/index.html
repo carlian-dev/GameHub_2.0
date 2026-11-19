@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!-- /reset-password redirect shim - forwards to reset-password page preserving query params. -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Reset Password — GameHub</title>
+  <script>
+    location.replace("../src/function/auth/reset-password.html" + location.search);
+  </script>
+</head>
+<body>
+  <p>Redirecting to reset password… <a href="../src/function/auth/reset-password.html">continue</a></p>
+</body>
+</html>

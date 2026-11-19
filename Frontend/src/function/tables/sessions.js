@@ -24,13 +24,33 @@ function fmtLeft(ms) {
     : `${m}:${String(s).padStart(2, "0")}`;
 }
 
+function createSessionBar(startTime, endTime, plannedMinutes = 60) {
+  const track = document.createElement("div");
+  track.className = "session-bar-track";
+  track.setAttribute("aria-hidden", "true");
+
+  const fill = document.createElement("div");
+  fill.className = "session-bar-fill bar-green";
+  if (startTime) fill.setAttribute("data-bar-start", startTime);
+  if (endTime) fill.setAttribute("data-bar-end", endTime);
+  if (plannedMinutes) fill.setAttribute("data-bar-planned", String(plannedMinutes));
+  fill.style.width = "100%";
+
+  track.appendChild(fill);
+  return track;
+}
+
 function tickTimers() {
   const now = Date.now();
   let hitZero = false;
+
+  // 1. Text countdown timers
   document.querySelectorAll("#tbl [data-end]").forEach((el) => {
     const raw = el.getAttribute("data-end");
     if (!raw) { el.textContent = "—"; return; }
-    const ms = new Date(raw).getTime() - now;
+    const end = new Date(raw).getTime();
+    if (isNaN(end)) return;
+    const ms = end - now;
     const tr = el.closest("tr");
     const isActive = tr && tr.dataset.status === "active";
     el.textContent = isActive ? fmtLeft(ms) : "—";
@@ -38,6 +58,59 @@ function tickTimers() {
     el.classList.remove("over");
     if (isActive && ms <= 0) hitZero = true;
   });
+
+  // 2. Standalone visual progress bars (green -> yellow -> red as time is almost done)
+  document.querySelectorAll("#tbl [data-bar-end]").forEach((barFill) => {
+    const tr = barFill.closest("tr");
+    const isActive = tr && tr.dataset.status === "active";
+    if (!isActive) {
+      barFill.parentElement.style.display = "none";
+      return;
+    }
+
+    const endRaw = barFill.getAttribute("data-bar-end");
+    if (!endRaw) return;
+    const end = new Date(endRaw).getTime();
+    if (isNaN(end)) return;
+
+    const startRaw = barFill.getAttribute("data-bar-start");
+    let totalMs = 0;
+    if (startRaw) {
+      const start = new Date(startRaw).getTime();
+      if (!isNaN(start) && end > start) {
+        totalMs = end - start;
+      }
+    }
+    if (!totalMs) {
+      const planned = Number(barFill.getAttribute("data-bar-planned"));
+      totalMs = (Number.isFinite(planned) && planned > 0 ? planned : 60) * 60000;
+    }
+
+    const remainingMs = Math.max(0, end - now);
+    const ratio = Math.max(0, Math.min(1, remainingMs / totalMs));
+    const pct = Math.round(ratio * 100);
+
+    let tone = "bar-green";
+    let color = "#10B981";
+
+    if (remainingMs <= 5 * 60000 || ratio <= 0.20) {
+      tone = "bar-red";
+      color = "#EF4444";
+    } else if (remainingMs <= 15 * 60000 || ratio <= 0.50) {
+      tone = "bar-yellow";
+      color = "#F59E0B";
+    }
+
+    barFill.style.width = `${pct}%`;
+    barFill.style.backgroundColor = color;
+    barFill.className = `session-bar-fill ${tone}`;
+
+    const track = barFill.parentElement;
+    if (track) {
+      track.title = `${fmtLeft(remainingMs)} remaining (${pct}%)`;
+    }
+  });
+
   // The row should disappear as soon as the server closes the session.
   if (hitZero && Date.now() - sessExpiryReloadAt > 10000) {
     sessExpiryReloadAt = Date.now();
@@ -54,15 +127,35 @@ function paintSessions(list) {
     const badgeCls = s.status === "active" ? "occupied" : s.status === "closed" ? "available" : "archived";
     tr.innerHTML =
       "<td></td><td></td><td></td><td></td><td></td>" +
-      '<td><span class="timer">…</span></td>' +
+      "<td></td>" +
       "<td></td>";
-    tr.children[0].textContent = s.tableName || s.tableId || "—";
+
+    const tblWrap = document.createElement("div");
+    tblWrap.className = "session-table-cell";
+    const tblName = document.createElement("strong");
+    tblName.className = "session-table-name";
+    tblName.textContent = s.tableName || s.tableId || "—";
+    tblWrap.appendChild(tblName);
+    if (s.status === "active" && s.endTime) {
+      tblWrap.appendChild(createSessionBar(s.startTime, s.endTime, s.plannedMinutes));
+    }
+    tr.children[0].appendChild(tblWrap);
+
     tr.children[1].textContent = s.customerName || "—";
     tr.children[2].textContent = s.cashierName || "—";
     tr.children[3].textContent = fmtClock(s.startTime);
     tr.children[4].textContent = s.endTime ? fmtClock(s.endTime) : "—";
-    const timer = tr.children[5].querySelector(".timer");
-    timer.setAttribute("data-end", s.endTime || "");
+
+    const timer = document.createElement("span");
+    timer.className = "timer";
+    if (s.status === "active" && s.endTime) {
+      timer.setAttribute("data-end", s.endTime);
+      timer.textContent = "…";
+    } else {
+      timer.textContent = "—";
+    }
+    tr.children[5].appendChild(timer);
+
     const badge = document.createElement("span");
     badge.className = `badge ${badgeCls}`;
     badge.textContent = s.status || "—";
@@ -101,10 +194,10 @@ dashTabsInit((t) => { sessTab = t; loadSessions(); });
   const msg = document.getElementById("msg");
   try {
     const me = await getMe();
-    if (me.role !== "admin") { location.href = "../auth/login.html"; return; }
-    const name = me.email || "admin";
+    if (me.role !== "admin") { location.href = staffHome(me.role); return; }
+    const name = me.displayName || me.email || me.username || "admin";
     document.getElementById("who").textContent = name;
-    document.getElementById("avatar").textContent = name.charAt(0).toUpperCase();
+    dashRenderAvatar("avatar", { name, avatarUrl: me.avatarUrl, fallbackLetter: "A" });
     await loadSessions();
     setInterval(tickTimers, 1000);
     setInterval(() => {

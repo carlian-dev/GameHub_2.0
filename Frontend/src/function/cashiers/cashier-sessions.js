@@ -746,6 +746,7 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
     const stateRetry = overlay.querySelector("#billStateRetry");
     const stateReceipt = overlay.querySelector("#billStateReceipt");
     const stateClose = overlay.querySelector("#billStateClose");
+    const amountField = input.closest(".field");
     sub.textContent = `${tableName || "Session"} · ${customerName || "Customer"}`;
 
     const lastFocus = document.activeElement;
@@ -771,11 +772,15 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       titleEl.textContent = title;
       pay.hidden = true;
       state.hidden = false;
+      stateRetry.disabled = false;
+      stateClose.disabled = false;
       loadMsg.hidden = false;
       loadMsg.textContent = message;
       loadMsg.className = `dash-msg ${kind}`.trim();
       stateRetry.hidden = !retry;
+      stateRetry.textContent = "Retry";
       stateReceipt.hidden = !receiptRef;
+      stateReceipt.textContent = "Open receipt";
       if (receiptRef) {
         stateReceipt.href = `../shared/receipt.html?ref=${encodeURIComponent(receiptRef)}`;
       }
@@ -835,6 +840,26 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       }
     }
 
+    function syncMethod() {
+      amountField.hidden = false;
+      changeLine.hidden = false;
+      confirmBtn.textContent = "Confirm payment";
+      refresh();
+    }
+
+    function setMethod(next) {
+      method = next === "gcash" ? next : "cash";
+      overlay.querySelectorAll(".bill-methods .chip").forEach((c) => {
+        const on = c.dataset.m === method;
+        c.classList.toggle("on", on);
+        c.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    }
+
+    function resetMethod() {
+      setMethod("cash");
+    }
+
     function renderPayable() {
       const items = Array.isArray(bill.items) ? bill.items : [];
       total = Number(bill.total);
@@ -854,12 +879,13 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       const full = `${tableName || bill.session.tableName || "Session"} · ${customerName || bill.session.customerName || "Customer"}`;
       sub.textContent = full;
       input.value = total.toFixed(2);
-      refresh();
+      syncMethod();
       input.focus();
       input.select();
     }
 
     async function loadBill() {
+      resetMethod();
       bill = null;
       pay.hidden = true;
       state.hidden = true;
@@ -897,6 +923,7 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
     }
 
     function successView(t) {
+      if (settled) return;
       const paidTotal = Number(t.total != null ? t.total : total);
       const sessionPaid = Number(t.sessionTotal != null ? t.sessionTotal : paidTotal);
       const fnbPaid = Number(t.fnbTotal != null ? t.fnbTotal : 0);
@@ -961,13 +988,8 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
 
     overlay.querySelectorAll(".bill-methods .chip").forEach((chip) =>
       chip.addEventListener("click", () => {
-        method = chip.dataset.m;
-        overlay.querySelectorAll(".bill-methods .chip").forEach((c) => {
-          const on = c === chip;
-          c.classList.toggle("on", on);
-          c.setAttribute("aria-pressed", on ? "true" : "false");
-        });
-        refresh();
+        setMethod(chip.dataset.m);
+        syncMethod();
       }));
 
     input.addEventListener("input", () => { err.hidden = true; refresh(); });
@@ -1030,16 +1052,29 @@ function paintSessions(list) {
   tb.innerHTML = "";
   for (const s of list) {
     const tr = document.createElement("tr");
+    tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
+
+    const tblWrap = document.createElement("div");
+    tblWrap.className = "session-table-cell";
+    const tblName = document.createElement("strong");
+    tblName.className = "session-table-name";
+    tblName.textContent = s.tableName || "—";
+    tblWrap.appendChild(tblName);
+    if (s.endTime) {
+      tblWrap.appendChild(createSessionBar(s.startTime, s.endTime, s.plannedMinutes));
+    }
+    tr.children[0].appendChild(tblWrap);
+
+    tr.children[1].textContent = s.customerName || "—";
+    tr.children[2].textContent = fmtClock(s.startTime);
+    tr.children[3].textContent = fmtClock(s.endTime);
+
     const timer = document.createElement("span");
     timer.className = "timer";
     timer.setAttribute("data-end", s.endTime || "");
     timer.textContent = s.endTime ? "…" : "—";
-    tr.innerHTML = "<td></td><td></td><td></td><td></td><td></td><td></td><td></td>";
-    tr.children[0].textContent = s.tableName || "—";
-    tr.children[1].textContent = s.customerName || "—";
-    tr.children[2].textContent = fmtClock(s.startTime);
-    tr.children[3].textContent = fmtClock(s.endTime);
     tr.children[4].appendChild(timer);
+
     fnbCell(tr.children[5], s);
     const act = tr.children[6];
     act.classList.add("actions-cell");

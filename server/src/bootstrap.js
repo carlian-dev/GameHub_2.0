@@ -1,9 +1,15 @@
 // Dependency wiring: DB → models → services → controllers → routes.
 // Shared by server.js (HTTP listener) and the contract runner (in-process),
 // so both exercise the exact same app.
-import { env } from "./config/env.js";
+import crypto from "node:crypto";
+import { env, persistEnvValue } from "./config/env.js";
 import { getDb, getMongoClient } from "./config/db.js";
 import { setupRoutes } from "./app.js";
+import { authenticate } from "./middleware/auth.js";
+import {
+  configureAuthRateLimit,
+  resolveRateLimitConfig,
+} from "./middleware/rateLimit.js";
 
 // Models
 import { healthModel } from "./models/health.model.js";
@@ -17,11 +23,15 @@ import { reservationModel } from "./models/reservation.model.js";
 import { sessionModel } from "./models/session.model.js";
 import { transactionModel } from "./models/transaction.model.js";
 import { productModel } from "./models/product.model.js";
+import { activityModel } from "./models/activity.model.js";
 
 // Services
 import { healthService } from "./services/health.service.js";
 import { settingsService } from "./services/settings.service.js";
+import { featureAccessService } from "./services/featureAccess.service.js";
+import { integrationValidationService } from "./services/integrationValidation.service.js";
 import { authService } from "./services/auth.service.js";
+import { twoFactorService } from "./services/twoFactor.service.js";
 import { invitationService } from "./services/invitation.service.js";
 import { cashierService } from "./services/cashier.service.js";
 import { tableService } from "./services/table.service.js";
@@ -30,16 +40,19 @@ import { sessionService } from "./services/session.service.js";
 import { reservationService } from "./services/reservation.service.js";
 import { googleCalendarService } from "./services/googleCalendar.service.js";
 import { mailService } from "./services/mail.service.js";
+import { recaptchaService } from "./services/recaptcha.service.js";
 import { transactionService } from "./services/transaction.service.js";
 import { reportService } from "./services/report.service.js";
 import { productService } from "./services/product.service.js";
 import { orderService } from "./services/order.service.js";
+import { activityService } from "./services/activity.service.js";
 
 // Controllers
 import {
   healthController,
   settingsController,
   authController,
+  twoFactorController,
   invitationController,
   cashierController,
   tableController,
@@ -50,6 +63,7 @@ import {
   reportController,
   productController,
   orderController,
+  activityController,
 } from "./controllers/index.js";
 
 let wired = false;
@@ -77,6 +91,7 @@ export async function wireApp() {
     session: sessionModel({ db }),
     transaction: transactionModel({ db }),
     product: productModel({ db }),
+    activity: activityModel({ db }),
   };
 
   const mailer = mailService({
@@ -100,25 +115,62 @@ export async function wireApp() {
     rateModel: models.rate,
     db,
   });
+  // Super-admin TOTP secrets are AES-256-GCM encrypted at rest. Reuse the
+  // settings key when configured; otherwise derive a dedicated key from
+  // SESSION_SECRET so 2FA needs no extra env value. Changing either key makes
+  // existing authenticators unreadable (reset via the users collection).
+  const twoFactorKey =
+    env.SETTINGS_ENCRYPTION_KEY ||
+    crypto.createHash("sha256").update(`gamehub-2fa:${env.SESSION_SECRET}`).digest("hex");
+  const twoFactorSvc = twoFactorService({
+    userModel: models.user,
+    db,
+    encryptionKey: twoFactorKey,
+  });
+  // Settings > API proves every new credential against the service that
+  // issues it before the settings document is written.
+  const credentialValidator = integrationValidationService();
+  const rateLimitConfig = resolveRateLimitConfig();
+  const settingsSvc = settingsService({
+    settingsModel: models.settings,
+    db,
+    mongoClient,
+    googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
+    googleMapsApiKeyFromEnv: env.GOOGLE_MAPS_API_KEY,
+    googleCalendarFromEnv: {
+      calendarId: env.GOOGLE_CALENDAR_ID,
+      clientEmail: env.GOOGLE_CALENDAR_CLIENT_EMAIL,
+      privateKey: env.GOOGLE_CALENDAR_PRIVATE_KEY,
+    },
+    settingsEncryptionKey: env.SETTINGS_ENCRYPTION_KEY,
+    recaptchaFromEnv: {
+      siteKey: env.RECAPTCHA_SITE_KEY,
+      secretKey: env.RECAPTCHA_SECRET_KEY,
+    },
+    // Credential changes require a current authenticator code (step-up).
+    twoFactorService: twoFactorSvc,
+    // Live provider check for a credential that is being added or replaced.
+    integrationValidator: credentialValidator,
+    // Settings > API mirrors admin credentials into server/.env *_OVERRIDE
+    // fields; an empty field falls back to the base env value.
+    persistEnvValue,
+    defaultAuthRateLimit: rateLimitConfig.auth,
+    configureAuthRateLimit,
+    authRateLimitEnabled: rateLimitConfig.enabled,
+  });
+  await settingsSvc.initializeAuthRateLimit();
+  // Super-admin RBAC matrix. Cached in-process so the route guard does not add
+  // a DB round trip to every admin/cashier request.
+  const featureAccessSvc = featureAccessService({
+    settingsModel: models.settings,
+    db,
+  });
+  await featureAccessSvc.refresh();
   const services = {
     health: healthService({ healthModel: models.health, dbName: env.MONGODB_DB }),
-    settings: settingsService({
-      settingsModel: models.settings,
-      db,
-      mongoClient,
-      googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
-      googleCalendarFromEnv: {
-        calendarId: env.GOOGLE_CALENDAR_ID,
-        clientEmail: env.GOOGLE_CALENDAR_CLIENT_EMAIL,
-        privateKey: env.GOOGLE_CALENDAR_PRIVATE_KEY,
-      },
-    }),
-    auth: authService({
-      userModel: models.user,
-      settingsModel: models.settings,
-      db,
-      googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
-    }),
+    settings: settingsSvc,
+    featureAccess: featureAccessSvc,
+    twoFactor: twoFactorSvc,
     invitation: invitationService({
       invitationModel: models.invitation,
       db,
@@ -136,7 +188,30 @@ export async function wireApp() {
     }),
     report: reportService({ transactionModel: models.transaction }),
     product: productService({ productModel: models.product, db }),
+    activity: activityService({
+      activityModel: models.activity,
+      userModel: models.user,
+    }),
   };
+
+  // reCAPTCHA is DB-backed (settings.recaptcha) with env fallback while no
+  // document exists. Verification is a no-op when the integration is off.
+  const recaptcha = recaptchaService({
+    configProvider: () => services.settings.recaptchaConfig(),
+  });
+  services.recaptcha = recaptcha;
+  services.auth = authService({
+    userModel: models.user,
+    settingsModel: models.settings,
+    invitationModel: models.invitation,
+    db,
+    googleClientIdFromEnv: env.GOOGLE_CLIENT_ID,
+    googleAuthConfigProvider: () => settingsSvc.googleAuthConfig(),
+    recaptchaService: recaptcha,
+    mailer,
+    frontendUrl: env.FRONTEND_URL,
+    mailerDryRun: env.MAIL_DRY_RUN,
+  });
 
   // Calendar sync is DB-backed (settings.googleCalendar), with env fallback
   // when no document exists. It is always present; methods no-op when disabled.
@@ -162,6 +237,8 @@ export async function wireApp() {
     db,
     calendarService: calendar,
     mailer,
+    recaptchaService: recaptcha,
+    sessionService: sessionSvc,
   });
   services.order = orderService({
     sessionModel: models.session,
@@ -173,8 +250,15 @@ export async function wireApp() {
 
   const controllers = {
     health: healthController({ healthService: services.health }),
-    settings: settingsController({ settingsService: services.settings }),
-    auth: authController({ authService: services.auth }),
+    settings: settingsController({
+      settingsService: services.settings,
+      featureAccess: services.featureAccess,
+    }),
+    auth: authController({
+      authService: services.auth,
+      featureAccess: services.featureAccess,
+    }),
+    twoFactor: twoFactorController({ twoFactorService: services.twoFactor }),
     invitation: invitationController({ invitationService: services.invitation }),
     cashier: cashierController({ cashierService: services.cashier }),
     table: tableController({ tableService: services.table }),
@@ -182,12 +266,19 @@ export async function wireApp() {
     reservation: reservationController({ reservationService: services.reservation }),
     session: sessionController({ sessionService: services.session }),
     transaction: transactionController({ transactionService: services.transaction }),
-    report: reportController({ reportService: services.report }),
+    report: reportController({
+      reportService: services.report,
+      settingsService: services.settings,
+    }),
     product: productController({ productService: services.product }),
     order: orderController({ orderService: services.order }),
+    activity: activityController({ activityService: services.activity }),
   };
 
-  setupRoutes(controllers);
+  setupRoutes(controllers, {
+    authenticate: authenticate({ userModel: models.user }),
+    featureAccess: services.featureAccess,
+  });
   wired = true;
   wiredGraph = { models, services, controllers };
   return wiredGraph;

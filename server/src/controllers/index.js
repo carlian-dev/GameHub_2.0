@@ -2,20 +2,25 @@
 // through a view. No DB queries. migration.md §9 layer rules.
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/HttpError.js";
+import { clearAuthCookie, setAuthCookie } from "../utils/authToken.js";
 import {
   healthView,
   loginView,
   meView,
+  profileView,
   publicConfigView,
   adminIntegrationsView,
   invitationCheckView,
+  activityView,
+  twoFactorSetupView,
+  twoFactorStatusView,
 } from "../views/index.js";
 
 // -------- Tables --------
 export function tableController({ tableService }) {
   return {
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -24,7 +29,7 @@ export function tableController({ tableService }) {
     }),
 
     add: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -36,7 +41,7 @@ export function tableController({ tableService }) {
     rename: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -48,7 +53,7 @@ export function tableController({ tableService }) {
     status: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -60,7 +65,7 @@ export function tableController({ tableService }) {
     archive: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -71,7 +76,7 @@ export function tableController({ tableService }) {
     unarchive: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -85,7 +90,7 @@ export function tableController({ tableService }) {
     }),
 
     cashierList: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -99,7 +104,7 @@ export function tableController({ tableService }) {
 export function rateController({ rateService }) {
   return {
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -108,7 +113,7 @@ export function rateController({ rateService }) {
     }),
 
     set: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -127,7 +132,7 @@ export function rateController({ rateService }) {
 export function sessionController({ sessionService }) {
   return {
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -138,7 +143,7 @@ export function sessionController({ sessionService }) {
     }),
 
     start: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -158,7 +163,7 @@ export function sessionController({ sessionService }) {
     extend: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -174,7 +179,7 @@ export function sessionController({ sessionService }) {
     end: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -185,7 +190,7 @@ export function sessionController({ sessionService }) {
     cancel: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -199,7 +204,7 @@ export function sessionController({ sessionService }) {
 export function transactionController({ transactionService }) {
   return {
     create: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -215,7 +220,7 @@ export function transactionController({ transactionService }) {
     }),
 
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -231,7 +236,7 @@ export function transactionController({ transactionService }) {
     get: asyncHandler(async (req, res) => {
       const { ref } = req.params || {};
       if (!ref) throw new HttpError(422, "ref is required");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -242,10 +247,10 @@ export function transactionController({ transactionService }) {
 }
 
 // -------- Reports --------
-export function reportController({ reportService }) {
+export function reportController({ reportService, settingsService }) {
   return {
     daily: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -254,7 +259,7 @@ export function reportController({ reportService }) {
     }),
 
     monthly: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -263,7 +268,7 @@ export function reportController({ reportService }) {
     }),
 
     income: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -275,9 +280,15 @@ export function reportController({ reportService }) {
     }),
 
     export: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
+      }
+      const exportsCfg = settingsService
+        ? await settingsService.exportConfig()
+        : { csvExport: true };
+      if (!exportsCfg.csvExport) {
+        throw new HttpError(403, "CSV export is turned off by the super administrator");
       }
       const result = await reportService.export({
         from: req.query.from,
@@ -302,66 +313,183 @@ export function healthController({ healthService }) {
 }
 
 // -------- Settings --------
-export function settingsController({ settingsService }) {
+export function settingsController({ settingsService, featureAccess }) {
   return {
     publicConfig: asyncHandler(async (req, res) => {
       res.set("Cache-Control", "no-store");
-      const data = await settingsService.publicConfig();
-      res.status(200).json(publicConfigView(data));
+      const { exports, ...integrations } = await settingsService.publicConfig();
+      res.status(200).json({ ...publicConfigView(integrations), exports });
     }),
     adminIntegrations: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
       const data = await settingsService.adminIntegrations();
       res.status(200).json(adminIntegrationsView(data));
     }),
-    settingsUpdate: asyncHandler(async (req, res) => {
+    /** Super admin: activation state plus masked credentials. */
+    superAdminIntegrations: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const data = await settingsService.superAdminIntegrations();
+      res.status(200).json(adminIntegrationsView(data));
+    }),
+    superAdminGetAuthRateLimit: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const data = await settingsService.getAuthRateLimit();
+      res.status(200).json({ ok: true, authRateLimit: data });
+    }),
+    superAdminUpdateAuthRateLimit: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const data = await settingsService.updateAuthRateLimit(req.body, {
+        id: user.id,
+        email: user.email ?? null,
+        role: user.role,
+      });
+      res.status(200).json({ ok: true, authRateLimit: data });
+    }),
+    /**
+     * Super admin: flip one integration and/or change its credentials. A
+     * `credentials` payload must also carry the 6-digit authenticator `code`
+     * (step-up); the service verifies it before writing.
+     */
+    superAdminUpdate: asyncHandler(async (req, res) => {
       const { key } = req.params || {};
       if (!key) throw new HttpError(422, "unknown integration");
-      const user = req.session && req.session.user;
-      const adminEmail = user ? user.email : null;
-      const shaped = await settingsService.update(key, req.body || {}, adminEmail);
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const shaped = await settingsService.update(key, req.body || {}, {
+        id: user.id,
+        email: user.email ?? null,
+        role: user.role,
+      });
       res.status(200).json({ ok: true, integration: shaped });
+    }),
+    /** Super admin: RBAC matrix — every feature switch and its state. */
+    superAdminFeatureAccess: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      if (!featureAccess) {
+        throw new HttpError(503, "feature access is unavailable");
+      }
+      const data = await featureAccess.snapshot();
+      res.status(200).json({ ok: true, featureAccess: data });
+    }),
+    /**
+     * Super admin: flip one or more features for admin/cashier accounts.
+     * Accepts cells such as `{ features: { "staff.admin": false } }`; unknown
+     * features, roles the feature does not apply to, and non-boolean values are
+     * rejected before anything is stored.
+     */
+    superAdminUpdateFeatureAccess: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      if (!featureAccess) {
+        throw new HttpError(503, "feature access is unavailable");
+      }
+      const data = await featureAccess.update(req.body || {}, {
+        id: user.id,
+        email: user.email ?? null,
+        role: user.role,
+      });
+      res.status(200).json({ ok: true, featureAccess: data });
+    }),
+    /**
+     * Super admin: restore every integration to its `.env` defaults. Clears the
+     * `*_OVERRIDE` values and saved credentials/toggles, so the same 6-digit
+     * authenticator step-up as a credential change is required.
+     */
+    superAdminReset: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      const data = await settingsService.resetToDefaults(
+        { id: user.id, email: user.email ?? null, role: user.role },
+        req.body && req.body.code
+      );
+      res.status(200).json({ ok: true, ...data });
     }),
   };
 }
 
 // -------- Auth --------
-export function authController({ authService }) {
+export function authController({ authService, featureAccess }) {
   return {
     login: asyncHandler(async (req, res) => {
-      const { email, username, password } = req.body || {};
+      const { email, username, password, recaptchaToken } = req.body || {};
       const identifier = email || username || "";
-      const result = await authService.login({ identifier, password }, req);
-      res.status(200).json(loginView(result));
+      const result = await authService.login(
+        { identifier, password, recaptchaToken },
+        req
+      );
+      // The JWT travels only in the HttpOnly cookie; the body carries just the
+      // fields the frontend needs to redirect by role.
+      setAuthCookie(res, result.token);
+      res.status(200).json(loginView(result.user));
     }),
 
     logout: asyncHandler(async (req, res) => {
-      await authService.logout(req);
-      res.clearCookie("gh_session", { path: "/" });
-      res.status(200).json({ ok: true });
+      // Stateless: nothing server-side to destroy. Clearing the cookie and the
+      // tokenVersion bump in the service invalidate every token issued so far.
+      const result = await authService.logout(req.authUser);
+      clearAuthCookie(res);
+      res.status(200).json(result);
     }),
 
     me: asyncHandler(async (req, res) => {
-      const userId = req.session && req.session.user ? req.session.user.id : null;
+      const userId = req.authUser ? req.authUser.id : null;
       if (!userId) {
         throw new HttpError(401, "not logged in");
       }
-      const result = await authService.me(userId, req);
-      res.status(200).json(meView(result));
+      const result = await authService.me(userId);
+      // Feature switches for this role: the client hides disabled nav entries
+      // and refuses to run their pages. The server enforces the same matrix.
+      const features = featureAccess
+        ? await featureAccess.enabledFor(result.role)
+        : [];
+      res.status(200).json(meView({ ...result, features }));
+    }),
+
+    /** PUT /api/me/profile — self-service display name and avatar. */
+    updateProfile: asyncHandler(async (req, res) => {
+      const userId = req.authUser ? req.authUser.id : null;
+      if (!userId) {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await authService.updateProfile(userId, {
+        displayName: req.body?.displayName,
+        avatarUrl: req.body?.avatarUrl,
+        version: req.body?.version,
+      });
+      res.status(200).json(profileView(result));
     }),
 
     google: asyncHandler(async (req, res) => {
       const { idToken, email } = req.body || {};
       const result = await authService.google({ idToken, email }, req);
-      res.status(200).json(loginView(result));
+      setAuthCookie(res, result.token);
+      res.status(200).json(loginView(result.user));
     }),
 
     register: asyncHandler(async (req, res) => {
       const {
-        token, firstName, lastName, email, password, username, idToken,
+        token, firstName, lastName, email, password, username, idToken, recaptchaToken,
       } = req.body || {};
 
       if (idToken) {
@@ -369,9 +497,102 @@ export function authController({ authService }) {
       }
 
       const result = await authService.register({
-        token, firstName, lastName, email, password, username,
+        token, firstName, lastName, email, password, username, recaptchaToken,
+        remoteIp: req.ip,
       });
-      res.status(200).json(loginView(result));
+      res.status(200).json(loginView(result.user || result));
+    }),
+
+    forgotPassword: asyncHandler(async (req, res) => {
+      const { email, recaptchaToken } = req.body || {};
+      const result = await authService.forgotPassword(
+        { email, recaptchaToken },
+        req
+      );
+      res.status(200).json(result);
+    }),
+
+    verifyResetToken: asyncHandler(async (req, res) => {
+      const { token } = req.params;
+      const result = await authService.verifyResetToken(token);
+      res.status(200).json(result);
+    }),
+
+    resetPassword: asyncHandler(async (req, res) => {
+      const { token, password, recaptchaToken } = req.body || {};
+      const result = await authService.resetPassword(
+        { token, password, recaptchaToken },
+        req
+      );
+      res.status(200).json(result);
+    }),
+  };
+}
+
+// -------- Super-admin two-factor authentication (TOTP) --------
+export function twoFactorController({ twoFactorService }) {
+  function requireActor(req) {
+    const user = req.authUser;
+    if (!user || user.role !== "super_admin") {
+      throw new HttpError(403, "super admin only");
+    }
+    return user;
+  }
+
+  return {
+    status: asyncHandler(async (req, res) => {
+      const user = requireActor(req);
+      const result = await twoFactorService.status(user.id);
+      res.status(200).json(twoFactorStatusView(result));
+    }),
+
+    /**
+     * Start pairing another device from the security panel. Adding to an
+     * existing setup also needs a current code from an already-paired device.
+     * The `label` names the device so it can be told apart in the list.
+     */
+    setup: asyncHandler(async (req, res) => {
+      const user = requireActor(req);
+      const result = await twoFactorService.beginEnrollment(
+        user.id,
+        req.body?.code,
+        req.body?.label
+      );
+      res.status(200).json(twoFactorSetupView(result));
+    }),
+
+    enable: asyncHandler(async (req, res) => {
+      const { code } = req.body || {};
+      if (!code) {
+        throw new HttpError(422, "enter the 6-digit code from your authenticator app");
+      }
+      const user = requireActor(req);
+      const result = await twoFactorService.completeEnrollment(user.id, code);
+      res.status(200).json(twoFactorStatusView(result));
+    }),
+
+    removeDevice: asyncHandler(async (req, res) => {
+      const { code } = req.body || {};
+      if (!code) {
+        throw new HttpError(422, "enter the 6-digit code from your authenticator app");
+      }
+      const user = requireActor(req);
+      const result = await twoFactorService.removeDevice(
+        user.id,
+        req.params?.id,
+        code
+      );
+      res.status(200).json(twoFactorStatusView(result));
+    }),
+
+    disable: asyncHandler(async (req, res) => {
+      const { code } = req.body || {};
+      if (!code) {
+        throw new HttpError(422, "enter the 6-digit code from your authenticator app");
+      }
+      const user = requireActor(req);
+      const result = await twoFactorService.disable(user.id, code);
+      res.status(200).json(twoFactorStatusView(result));
     }),
   };
 }
@@ -390,7 +611,7 @@ export function invitationController({ invitationService }) {
 
     create: asyncHandler(async (req, res) => {
       const { email } = req.body || {};
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -404,7 +625,7 @@ export function invitationController({ invitationService }) {
     }),
 
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -415,7 +636,7 @@ export function invitationController({ invitationService }) {
     revoke: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -429,7 +650,7 @@ export function invitationController({ invitationService }) {
 export function cashierController({ cashierService }) {
   return {
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -443,7 +664,7 @@ export function cashierController({ cashierService }) {
     update: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -454,7 +675,7 @@ export function cashierController({ cashierService }) {
     archive: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
@@ -465,12 +686,47 @@ export function cashierController({ cashierService }) {
     unarchive: asyncHandler(async (req, res) => {
       const { id } = req.params || {};
       if (!id) throw new HttpError(422, "invalid id");
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
       const result = await cashierService.unarchive(id, user.id);
       res.status(200).json(result);
+    }),
+  };
+}
+
+// -------- Activity log (admin full audit + user self audit) --------
+export function activityController({ activityService }) {
+  return {
+    list: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "admin") {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await activityService.list({
+        action: req.query.action,
+        actorId: req.query.actorId,
+        from: req.query.from,
+        to: req.query.to,
+        limit: req.query.limit,
+      });
+      res.status(200).json(activityView(result));
+    }),
+
+    myList: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || !user.id) {
+        throw new HttpError(401, "not logged in");
+      }
+      const result = await activityService.list({
+        action: req.query.action,
+        actorId: String(user.id),
+        from: req.query.from,
+        to: req.query.to,
+        limit: req.query.limit,
+      });
+      res.status(200).json(activityView(result));
     }),
   };
 }
@@ -498,7 +754,7 @@ export function productController({ productService }) {
     create: asyncHandler(async (req, res) => {
       const result = await productService.add(
         req.body || {},
-        req.session && req.session.user
+        req.authUser
       );
       res.status(201).json(result);
     }),
@@ -509,7 +765,7 @@ export function productController({ productService }) {
       const result = await productService.update(
         id,
         req.body || {},
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -519,7 +775,7 @@ export function productController({ productService }) {
       if (!id) throw new HttpError(422, "invalid id");
       const result = await productService.archive(
         id,
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -529,7 +785,7 @@ export function productController({ productService }) {
       if (!id) throw new HttpError(422, "invalid id");
       const result = await productService.unarchive(
         id,
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -555,7 +811,7 @@ export function orderController({ orderService }) {
           productId: req.body?.productId,
           qty: req.body?.qty,
         },
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -567,7 +823,7 @@ export function orderController({ orderService }) {
         id,
         lineId,
         { qty: req.body?.qty },
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -578,7 +834,7 @@ export function orderController({ orderService }) {
       const result = await orderService.remove(
         id,
         lineId,
-        req.session && req.session.user
+        req.authUser
       );
       res.status(200).json(result);
     }),
@@ -589,7 +845,10 @@ export function orderController({ orderService }) {
 export function reservationController({ reservationService }) {
   return {
     create: asyncHandler(async (req, res) => {
-      const result = await reservationService.createReservation(req.body || {});
+      const result = await reservationService.createReservation(
+        req.body || {},
+        req.ip
+      );
       res.status(200).json(result);
     }),
 
@@ -601,7 +860,7 @@ export function reservationController({ reservationService }) {
     }),
 
     list: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -617,7 +876,7 @@ export function reservationController({ reservationService }) {
     }),
 
     accept: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
@@ -627,12 +886,22 @@ export function reservationController({ reservationService }) {
     }),
 
     reject: asyncHandler(async (req, res) => {
-      const user = req.session && req.session.user;
+      const user = req.authUser;
       if (!user) {
         throw new HttpError(401, "not logged in");
       }
       const { ref } = req.params || {};
       const result = await reservationService.reject(ref, user.id);
+      res.status(200).json(result);
+    }),
+
+    checkIn: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user) {
+        throw new HttpError(401, "not logged in");
+      }
+      const { ref } = req.params || {};
+      const result = await reservationService.checkIn(ref, user);
       res.status(200).json(result);
     }),
 

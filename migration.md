@@ -669,7 +669,7 @@ If the deployment is cross-site, stop and get approval before changing `sameSite
 
 ### 13.6 Settings
 
-- Registry keys: `googleAuth`, `googleMaps`, `recaptcha`, `otp`.
+- Registry keys: `googleAuth`, `googleMaps`, `googleCalendar`, `recaptcha`, `receiptPdf`, `csvExport`.
 - Only `available: true` integrations can be updated.
 - DB documents authoritative; defaults only when no document exists.
 - `/api/config` fails closed: on read failure, both integrations return disabled/empty with HTTP 200.

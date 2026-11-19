@@ -25,6 +25,7 @@
         "total": 0,
         "items": [],
         "method": "",
+        "provider": null,
         "received": 0,
         "change": 0,
         "paidAt": "<dyn>",

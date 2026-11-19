@@ -32,6 +32,7 @@ Success means a cashier can run one complete walk-in flow — start a table sess
 | AD-025 | Administrator should be able to view transaction records. | Transaction list/detail shows the F&B amount and item lines. |
 | AD-019 | Administrator should be able to view daily income reports. | Income totals include F&B and split session vs. F&B revenue. |
 | CA-025 | Cashier should be able to generate or print a customer receipt. | Receipt itemizes F&B lines, subtotals, and the combined total. |
+
 | CA-033 | System should record important cashier actions. | Add/update/remove order actions and product catalogue changes are logged. |
 
 Supporting requirements reused without change: role guards from the server session, `activityLogs`, CSV export, daily/monthly/income reports, jsPDF receipt, and the existing two-step close-out-then-pay flow.

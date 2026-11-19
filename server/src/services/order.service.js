@@ -223,6 +223,7 @@ export function orderService({
                 "fnbOrders.$.updatedAt": now,
                 updatedAt: now,
               },
+              $inc: { version: 1 },
             }
           );
           if (res.modifiedCount === 1) {
@@ -269,6 +270,7 @@ export function orderService({
             {
               $push: { fnbOrders: newLine },
               $set: { updatedAt: now },
+              $inc: { version: 1 },
             }
           );
           if (res.modifiedCount === 1) {
@@ -336,6 +338,7 @@ export function orderService({
               "fnbOrders.$.updatedAt": now,
               updatedAt: now,
             },
+            $inc: { version: 1 },
           }
         );
         if (res.modifiedCount === 1) {
@@ -384,6 +387,7 @@ export function orderService({
           {
             $pull: { fnbOrders: { _id: line._id } },
             $set: { updatedAt: now },
+            $inc: { version: 1 },
           }
         );
         if (res.modifiedCount === 1) {

@@ -89,6 +89,13 @@ export const env = {
   AUTH_RATE_LIMIT_WINDOW_MS: process.env.AUTH_RATE_LIMIT_WINDOW_MS || "900000",
   AUTH_RATE_LIMIT_MAX: process.env.AUTH_RATE_LIMIT_MAX || "10",
   WRITE_RATE_LIMIT_MAX: process.env.WRITE_RATE_LIMIT_MAX || "60",
+  // Per-action cooldown applied to every mutation (method + path + payload).
+  // Defaults to one request per second per user/IP; raise ACTION_RATE_LIMIT_MAX
+  // or lower ACTION_RATE_LIMIT_WINDOW_MS if a flow legitimately repeats an
+  // action fast.
+  ACTION_RATE_LIMIT_WINDOW_MS:
+    process.env.ACTION_RATE_LIMIT_WINDOW_MS || "1000",
+  ACTION_RATE_LIMIT_MAX: process.env.ACTION_RATE_LIMIT_MAX || "1",
   RESERVATION_RATE_LIMIT_WINDOW_MS:
     process.env.RESERVATION_RATE_LIMIT_WINDOW_MS || "600000",
   RESERVATION_RATE_LIMIT_MAX: process.env.RESERVATION_RATE_LIMIT_MAX || "10",

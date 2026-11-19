@@ -10,6 +10,7 @@ const LIMITER_KEYS = [
   "api",
   "auth",
   "writes",
+  "actions",
   "reservations",
   "staffLists",
   "reports",
@@ -37,6 +38,7 @@ function config(overrides = {}) {
 // stores under req.authUser).
 function testApp(limiters) {
   const app = express();
+  app.use(express.json());
   app.use((req, res, next) => {
     const id = req.get("x-user-id");
     req.authUser = id ? { id, role: "admin" } : null;
@@ -45,6 +47,9 @@ function testApp(limiters) {
   app.get("/read", limiters.api, (req, res) => res.json({ ok: true }));
   app.get("/write", limiters.writes, (req, res) => res.json({ ok: true }));
   app.post("/write", limiters.writes, (req, res) => res.json({ ok: true }));
+  app.get("/action", limiters.actions, (req, res) => res.json({ ok: true }));
+  app.post("/action", limiters.actions, (req, res) => res.json({ ok: true }));
+  app.post("/other-action", limiters.actions, (req, res) => res.json({ ok: true }));
   app.post("/login", limiters.auth, (req, res) => {
     const failed = req.get("x-fail") === "1";
     res.status(failed ? 401 : 200).json({ ok: !failed });
@@ -104,6 +109,47 @@ describe("createRateLimiters", () => {
     assert.equal((await request(app).get("/write")).status, 200);
     assert.equal((await request(app).post("/write")).status, 200);
     assert.equal((await request(app).post("/write")).status, 429);
+  });
+
+  it("cools down repeated mutations without throttling reads", async () => {
+    const app = testApp(createRateLimiters(config({ actions: { limit: 1 } })));
+
+    // Reads never enter the per-action cooldown.
+    assert.equal((await request(app).get("/action")).status, 200);
+    assert.equal((await request(app).get("/action")).status, 200);
+
+    // First mutation passes; an immediate repeat of the same action waits.
+    assert.equal((await request(app).post("/action")).status, 200);
+    const blocked = await request(app).post("/action");
+    assert.equal(blocked.status, 429);
+    assert.match(String(blocked.headers["retry-after"]), /^\d+$/);
+
+    // Another route is a different action with its own fresh cooldown, and a
+    // second user does not inherit the first user's countdown.
+    assert.equal((await request(app).post("/other-action")).status, 200);
+    assert.equal(
+      (await request(app).post("/action").set("x-user-id", "u2")).status,
+      200
+    );
+  });
+
+  it("treats a different payload on the same route as a different action", async () => {
+    const app = testApp(createRateLimiters(config({ actions: { limit: 1 } })));
+
+    assert.equal(
+      (await request(app).post("/action").send({ item: "coffee" })).status,
+      200
+    );
+    // The same button (same method, path and payload) is on cooldown.
+    assert.equal(
+      (await request(app).post("/action").send({ item: "coffee" })).status,
+      429
+    );
+    // A different item is a different action and gets its own slot.
+    assert.equal(
+      (await request(app).post("/action").send({ item: "juice" })).status,
+      200
+    );
   });
 
   it("does not count successful auth attempts", async () => {
@@ -235,6 +281,8 @@ describe("createRateLimiters", () => {
     }
     assert.equal((await request(app).post("/write")).status, 200);
     assert.equal((await request(app).post("/write")).status, 200);
+    assert.equal((await request(app).post("/action")).status, 200);
+    assert.equal((await request(app).post("/action")).status, 200);
     assert.equal((await request(app).post("/login").set("x-fail", "1")).status, 401);
   });
 });
@@ -248,6 +296,8 @@ describe("resolveRateLimitConfig", () => {
       AUTH_RATE_LIMIT_WINDOW_MS: "0",
       AUTH_RATE_LIMIT_MAX: "0",
       WRITE_RATE_LIMIT_MAX: "",
+      ACTION_RATE_LIMIT_WINDOW_MS: "0",
+      ACTION_RATE_LIMIT_MAX: "-1",
       RESERVATION_RATE_LIMIT_WINDOW_MS: "0",
       RESERVATION_RATE_LIMIT_MAX: "0",
       STAFF_LIST_RATE_LIMIT_WINDOW_MS: "0",
@@ -274,6 +324,7 @@ describe("resolveRateLimitConfig", () => {
     assert.equal(cfg.auth.windowMs, 15 * 60 * 1000);
     assert.equal(cfg.auth.limit, 10);
     assert.equal(cfg.writes.limit, 60);
+    assert.deepEqual(cfg.actions, { windowMs: 1000, limit: 1 });
     assert.equal(cfg.reservations.windowMs, 10 * 60 * 1000);
     assert.equal(cfg.reservations.limit, 10);
     assert.deepEqual(cfg.staffLists, { windowMs: 60_000, limit: 60 });
@@ -300,6 +351,8 @@ describe("resolveRateLimitConfig", () => {
       AUTH_RATE_LIMIT_WINDOW_MS: "9000",
       AUTH_RATE_LIMIT_MAX: "7",
       WRITE_RATE_LIMIT_MAX: "12",
+      ACTION_RATE_LIMIT_WINDOW_MS: "1500",
+      ACTION_RATE_LIMIT_MAX: "2",
       RESERVATION_RATE_LIMIT_WINDOW_MS: "7000",
       RESERVATION_RATE_LIMIT_MAX: "3",
       STAFF_LIST_RATE_LIMIT_WINDOW_MS: "3000",
@@ -324,6 +377,7 @@ describe("resolveRateLimitConfig", () => {
     assert.deepEqual(cfg.api, { windowMs: 5000, limit: 42 });
     assert.deepEqual(cfg.auth, { windowMs: 9000, limit: 7 });
     assert.deepEqual(cfg.writes, { windowMs: 5000, limit: 12 });
+    assert.deepEqual(cfg.actions, { windowMs: 1500, limit: 2 });
     assert.deepEqual(cfg.reservations, { windowMs: 7000, limit: 3 });
     assert.deepEqual(cfg.staffLists, { windowMs: 3000, limit: 9 });
     assert.deepEqual(cfg.reports, { windowMs: 4000, limit: 8 });

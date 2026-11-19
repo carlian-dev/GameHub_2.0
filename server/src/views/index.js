@@ -84,6 +84,8 @@ export function meView({
   createdAt,
   googleLinked,
   twoFactorEnabled,
+  version,
+  features,
 }) {
   return {
     ok: true,
@@ -97,14 +99,19 @@ export function meView({
     createdAt,
     googleLinked,
     twoFactorEnabled: !!twoFactorEnabled,
+    // Optimistic-concurrency revision: send it back with profile edits.
+    version: Number(version) > 0 ? Number(version) : 1,
+    // Switchable features this role currently has (super-admin RBAC matrix).
+    features: Array.isArray(features) ? features : [],
   };
 }
 
-export function profileView({ displayName, avatarUrl }) {
+export function profileView({ displayName, avatarUrl, version }) {
   return {
     ok: true,
     displayName: displayName ?? "",
     avatarUrl: avatarUrl ?? null,
+    version: Number(version) > 0 ? Number(version) : 1,
   };
 }
 

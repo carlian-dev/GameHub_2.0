@@ -1,9 +1,22 @@
 // src/function/super-admin/integrations.js - super admin integration control.
 // Pair: integrations.html <-> /api/super-admin/settings/integrations.
+// Login protection lives on login-protection.html and authenticator devices on
+// security.html; this page only owns activation and API credentials.
 // Guard: role=super_admin stays; admin/cashier go to their dashboards and
 // guests go to login. This role owns both the on/off switch and the credentials.
 // Credential values are always replaced blind: the API only returns masked hints.
 (function () {
+  // Older links pointed at #security / #loginProtection on this page. Forward
+  // them to the standalone pages instead of loading the wrong content.
+  if (location.hash === "#security") {
+    location.replace("./security.html");
+    return;
+  }
+  if (location.hash === "#loginProtection") {
+    location.replace("./login-protection.html");
+    return;
+  }
+
   const msg = document.getElementById("msg");
   const list = document.getElementById("apiList");
   let loading = false;
@@ -146,20 +159,30 @@
   /**
    * Credential changes are step-up protected: the server requires a current
    * authenticator code, which cannot exist until an app is paired. Point the
-   * super admin at the Security panel instead of letting the save fail with 409.
+   * super admin at the Security page instead of letting the save fail with 409.
    */
   function requireAuthenticator() {
     if (tfaPaired !== false) return true;
     dashToast(
-      "Pair an authenticator app in the Security panel below before changing API keys.",
+      "Pair an authenticator app on the Security page before changing API keys.",
       "err",
       { title: "Authenticator required", timeout: 7000 }
     );
-    document.getElementById("security")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
     return false;
+  }
+
+  /**
+   * The Security page owns pairing, but this page still needs the paired/not
+   * paired state so a credential edit can be stopped before the server 409s.
+   * A failed lookup leaves it null (unknown) and lets the server decide.
+   */
+  async function loadAuthenticatorState() {
+    try {
+      const status = await getSuperAdminTwoFactor();
+      tfaPaired = !!(status && status.enabled);
+    } catch {
+      tfaPaired = null;
+    }
   }
 
   /**
@@ -464,351 +487,6 @@
     }
   }
 
-  const loginProtectionForm = document.getElementById("loginProtectionForm");
-  const authMaxAttempts = document.getElementById("authMaxAttempts");
-  const authWindowMinutes = document.getElementById("authWindowMinutes");
-  const loginProtectionMsg = document.getElementById("loginProtectionMsg");
-  const saveLoginProtection = document.getElementById("saveLoginProtection");
-
-  function setLoginProtectionMsg(text, kind = "") {
-    if (!loginProtectionMsg) return;
-    loginProtectionMsg.textContent = text || "";
-    loginProtectionMsg.className = `security-msg${kind ? ` is-${kind}` : ""}`;
-  }
-
-  async function loadLoginProtection() {
-    try {
-      const data = await getSuperAdminAuthRateLimit();
-      const settings = data && data.authRateLimit;
-      if (!settings) throw new Error("Login protection settings were not returned.");
-      authMaxAttempts.value = String(settings.maxAttempts);
-      authWindowMinutes.value = String(settings.windowMinutes);
-      setLoginProtectionMsg(
-        settings.enabled
-          ? "Current limits are active."
-          : "Rate limiting is disabled by the server environment; these values will apply when it is enabled."
-      );
-    } catch (e) {
-      setLoginProtectionMsg(e.message, "err");
-      dashToast(e.message, "err");
-    }
-  }
-
-  async function saveLoginProtectionSettings(event) {
-    event.preventDefault();
-    const maxAttempts = Number(authMaxAttempts.value);
-    const windowMinutes = Number(authWindowMinutes.value);
-    if (
-      !Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 100 ||
-      !Number.isInteger(windowMinutes) || windowMinutes < 1 || windowMinutes > 1440
-    ) {
-      setLoginProtectionMsg(
-        "Enter 1–100 attempts and a 1–1,440 minute window.",
-        "err"
-      );
-      return;
-    }
-
-    saveLoginProtection.disabled = true;
-    setLoginProtectionMsg("Saving login protection settings…");
-    try {
-      const data = await updateSuperAdminAuthRateLimit({
-        maxAttempts,
-        windowMinutes,
-      });
-      const settings = data && data.authRateLimit;
-      if (!settings) throw new Error("Updated login protection settings were not returned.");
-      authMaxAttempts.value = String(settings.maxAttempts);
-      authWindowMinutes.value = String(settings.windowMinutes);
-      setLoginProtectionMsg(
-        settings.enabled
-          ? `Saved: ${settings.maxAttempts} failed attempts per ${settings.windowMinutes} minutes.`
-          : "Saved, but rate limiting is disabled by the server environment.",
-        "ok"
-      );
-      dashToast("Login protection settings saved.", "ok");
-    } catch (e) {
-      setLoginProtectionMsg(e.message, "err");
-      dashToast(e.message, "err");
-    } finally {
-      saveLoginProtection.disabled = false;
-    }
-  }
-
-  loginProtectionForm?.addEventListener("submit", saveLoginProtectionSettings);
-
-  // --- Authenticator app (2FA) ---
-  const tfaStatus = document.getElementById("tfaStatus");
-  const tfaNote = document.getElementById("tfaNote");
-  const tfaActions = document.getElementById("tfaActions");
-  const tfaSetup = document.getElementById("tfaSetup");
-  const tfaSetupCode = document.getElementById("tfaSetupCode");
-  const tfaMsgEl = document.getElementById("tfaSecurityMsg");
-
-  function tfaSetMsg(text, kind = "") {
-    if (!tfaMsgEl) return;
-    tfaMsgEl.textContent = text || "";
-    tfaMsgEl.className = `security-msg${kind ? ` is-${kind}` : ""}`;
-  }
-
-  function renderDevices(devices) {
-    const list = document.getElementById("tfaDevices");
-    if (!list) return;
-    list.replaceChildren();
-    if (!Array.isArray(devices) || devices.length === 0) {
-      list.hidden = true;
-      return;
-    }
-    devices.forEach((device) => {
-      const item = make("li", "security-device");
-      const info = make("div", "security-device-info");
-      info.appendChild(make("strong", "", device.label || "Authenticator device"));
-      const meta = [];
-      if (device.createdAt) meta.push(`Added ${formatDate(device.createdAt)}`);
-      meta.push(
-        device.lastUsedAt ? `Last used ${formatDate(device.lastUsedAt)}` : "Not used yet"
-      );
-      info.appendChild(make("span", "", meta.join(" · ")));
-      item.appendChild(info);
-
-      // The server refuses to remove the last device; hide the button too.
-      if (devices.length > 1) {
-        const remove = make(
-          "button",
-          "btn btn-ghost security-danger security-device-remove",
-          "Remove"
-        );
-        remove.type = "button";
-        remove.addEventListener("click", async () => {
-          remove.disabled = true;
-          try {
-            await removeSecurityDevice(device.id, device.label || "this device");
-          } finally {
-            remove.disabled = false;
-          }
-        });
-        item.appendChild(remove);
-      }
-      list.appendChild(item);
-    });
-    list.hidden = false;
-  }
-
-  function renderSecurity(status) {
-    const enabled = !!(status && status.enabled);
-    const devices = Array.isArray(status && status.devices) ? status.devices : [];
-    tfaPaired = enabled;
-    if (tfaStatus) {
-      tfaStatus.textContent = enabled
-        ? `${devices.length} device${devices.length === 1 ? "" : "s"}`
-        : "Off";
-      tfaStatus.className = `settings-badge ${enabled ? "is-active" : "is-declined"}`;
-    }
-    if (tfaNote) {
-      const enrolled = status && status.enrolledAt
-        ? ` First paired ${formatDate(status.enrolledAt)}.`
-        : "";
-      const used = status && status.lastUsedAt
-        ? ` Last used ${formatDate(status.lastUsedAt)}.`
-        : "";
-      if (!enabled) {
-        tfaNote.textContent =
-          "2FA is off. Pair an authenticator app before adding, replacing or clearing API keys. Sign-in does not require it.";
-      } else if (devices.length === 1) {
-        tfaNote.textContent =
-          `1 authenticator device paired. A code from it is required when adding, replacing or clearing an API credential. Add a second device so a lost phone doesn’t lock you out.${enrolled}${used}`;
-      } else {
-        tfaNote.textContent =
-          `${devices.length} authenticator devices paired. A code from any of them is accepted when adding, replacing or clearing an API credential.${enrolled}${used}`;
-      }
-    }
-    renderDevices(enabled ? devices : []);
-    if (tfaActions) tfaActions.hidden = false;
-    if (tfaSetup) tfaSetup.hidden = true;
-    const reenroll = document.getElementById("tfaReenroll");
-    const disable = document.getElementById("tfaDisable");
-    if (reenroll) {
-      const limit = Number(status && status.deviceLimit) || 5;
-      const atLimit = enabled && devices.length >= limit;
-      reenroll.textContent = enabled ? "Add another device" : "Set up authenticator";
-      reenroll.hidden = atLimit;
-    }
-    if (disable) disable.hidden = !enabled;
-  }
-
-  async function loadSecurity() {
-    try {
-      const status = await getSuperAdminTwoFactor();
-      renderSecurity(status);
-    } catch (e) {
-      if (tfaStatus) {
-        tfaStatus.textContent = "Unavailable";
-        tfaStatus.className = "settings-badge is-declined";
-      }
-      tfaSetMsg(e.message, "err");
-    }
-  }
-
-  async function beginSecuritySetup() {
-    let code = "";
-    if (tfaPaired) {
-      const entered = await dashPrompt(
-        "Enter the current 6-digit code from an already-paired device before adding another one.",
-        "6-digit code",
-        "",
-        "Add authenticator device"
-      );
-      if (entered === null) return;
-      code = String(entered).replace(/\D/g, "");
-      if (code.length !== 6) {
-        tfaSetMsg("Enter the current 6-digit code from an already-paired device.", "err");
-        return;
-      }
-    }
-    const enteredLabel = await dashPrompt(
-      tfaPaired
-        ? "Name this device so you can tell it apart later (for example “Pixel 9” or “Office tablet”)."
-        : "Name this device so you can tell it apart later. Optional — leave blank for “Primary device”.",
-      "Device name",
-      "",
-      tfaPaired ? "Add authenticator device" : "Set up authenticator"
-    );
-    if (enteredLabel === null) return;
-    const label = String(enteredLabel).trim().slice(0, 40);
-
-    const btn = document.getElementById("tfaReenroll");
-    if (btn) btn.disabled = true;
-    tfaSetMsg("Preparing your QR code…");
-    try {
-      const data = await setupSuperAdminTwoFactor(code, label);
-      document.getElementById("tfaSetupQr").src = data.qrDataUrl;
-      document.getElementById("tfaSetupSecret").textContent =
-        String(data.secret || "").match(/.{1,4}/g)?.join(" ") || data.secret;
-      tfaSetup.hidden = false;
-      tfaActions.hidden = true;
-      tfaSetupCode.value = "";
-      tfaSetMsg(
-        `Scan this QR code with “${data.label || label || "the new device"}”, then enter the 6-digit code to confirm. The devices already paired stay active.`,
-        "ok"
-      );
-      document.getElementById("tfaSetup").scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-      });
-      tfaSetupCode.focus();
-    } catch (e) {
-      tfaSetMsg(e.message, "err");
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  function cancelSecuritySetup() {
-    if (tfaSetup) tfaSetup.hidden = true;
-    if (tfaActions) tfaActions.hidden = false;
-    tfaSetMsg("");
-  }
-
-  async function enableSecurity(event) {
-    event.preventDefault();
-    const code = tfaSetupCode.value.replace(/\D/g, "");
-    if (code.length !== 6) {
-      tfaSetMsg("Enter the 6-digit code from your authenticator app.", "err");
-      tfaSetupCode.focus();
-      return;
-    }
-    const btn = document.getElementById("tfaEnable");
-    if (btn) btn.disabled = true;
-    tfaSetMsg("Verifying…");
-    try {
-      const status = await enableSuperAdminTwoFactor(code);
-      renderSecurity(status);
-      const count = Array.isArray(status.devices) ? status.devices.length : 1;
-      tfaSetMsg(
-        count > 1
-          ? `Device confirmed. ${count} devices can now approve API key changes.`
-          : "Authenticator app confirmed. You’ll use it when changing API keys.",
-        "ok"
-      );
-      dashToast(
-        count > 1 ? "Authenticator device added." : "Two-factor authentication is on.",
-        "ok"
-      );
-    } catch (e) {
-      tfaSetMsg(e.message, "err");
-      tfaSetupCode.value = "";
-      tfaSetupCode.focus();
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  /** Remove one paired device. Any remaining device keeps working. */
-  async function removeSecurityDevice(deviceId, label) {
-    const entered = await dashPrompt(
-      `Enter the current 6-digit code to remove “${label}”. The other paired devices keep working.`,
-      "6-digit code",
-      "",
-      "Remove authenticator device"
-    );
-    if (entered === null) return;
-    const code = String(entered).replace(/\D/g, "");
-    if (code.length !== 6) {
-      tfaSetMsg("Enter the 6-digit code from an authenticator app.", "err");
-      return;
-    }
-    tfaSetMsg(`Removing “${label}”…`);
-    try {
-      const status = await removeSuperAdminTwoFactorDevice(deviceId, code);
-      renderSecurity(status);
-      const left = Array.isArray(status.devices) ? status.devices.length : 0;
-      tfaSetMsg(
-        `Removed “${label}”. ${left} device${left === 1 ? "" : "s"} remain.`,
-        "ok"
-      );
-      dashToast("Authenticator device removed.", "ok");
-    } catch (e) {
-      tfaSetMsg(e.message, "err");
-    }
-  }
-
-  async function disableSecurity() {
-    const entered = await dashPrompt(
-      "Enter the current 6-digit code from any authenticator device. Turning 2FA off removes every paired device and blocks API key changes until you pair one again.",
-      "6-digit code",
-      "",
-      "Turn off two-factor authentication"
-    );
-    if (entered === null) return;
-    const code = String(entered).replace(/\D/g, "");
-    if (code.length !== 6) {
-      tfaSetMsg("Enter the current 6-digit code to turn 2FA off.", "err");
-      return;
-    }
-    const btn = document.getElementById("tfaDisable");
-    if (btn) btn.disabled = true;
-    tfaSetMsg("Turning off 2FA…");
-    try {
-      const status = await disableSuperAdminTwoFactor(code);
-      renderSecurity(status);
-      tfaSetMsg("2FA is off. Pair an authenticator before changing API keys.", "ok");
-      dashToast("Two-factor authentication is off.", "ok");
-    } catch (e) {
-      tfaSetMsg(e.message, "err");
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  document.getElementById("tfaReenroll")?.addEventListener("click", beginSecuritySetup);
-  document.getElementById("tfaCancelSetup")?.addEventListener("click", cancelSecuritySetup);
-  document.getElementById("tfaDisable")?.addEventListener("click", disableSecurity);
-  document.getElementById("tfaEnableForm")?.addEventListener("submit", enableSecurity);
-  tfaSetupCode?.addEventListener("input", (e) => {
-    const digits = e.currentTarget.value.replace(/\D/g, "").slice(0, 6);
-    if (e.currentTarget.value !== digits) e.currentTarget.value = digits;
-  });
-
   (async () => {
     try {
       const me = await getMe();
@@ -820,9 +498,7 @@
       document.getElementById("who").textContent = displayName;
       dashRenderAvatar("avatar", { name: displayName, avatarUrl: me.avatarUrl, fallbackLetter: "S" });
       setMsg("");
-      await load();
-      await loadLoginProtection();
-      await loadSecurity();
+      await Promise.all([load(), loadAuthenticatorState()]);
     } catch (e) {
       setMsg(`${e.message} - redirecting to login.`, "err");
       setTimeout(() => { location.href = "../auth/login.html"; }, 1400);

@@ -7,7 +7,7 @@
 //   POST /api/auth/google              (6)
 //   POST /api/logout                   (7)   Auth
 //   GET  /api/me                       (8)    Auth
-//   PUT  /api/me/profile                      Self-service display name & avatar (any role)
+//   PUT  /api/me/profile                      Self-service display name & avatar (any role; requires `version`)
 //   GET  /api/me/activity-logs                Self activity audit (any role)
 import { requireLogin } from "../middleware/auth.js";
 import { rateLimiters } from "../middleware/rateLimit.js";
@@ -19,17 +19,39 @@ export function registerAuthRoutes(router, { authController, invitationControlle
   router.get("/invitations/:token", rateLimiters.auth, invitationController.check);
   router.post("/login", rateLimiters.auth, authController.login);
   router.post("/auth/google", rateLimiters.auth, authController.google);
-  router.post("/forgot-password", rateLimiters.auth, authController.forgotPassword);
+  router.post(
+    "/forgot-password",
+    // Mail budget first: it counts every request, so a known address cannot
+    // be mail-bombed even though the auth limiter refunds successful requests.
+    rateLimiters.notifications,
+    rateLimiters.auth,
+    authController.forgotPassword
+  );
   router.get("/reset-password/:token", rateLimiters.auth, authController.verifyResetToken);
   router.post("/reset-password", rateLimiters.auth, authController.resetPassword);
-  router.post("/auth/forgot-password", rateLimiters.auth, authController.forgotPassword);
+  router.post(
+    "/auth/forgot-password",
+    rateLimiters.notifications,
+    rateLimiters.auth,
+    authController.forgotPassword
+  );
   router.post("/auth/reset-password", rateLimiters.auth, authController.resetPassword);
 
   // Authenticated (session required — requireLogin applied inside controllers)
   router.post("/logout", authController.logout);
   router.get("/me", authController.me);
-  router.put("/me/profile", requireLogin, authController.updateProfile);
+  // A profile save can carry a 2MB base64 avatar, so keep the budget small.
+  router.put(
+    "/me/profile",
+    requireLogin,
+    rateLimiters.profileEdits,
+    authController.updateProfile
+  );
   if (activityController && activityController.myList) {
-    router.get("/me/activity-logs", activityController.myList);
+    router.get(
+      "/me/activity-logs",
+      rateLimiters.audit,
+      activityController.myList
+    );
   }
 }

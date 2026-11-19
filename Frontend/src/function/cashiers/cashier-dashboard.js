@@ -195,10 +195,12 @@ function renderReservations(reservations) {
 async function loadDashboard(quiet = false) {
   if (!quiet) setStartMsg("Loading tables…", "loading");
   try {
+    // Each panel degrades on its own: a feature the super admin switched off
+    // (or a transient failure) must not blank the whole dashboard.
     const [{ tables }, { sessions: active }, { reservations }] = await Promise.all([
-      listCashierTables("all"),
-      listCashierSessions("active"),
-      listCashierReservations(),
+      listCashierTables("all").catch(() => ({ tables: [] })),
+      listCashierSessions("active").catch(() => ({ sessions: [] })),
+      listCashierReservations().catch(() => ({ reservations: [] })),
     ]);
     const all = tables || [];
     const available = all.filter((t) => t.status === "available");

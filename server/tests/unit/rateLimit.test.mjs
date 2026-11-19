@@ -6,22 +6,30 @@ import express from "express";
 import request from "supertest";
 import { createRateLimiters, resolveRateLimitConfig } from "../../src/middleware/rateLimit.js";
 
+const LIMITER_KEYS = [
+  "api",
+  "auth",
+  "writes",
+  "reservations",
+  "staffLists",
+  "reports",
+  "exports",
+  "audit",
+  "notifications",
+  "integrationChecks",
+  "profileEdits",
+  "health",
+];
+
 function config(overrides = {}) {
-  const base = {
-    enabled: true,
-    api: { windowMs: 60_000, limit: 100 },
-    auth: { windowMs: 60_000, limit: 100 },
-    writes: { windowMs: 60_000, limit: 100 },
-    reservations: { windowMs: 60_000, limit: 100 },
-  };
-  return {
-    ...base,
-    ...overrides,
-    api: { ...base.api, ...(overrides.api || {}) },
-    auth: { ...base.auth, ...(overrides.auth || {}) },
-    writes: { ...base.writes, ...(overrides.writes || {}) },
-    reservations: { ...base.reservations, ...(overrides.reservations || {}) },
-  };
+  const base = Object.fromEntries(
+    LIMITER_KEYS.map((key) => [key, { windowMs: 60_000, limit: 100 }])
+  );
+  const merged = { enabled: true, ...base, ...overrides };
+  for (const key of LIMITER_KEYS) {
+    merged[key] = { ...base[key], ...(overrides[key] || {}) };
+  }
+  return merged;
 }
 
 // Minimal stand-in for the JWT middleware: `x-user-id` marks the request as
@@ -44,6 +52,15 @@ function testApp(limiters) {
   app
     .route("/reservations")
     .post(limiters.reservations, (req, res) => res.json({ ok: true }));
+  // One route per resource-heavy limiter so each budget can be asserted.
+  app.get("/staff-list", limiters.staffLists, (req, res) => res.json({ ok: true }));
+  app.get("/report", limiters.reports, (req, res) => res.json({ ok: true }));
+  app.get("/export", limiters.exports, (req, res) => res.json({ ok: true }));
+  app.get("/audit", limiters.audit, (req, res) => res.json({ ok: true }));
+  app.post("/notify", limiters.notifications, (req, res) => res.json({ ok: true }));
+  app.put("/integration", limiters.integrationChecks, (req, res) => res.json({ ok: true }));
+  app.put("/profile", limiters.profileEdits, (req, res) => res.json({ ok: true }));
+  app.get("/health", limiters.health, (req, res) => res.json({ ok: true }));
   return app;
 }
 
@@ -139,12 +156,85 @@ describe("createRateLimiters", () => {
     );
   });
 
+  it("gives each expensive read its own per-user budget", async () => {
+    const app = testApp(
+      createRateLimiters(
+        config({
+          staffLists: { limit: 1 },
+          reports: { limit: 1 },
+          exports: { limit: 1 },
+          audit: { limit: 1 },
+        })
+      )
+    );
+
+    for (const path of ["/staff-list", "/report", "/export", "/audit"]) {
+      assert.equal(
+        (await request(app).get(path).set("x-user-id", "u1")).status,
+        200
+      );
+      assert.equal(
+        (await request(app).get(path).set("x-user-id", "u1")).status,
+        429
+      );
+      // Another user has a fresh bucket, and exhausting one read type must
+      // not spend the budget of the other three.
+      assert.equal(
+        (await request(app).get(path).set("x-user-id", "u2")).status,
+        200
+      );
+    }
+  });
+
+  it("throttles notification, integration-check and profile writes per user", async () => {
+    const app = testApp(
+      createRateLimiters(
+        config({
+          notifications: { limit: 1 },
+          integrationChecks: { limit: 1 },
+          profileEdits: { limit: 1 },
+        })
+      )
+    );
+
+    for (const [method, path] of [
+      ["post", "/notify"],
+      ["put", "/integration"],
+      ["put", "/profile"],
+    ]) {
+      assert.equal(
+        (await request(app)[method](path).set("x-user-id", "u1")).status,
+        200
+      );
+      assert.equal(
+        (await request(app)[method](path).set("x-user-id", "u1")).status,
+        429
+      );
+      assert.equal(
+        (await request(app)[method](path).set("x-user-id", "u2")).status,
+        200
+      );
+    }
+  });
+
+  it("throttles the public health probe by IP", async () => {
+    const app = testApp(createRateLimiters(config({ health: { limit: 1 } })));
+
+    assert.equal((await request(app).get("/health")).status, 200);
+    assert.equal((await request(app).get("/health")).status, 429);
+  });
+
   it("is a pass-through when disabled", async () => {
     const app = testApp(createRateLimiters(config({ enabled: false, api: { limit: 1 } })));
 
+    for (const path of ["/read", "/staff-list", "/report", "/export", "/audit", "/health"]) {
+      assert.equal((await request(app).get(path)).status, 200);
+    }
     for (let i = 0; i < 5; i += 1) {
       assert.equal((await request(app).get("/read")).status, 200);
     }
+    assert.equal((await request(app).post("/write")).status, 200);
+    assert.equal((await request(app).post("/write")).status, 200);
     assert.equal((await request(app).post("/login").set("x-fail", "1")).status, 401);
   });
 });
@@ -160,6 +250,22 @@ describe("resolveRateLimitConfig", () => {
       WRITE_RATE_LIMIT_MAX: "",
       RESERVATION_RATE_LIMIT_WINDOW_MS: "0",
       RESERVATION_RATE_LIMIT_MAX: "0",
+      STAFF_LIST_RATE_LIMIT_WINDOW_MS: "0",
+      STAFF_LIST_RATE_LIMIT_MAX: "-1",
+      REPORT_RATE_LIMIT_WINDOW_MS: "nope",
+      REPORT_RATE_LIMIT_MAX: "",
+      EXPORT_RATE_LIMIT_WINDOW_MS: "0",
+      EXPORT_RATE_LIMIT_MAX: "0",
+      AUDIT_RATE_LIMIT_WINDOW_MS: "0",
+      AUDIT_RATE_LIMIT_MAX: "0",
+      NOTIFICATION_RATE_LIMIT_WINDOW_MS: "0",
+      NOTIFICATION_RATE_LIMIT_MAX: "0",
+      INTEGRATION_RATE_LIMIT_WINDOW_MS: "0",
+      INTEGRATION_RATE_LIMIT_MAX: "0",
+      PROFILE_RATE_LIMIT_WINDOW_MS: "0",
+      PROFILE_RATE_LIMIT_MAX: "0",
+      HEALTH_RATE_LIMIT_WINDOW_MS: "0",
+      HEALTH_RATE_LIMIT_MAX: "0",
     });
 
     assert.equal(cfg.enabled, true);
@@ -170,6 +276,20 @@ describe("resolveRateLimitConfig", () => {
     assert.equal(cfg.writes.limit, 60);
     assert.equal(cfg.reservations.windowMs, 10 * 60 * 1000);
     assert.equal(cfg.reservations.limit, 10);
+    assert.deepEqual(cfg.staffLists, { windowMs: 60_000, limit: 60 });
+    assert.deepEqual(cfg.reports, { windowMs: 60_000, limit: 20 });
+    assert.deepEqual(cfg.exports, { windowMs: 10 * 60 * 1000, limit: 5 });
+    assert.deepEqual(cfg.audit, { windowMs: 60_000, limit: 20 });
+    assert.deepEqual(cfg.notifications, {
+      windowMs: 10 * 60 * 1000,
+      limit: 10,
+    });
+    assert.deepEqual(cfg.integrationChecks, {
+      windowMs: 15 * 60 * 1000,
+      limit: 10,
+    });
+    assert.deepEqual(cfg.profileEdits, { windowMs: 60_000, limit: 5 });
+    assert.deepEqual(cfg.health, { windowMs: 60_000, limit: 30 });
   });
 
   it("accepts explicit env values", () => {
@@ -182,6 +302,22 @@ describe("resolveRateLimitConfig", () => {
       WRITE_RATE_LIMIT_MAX: "12",
       RESERVATION_RATE_LIMIT_WINDOW_MS: "7000",
       RESERVATION_RATE_LIMIT_MAX: "3",
+      STAFF_LIST_RATE_LIMIT_WINDOW_MS: "3000",
+      STAFF_LIST_RATE_LIMIT_MAX: "9",
+      REPORT_RATE_LIMIT_WINDOW_MS: "4000",
+      REPORT_RATE_LIMIT_MAX: "8",
+      EXPORT_RATE_LIMIT_WINDOW_MS: "5000",
+      EXPORT_RATE_LIMIT_MAX: "7",
+      AUDIT_RATE_LIMIT_WINDOW_MS: "6000",
+      AUDIT_RATE_LIMIT_MAX: "6",
+      NOTIFICATION_RATE_LIMIT_WINDOW_MS: "7000",
+      NOTIFICATION_RATE_LIMIT_MAX: "5",
+      INTEGRATION_RATE_LIMIT_WINDOW_MS: "8000",
+      INTEGRATION_RATE_LIMIT_MAX: "4",
+      PROFILE_RATE_LIMIT_WINDOW_MS: "9000",
+      PROFILE_RATE_LIMIT_MAX: "3",
+      HEALTH_RATE_LIMIT_WINDOW_MS: "10000",
+      HEALTH_RATE_LIMIT_MAX: "2",
     });
 
     assert.equal(cfg.enabled, false);
@@ -189,5 +325,13 @@ describe("resolveRateLimitConfig", () => {
     assert.deepEqual(cfg.auth, { windowMs: 9000, limit: 7 });
     assert.deepEqual(cfg.writes, { windowMs: 5000, limit: 12 });
     assert.deepEqual(cfg.reservations, { windowMs: 7000, limit: 3 });
+    assert.deepEqual(cfg.staffLists, { windowMs: 3000, limit: 9 });
+    assert.deepEqual(cfg.reports, { windowMs: 4000, limit: 8 });
+    assert.deepEqual(cfg.exports, { windowMs: 5000, limit: 7 });
+    assert.deepEqual(cfg.audit, { windowMs: 6000, limit: 6 });
+    assert.deepEqual(cfg.notifications, { windowMs: 7000, limit: 5 });
+    assert.deepEqual(cfg.integrationChecks, { windowMs: 8000, limit: 4 });
+    assert.deepEqual(cfg.profileEdits, { windowMs: 9000, limit: 3 });
+    assert.deepEqual(cfg.health, { windowMs: 10000, limit: 2 });
   });
 });

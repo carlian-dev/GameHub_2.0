@@ -23,9 +23,11 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    // Let the frontend read Retry-After on a 429 if it wants to show a wait.
+    // Let the frontend read Retry-After on a 429 if it wants to show a wait,
+    // and the CSV export filename from its blob download.
     exposedHeaders: [
       "Retry-After",
+      "Content-Disposition",
       "X-Auth-Attempts-Limit",
       "X-Auth-Attempts-Remaining",
       "X-Auth-Attempts-Reset",
@@ -62,8 +64,8 @@ app.get("/", (req, res) => {
 });
 
 // Mount API routes once the DB is wired (called from server.js after getDb()).
-export function setupRoutes(controllers, { authenticate } = {}) {
-  const routes = apiRoutes({ controllers, authenticate });
+export function setupRoutes(controllers, { authenticate, featureAccess } = {}) {
+  const routes = apiRoutes({ controllers, authenticate, featureAccess });
   app.use("/api", routes);
 
   // notFound and errorHandler must be mounted AFTER /api routes so they

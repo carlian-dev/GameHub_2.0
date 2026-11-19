@@ -1,11 +1,20 @@
 // Rate limiting using express-rate-limit (npm).
 //
-// Four limiters cover the shapes of traffic this API sees:
-//   api          every /api request, per IP (runs before the body parser)
-//   auth         login / authenticator changes / register / invite lookup
-//                (IP-based; unsuccessful requests count)
-//   writes       POST/PUT/PATCH/DELETE (per logged-in user, otherwise per IP)
-//   reservations public booking create/lookup/cancel (guests only)
+// Twelve limiters cover the shapes of traffic this API sees:
+//   api               every /api request, per IP (runs before the body parser)
+//   auth              login / authenticator changes / register / invite lookup
+//                     (IP-based; unsuccessful requests count)
+//   writes            POST/PUT/PATCH/DELETE (per user, otherwise per IP)
+//   reservations      public booking create/lookup/cancel (guests only)
+//   staffLists        reservation/session/transaction list reads
+//   reports           admin income reports (daily/monthly/income)
+//   exports           CSV report generation
+//   audit             activity-log reads (admin and self)
+//   notifications     reservation accept (calendar + mail), invitations, and
+//                     password-reset mail
+//   integrationChecks super-admin provider validation on credential changes
+//   profileEdits      self-service profile updates (2MB avatar payloads)
+//   health            public health probe
 //
 // Counters live in express-rate-limit's in-memory store: one window per
 // process, reset on restart. That is deliberate - JWT auth needs no per-request
@@ -29,6 +38,22 @@ const FALLBACK = {
   writeLimit: 60,
   reservationWindowMs: 10 * 60 * 1000,
   reservationLimit: 10,
+  staffListWindowMs: 60 * 1000,
+  staffListLimit: 60,
+  reportWindowMs: 60 * 1000,
+  reportLimit: 20,
+  exportWindowMs: 10 * 60 * 1000,
+  exportLimit: 5,
+  auditWindowMs: 60 * 1000,
+  auditLimit: 20,
+  notificationWindowMs: 10 * 60 * 1000,
+  notificationLimit: 10,
+  integrationWindowMs: 15 * 60 * 1000,
+  integrationLimit: 10,
+  profileWindowMs: 60 * 1000,
+  profileLimit: 5,
+  healthWindowMs: 60 * 1000,
+  healthLimit: 30,
 };
 
 function positiveInt(value, fallback) {
@@ -170,6 +195,68 @@ export function resolveRateLimitConfig(source = env) {
       ),
       limit: positiveInt(source.RESERVATION_RATE_LIMIT_MAX, FALLBACK.reservationLimit),
     },
+    staffLists: {
+      windowMs: positiveInt(
+        source.STAFF_LIST_RATE_LIMIT_WINDOW_MS,
+        FALLBACK.staffListWindowMs
+      ),
+      limit: positiveInt(source.STAFF_LIST_RATE_LIMIT_MAX, FALLBACK.staffListLimit),
+    },
+    reports: {
+      windowMs: positiveInt(
+        source.REPORT_RATE_LIMIT_WINDOW_MS,
+        FALLBACK.reportWindowMs
+      ),
+      limit: positiveInt(source.REPORT_RATE_LIMIT_MAX, FALLBACK.reportLimit),
+    },
+    exports: {
+      windowMs: positiveInt(
+        source.EXPORT_RATE_LIMIT_WINDOW_MS,
+        FALLBACK.exportWindowMs
+      ),
+      limit: positiveInt(source.EXPORT_RATE_LIMIT_MAX, FALLBACK.exportLimit),
+    },
+    audit: {
+      windowMs: positiveInt(
+        source.AUDIT_RATE_LIMIT_WINDOW_MS,
+        FALLBACK.auditWindowMs
+      ),
+      limit: positiveInt(source.AUDIT_RATE_LIMIT_MAX, FALLBACK.auditLimit),
+    },
+    notifications: {
+      windowMs: positiveInt(
+        source.NOTIFICATION_RATE_LIMIT_WINDOW_MS,
+        FALLBACK.notificationWindowMs
+      ),
+      limit: positiveInt(
+        source.NOTIFICATION_RATE_LIMIT_MAX,
+        FALLBACK.notificationLimit
+      ),
+    },
+    integrationChecks: {
+      windowMs: positiveInt(
+        source.INTEGRATION_RATE_LIMIT_WINDOW_MS,
+        FALLBACK.integrationWindowMs
+      ),
+      limit: positiveInt(
+        source.INTEGRATION_RATE_LIMIT_MAX,
+        FALLBACK.integrationLimit
+      ),
+    },
+    profileEdits: {
+      windowMs: positiveInt(
+        source.PROFILE_RATE_LIMIT_WINDOW_MS,
+        FALLBACK.profileWindowMs
+      ),
+      limit: positiveInt(source.PROFILE_RATE_LIMIT_MAX, FALLBACK.profileLimit),
+    },
+    health: {
+      windowMs: positiveInt(
+        source.HEALTH_RATE_LIMIT_WINDOW_MS,
+        FALLBACK.healthWindowMs
+      ),
+      limit: positiveInt(source.HEALTH_RATE_LIMIT_MAX, FALLBACK.healthLimit),
+    },
   };
 }
 
@@ -210,6 +297,14 @@ export function createRateLimiters(config = resolveRateLimitConfig()) {
       auth: passThrough,
       writes: passThrough,
       reservations: passThrough,
+      staffLists: passThrough,
+      reports: passThrough,
+      exports: passThrough,
+      audit: passThrough,
+      notifications: passThrough,
+      integrationChecks: passThrough,
+      profileEdits: passThrough,
+      health: passThrough,
     };
   }
   const authStore = new DynamicWindowStore(() => authConfig.windowMs);
@@ -245,6 +340,14 @@ export function createRateLimiters(config = resolveRateLimitConfig()) {
       // api/writes budgets still apply to them).
       skip: (req) => Boolean(req.authUser),
      }),
+    staffLists: build("staffLists", config.staffLists),
+    reports: build("reports", config.reports),
+    exports: build("exports", config.exports),
+    audit: build("audit", config.audit),
+    notifications: build("notifications", config.notifications),
+    integrationChecks: build("integrationChecks", config.integrationChecks),
+    profileEdits: build("profileEdits", config.profileEdits),
+    health: build("health", config.health),
   };
 }
 

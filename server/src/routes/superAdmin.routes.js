@@ -24,6 +24,17 @@ export function registerSuperAdminRoutes(
     requireSuperAdmin,
     settingsController.superAdminUpdateAuthRateLimit
   );
+  // Feature access matrix (RBAC): which admin and cashier features are on.
+  router.get(
+    "/super-admin/settings/feature-access",
+    requireSuperAdmin,
+    settingsController.superAdminFeatureAccess
+  );
+  router.put(
+    "/super-admin/settings/feature-access",
+    requireSuperAdmin,
+    settingsController.superAdminUpdateFeatureAccess
+  );
   // Restore every integration to its base .env values (clears the *_OVERRIDE
   // fields and saved credentials). It verifies an authenticator code, so failed
   // attempts count against the strict auth budget.
@@ -36,6 +47,8 @@ export function registerSuperAdminRoutes(
   router.put(
     "/super-admin/settings/integrations/:key",
     requireSuperAdmin,
+    // Credential changes call the provider before storing the value.
+    rateLimiters.integrationChecks,
     settingsController.superAdminUpdate
   );
 

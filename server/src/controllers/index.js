@@ -313,7 +313,7 @@ export function healthController({ healthService }) {
 }
 
 // -------- Settings --------
-export function settingsController({ settingsService }) {
+export function settingsController({ settingsService, featureAccess }) {
   return {
     publicConfig: asyncHandler(async (req, res) => {
       res.set("Cache-Control", "no-store");
@@ -376,6 +376,39 @@ export function settingsController({ settingsService }) {
       });
       res.status(200).json({ ok: true, integration: shaped });
     }),
+    /** Super admin: RBAC matrix — every feature switch and its state. */
+    superAdminFeatureAccess: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      if (!featureAccess) {
+        throw new HttpError(503, "feature access is unavailable");
+      }
+      const data = await featureAccess.snapshot();
+      res.status(200).json({ ok: true, featureAccess: data });
+    }),
+    /**
+     * Super admin: flip one or more features for admin/cashier accounts.
+     * Accepts cells such as `{ features: { "staff.admin": false } }`; unknown
+     * features, roles the feature does not apply to, and non-boolean values are
+     * rejected before anything is stored.
+     */
+    superAdminUpdateFeatureAccess: asyncHandler(async (req, res) => {
+      const user = req.authUser;
+      if (!user || user.role !== "super_admin") {
+        throw new HttpError(403, "super admin only");
+      }
+      if (!featureAccess) {
+        throw new HttpError(503, "feature access is unavailable");
+      }
+      const data = await featureAccess.update(req.body || {}, {
+        id: user.id,
+        email: user.email ?? null,
+        role: user.role,
+      });
+      res.status(200).json({ ok: true, featureAccess: data });
+    }),
     /**
      * Super admin: restore every integration to its `.env` defaults. Clears the
      * `*_OVERRIDE` values and saved credentials/toggles, so the same 6-digit
@@ -396,7 +429,7 @@ export function settingsController({ settingsService }) {
 }
 
 // -------- Auth --------
-export function authController({ authService }) {
+export function authController({ authService, featureAccess }) {
   return {
     login: asyncHandler(async (req, res) => {
       const { email, username, password, recaptchaToken } = req.body || {};
@@ -425,7 +458,12 @@ export function authController({ authService }) {
         throw new HttpError(401, "not logged in");
       }
       const result = await authService.me(userId);
-      res.status(200).json(meView(result));
+      // Feature switches for this role: the client hides disabled nav entries
+      // and refuses to run their pages. The server enforces the same matrix.
+      const features = featureAccess
+        ? await featureAccess.enabledFor(result.role)
+        : [];
+      res.status(200).json(meView({ ...result, features }));
     }),
 
     /** PUT /api/me/profile — self-service display name and avatar. */
@@ -437,6 +475,7 @@ export function authController({ authService }) {
       const result = await authService.updateProfile(userId, {
         displayName: req.body?.displayName,
         avatarUrl: req.body?.avatarUrl,
+        version: req.body?.version,
       });
       res.status(200).json(profileView(result));
     }),

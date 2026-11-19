@@ -8,6 +8,11 @@ import bcrypt from "bcryptjs";
 import { toObjectId } from "../models/bson.js";
 import { isValidGoogleClientId } from "../utils/google.js";
 import { signAuthToken } from "../utils/authToken.js";
+import {
+  parseUserVersion,
+  userVersion,
+  versionConflict,
+} from "../utils/concurrency.js";
 
 export function authService({
   userModel,
@@ -176,6 +181,8 @@ export function authService({
         googleLinked: googleSub !== "",
         twoFactorEnabled:
           user.role === "super_admin" && user.twoFactor?.enabled === true,
+        // Optimistic-concurrency revision for the profile edit form.
+        version: userVersion(user),
       };
     },
 
@@ -183,8 +190,12 @@ export function authService({
      * PUT /api/me/profile — self-service display name and profile picture.
      * Allowed for all active roles (cashier, admin, super_admin).
      * Email, username, role and password are never accepted here.
+     *
+     * `version` is the revision the caller last read (`GET /api/me`). The write
+     * succeeds only while the stored value still matches; otherwise it is a 409
+     * so two tabs cannot silently overwrite each other.
      */
-    async updateProfile(userId, { displayName, avatarUrl } = {}) {
+    async updateProfile(userId, { displayName, avatarUrl, version } = {}) {
       const user = await userModel.findById(userId);
       if (!user) {
         throw statusError(401, "not logged in");
@@ -247,13 +258,29 @@ export function authService({
       }
 
       if (!nameChanged && !avatarChanged) {
-        return { displayName: finalName, avatarUrl: finalAvatar };
+        // Nothing to write, so there is nothing to conflict over. Return the
+        // current revision so the client can catch up.
+        return {
+          displayName: finalName,
+          avatarUrl: finalAvatar,
+          version: userVersion(user),
+        };
       }
 
-      await usersColl.updateOne(
-        { _id: user._id },
-        { $set: setFields }
+      // Validate the precondition only when an actual write is needed.
+      const expectedVersion = parseUserVersion(version);
+      const updateResult = await userModel.updateWithVersion(
+        user._id,
+        expectedVersion,
+        setFields
       );
+      if (!updateResult || updateResult.matchedCount === 0) {
+        const fresh = await userModel.findById(user._id);
+        if (!fresh) {
+          throw statusError(401, "not logged in");
+        }
+        throw versionConflict(userVersion(fresh));
+      }
 
       try {
         const meta = {};
@@ -282,7 +309,11 @@ export function authService({
         // Audit is best-effort, like sign-in/sign-out logging.
       }
 
-      return { displayName: finalName, avatarUrl: finalAvatar };
+      return {
+        displayName: finalName,
+        avatarUrl: finalAvatar,
+        version: expectedVersion + 1,
+      };
     },
 
     /** Invitation-only registration. Role forced to cashier, status active. */
@@ -360,6 +391,7 @@ export function authService({
       const now = new Date();
 
       const res = await usersColl.insertOne({
+        version: 1,
         username: usernameLower,
         email: lowerEmail,
         passwordHash,

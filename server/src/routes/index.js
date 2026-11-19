@@ -5,6 +5,7 @@
 // which caused issues with Express 5).
 import { Router } from "express";
 import { superAdminScope } from "../middleware/auth.js";
+import { featureAccessScope } from "../middleware/featureAccess.js";
 import { rateLimiters } from "../middleware/rateLimit.js";
 import { registerPublicRoutes } from "./public.routes.js";
 import { registerAuthRoutes } from "./auth.routes.js";
@@ -17,7 +18,7 @@ import { registerReportRoutes } from "./report.routes.js";
 import { registerProductRoutes } from "./products.routes.js";
 import { registerOrderRoutes } from "./orders.routes.js";
 
-export default function apiRoutes({ controllers, authenticate }) {
+export default function apiRoutes({ controllers, authenticate, featureAccess }) {
   const router = Router();
 
   // Resolve the JWT cookie into req.authUser before any limiter or route sees
@@ -35,6 +36,11 @@ export default function apiRoutes({ controllers, authenticate }) {
   // endpoints (sessions, billing, reservations, reports) are off limits even
   // when a controller otherwise checks only for a login.
   router.use(superAdminScope);
+
+  // Super-admin feature matrix (RBAC): a switched-off admin/cashier feature is
+  // rejected here, before any controller runs. Public paths and other roles
+  // pass through; hiding the nav link alone would not be enforcement.
+  router.use(featureAccessScope(featureAccess));
 
   // Public routes (no login required): health, config, register, invite check,
   // public table availability, rates, reservations.

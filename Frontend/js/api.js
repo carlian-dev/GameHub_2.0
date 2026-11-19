@@ -10,19 +10,29 @@
 const API_TIMEOUT_MS = 15000;
 
 async function api(path, options = {}) {
+  const {
+    responseType = "json",
+    timeoutMs = API_TIMEOUT_MS,
+    ...fetchOptions
+  } = options;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-      ...options,
-      signal: options.signal || controller.signal,
+      headers: { "Content-Type": "application/json", ...(fetchOptions.headers || {}) },
+      ...fetchOptions,
+      signal: fetchOptions.signal || controller.signal,
     });
-    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
       const error = new Error(data.error || `HTTP ${res.status}`);
       error.status = res.status;
+      // Optimistic-concurrency conflict: the server includes the revision the
+      // account moved to. Callers can show it or refresh their cached copy.
+      if (Number.isInteger(data.currentVersion)) {
+        error.currentVersion = data.currentVersion;
+      }
       const retryAfter = Number(res.headers.get("Retry-After"));
       error.retryAfterSeconds =
         Number.isFinite(retryAfter) && retryAfter > 0 ? Math.ceil(retryAfter) : 0;
@@ -47,7 +57,14 @@ async function api(path, options = {}) {
       }
       throw error;
     }
-    return data;
+    // File responses (CSV export) ask for a blob; JSON stays the default.
+    if (responseType === "blob") {
+      return {
+        blob: await res.blob(),
+        filename: attachmentFilename(res.headers.get("Content-Disposition")),
+      };
+    }
+    return await res.json().catch(() => ({}));
   } catch (e) {
     if (e && e.name === "AbortError") {
       throw new Error("The server took too long to respond. Please try again.");
@@ -65,6 +82,22 @@ async function api(path, options = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Pull a filename out of `Content-Disposition: attachment; filename="..."`.
+// The server sends a quoted ASCII name; the UTF-8 form is handled too.
+function attachmentFilename(header) {
+  if (!header) return "";
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf8) {
+    try {
+      return decodeURIComponent(utf8[1]);
+    } catch {
+      return "";
+    }
+  }
+  const match = /filename="?([^";]+)"?/i.exec(header);
+  return match ? match[1].trim() : "";
 }
 
 async function getHealth() {
@@ -133,9 +166,14 @@ async function logout() {
   return api("/api/logout", { method: "POST" });
 }
 async function getMe() {
-  return api("/api/me");
+  const me = await api("/api/me");
+  // Super-admin feature matrix: hide switched-off nav entries and leave a
+  // switched-off page before it calls an API that will refuse it.
+  if (!applyFeatureAccess(me)) return new Promise(() => {});
+  return me;
 }
-// Self-service profile: display name and profile picture only (email stays read-only).
+// Self-service profile: display name and profile picture only (email stays
+// read-only). Include the `version` from getMe() so a stale save is a 409.
 async function updateMyProfile(payload) {
   const body = typeof payload === "string" ? { displayName: payload } : payload;
   return api("/api/me/profile", {
@@ -152,6 +190,61 @@ function staffHome(role) {
   if (role === "admin") return "../admin/admin-dashboard.html";
   if (role === "cashier") return "../cashiers/cashier-dashboard.html";
   return "../auth/login.html";
+}
+
+// --- Super admin feature matrix (RBAC) on the client ---
+// Pages that belong to a switchable feature. `GET /api/me` returns the enabled
+// keys; a disabled one is removed from the sidebar and its page is left for
+// the role's dashboard. The server enforces the same matrix, so this is UX
+// only — never the security boundary.
+const FEATURE_PAGES = {
+  "/admin/cashiers.html": "staff",
+  "/tables/tables.html": "tables",
+  "/tables/rates.html": "tables",
+  "/tables/sessions.html": "sessions",
+  "/admin/menu.html": "menu",
+  "/admin/transactions.html": "transactions",
+  "/admin/activity.html": "activity",
+  "/cashiers/cashier-sessions.html": "sessions",
+  "/cashiers/cashier-reservations.html": "reservations",
+  "/cashiers/cashier-tables.html": "tables",
+  "/cashiers/cashier-menu.html": "menu",
+};
+
+function featureForPathname(pathname) {
+  const clean = String(pathname || "").replace(/\/+$/, "");
+  for (const [suffix, key] of Object.entries(FEATURE_PAGES)) {
+    if (clean.endsWith(suffix)) return key;
+  }
+  return "";
+}
+
+function applyFeatureAccess(me) {
+  if (!me || !Array.isArray(me.features)) return true;
+  const allowed = new Set(me.features);
+
+  const here = featureForPathname(location.pathname);
+  if (here && !allowed.has(here)) {
+    location.replace(staffHome(me.role));
+    return false;
+  }
+
+  let removed = false;
+  document.querySelectorAll(".dash-nav a[href]").forEach((link) => {
+    let feature = "";
+    try {
+      feature = featureForPathname(new URL(link.href, location.href).pathname);
+    } catch {
+      return;
+    }
+    if (feature && !allowed.has(feature)) {
+      link.remove();
+      removed = true;
+    }
+  });
+  // The sliding nav pill measures link offsets; re-measure after removal.
+  if (removed) window.dispatchEvent(new Event("resize"));
+  return true;
 }
 
 // --- Admin settings (read-only: integration on/off state only) ---
@@ -183,6 +276,17 @@ async function resetSuperAdminIntegrations(code) {
   return api("/api/super-admin/settings/integrations/reset", {
     method: "POST",
     body: JSON.stringify({ code }),
+  });
+}
+
+// --- Super admin feature access (RBAC matrix) ---
+async function getSuperAdminFeatureAccess() {
+  return api("/api/super-admin/settings/feature-access");
+}
+async function updateSuperAdminFeatureAccess(features) {
+  return api("/api/super-admin/settings/feature-access", {
+    method: "PUT",
+    body: JSON.stringify({ features: features || {} }),
   });
 }
 
@@ -419,16 +523,22 @@ async function getIncomeReport(from, to) {
   const qs = q.toString() ? `?${q.toString()}` : "";
   return api(`/api/admin/reports/income${qs}`);
 }
-// Export stays URL-based (CSV download, not JSON): build
-// `${API_BASE_URL}/api/admin/reports/export?format=csv&from&to&method`
-// and navigate via anchor with credentials:include (see transactions.js).
-function exportReportUrl({ from = "", to = "", month = "", method = "all" } = {}) {
+// Export is fetched as a blob (not navigated to via anchor) so the dashboard
+// can show a JSON error as a toast — the export budget returns 429 once the
+// per-admin limit is spent. The CSV can take longer than a normal API call.
+function exportReportPath({ from = "", to = "", month = "", method = "all" } = {}) {
   const q = new URLSearchParams({ format: "csv" });
   if (from) q.set("from", from);
   if (to) q.set("to", to);
   if (month) q.set("month", month);
   if (method && method !== "all") q.set("method", method);
-  return `${API_BASE_URL}/api/admin/reports/export?${q.toString()}`;
+  return `/api/admin/reports/export?${q.toString()}`;
+}
+async function downloadReportExport(params = {}) {
+  return api(exportReportPath(params), {
+    responseType: "blob",
+    timeoutMs: 60000,
+  });
 }
 
 // --- Customer reservations (CU-004..CU-014, guest, no login) ---

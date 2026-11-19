@@ -162,7 +162,7 @@ administrator, both created directly in the database):
   `/api/super-admin/settings/integrations`: list activation state and masked
   credentials, and send `{enabled}` and/or `{credentials}` + `code` for one
   integration (a current authenticator code is required for any credential
-  change; a toggle needs none). The app is paired from the Security panel
+  change; a toggle needs none). The app is paired from the Security page
   through its own `/api/super-admin/2fa` endpoints, and credential changes
   stay blocked until it is. Up to five devices can be paired at once, each
   with its own encrypted secret; a code from any of them is accepted, and a
@@ -209,7 +209,7 @@ Frontend/
   login/index.html         Redirect so bare /login resolves
   src/function/auth/       Login (single step + Google), cashier signup form
   src/function/admin/      Admin dashboard, staff, credentials, operations
-  src/function/super-admin/ Integration activation and credentials
+  src/function/super-admin/ Integration, login protection, and security pages
   src/function/cashiers/   Cashier dashboard
   src/function/tables/     Tables, rates page, sessions view
   src/function/shared/     Landing status logic

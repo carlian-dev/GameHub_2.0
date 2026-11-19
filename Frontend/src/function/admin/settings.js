@@ -196,9 +196,12 @@
           dashEditProfile({
             user: me,
             onSave: async ({ displayName, avatarUrl }) => {
-              const res = await updateMyProfile({ displayName, avatarUrl });
+              // version = the revision this page read; a stale one is rejected
+              // with 409 instead of overwriting another tab's edit.
+              const res = await updateMyProfile({ displayName, avatarUrl, version: me.version });
               me.displayName = res.displayName || displayName;
               me.avatarUrl = res.avatarUrl !== undefined ? res.avatarUrl : avatarUrl;
+              if (res.version !== undefined) me.version = res.version;
               paint();
               dashToast("Profile updated.", "ok");
             },

@@ -1,9 +1,9 @@
-// One-time backfill for the sync version counters.
-// Documents written before versioning existed have no `version` field, and
-// $inc on a missing field creates it as 1 — the same value clients assume for
-// "never modified", so their first real change would go unseen. Set version: 1
-// on every legacy row of the versioned collections before switching clients to
-// compare versions.
+// One-time backfill for the document version counters.
+// Documents written before versioning existed have no `version` field. User
+// edits use that field as an optimistic-concurrency precondition, so it must
+// exist before clients start sending it; other collections use it as a change
+// counter. Set version: 1 on every legacy row of the versioned collections
+// before switching clients to compare versions.
 //
 // Dry run (counts only):  node scripts/backfillVersions.js
 // Apply:                  node scripts/backfillVersions.js --yes
@@ -19,7 +19,7 @@ dotenv.config({ path: path.join(serverRoot, ".env") });
 
 import { validateEnv, env } from "../src/config/env.js";
 
-const COLLECTIONS = ["tables", "sessions", "reservations"];
+const COLLECTIONS = ["users", "tables", "sessions", "reservations"];
 
 async function main() {
   validateEnv();

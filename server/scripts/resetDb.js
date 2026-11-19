@@ -53,6 +53,7 @@ async function main() {
 
     // Users: single admin + one active cashier.
     const adminRes = await db.collection("users").insertOne({
+      version: 1,
       email: ADMIN_EMAIL,
       passwordHash: adminHash,
       role: "admin",
@@ -62,6 +63,7 @@ async function main() {
     const adminId = adminRes.insertedId;
 
     const cashierRes = await db.collection("users").insertOne({
+      version: 1,
       username: CASHIER_USERNAME,
       email: CASHIER_EMAIL,
       passwordHash: cashierHash,

@@ -28,6 +28,7 @@ import { activityModel } from "./models/activity.model.js";
 // Services
 import { healthService } from "./services/health.service.js";
 import { settingsService } from "./services/settings.service.js";
+import { featureAccessService } from "./services/featureAccess.service.js";
 import { integrationValidationService } from "./services/integrationValidation.service.js";
 import { authService } from "./services/auth.service.js";
 import { twoFactorService } from "./services/twoFactor.service.js";
@@ -158,9 +159,17 @@ export async function wireApp() {
     authRateLimitEnabled: rateLimitConfig.enabled,
   });
   await settingsSvc.initializeAuthRateLimit();
+  // Super-admin RBAC matrix. Cached in-process so the route guard does not add
+  // a DB round trip to every admin/cashier request.
+  const featureAccessSvc = featureAccessService({
+    settingsModel: models.settings,
+    db,
+  });
+  await featureAccessSvc.refresh();
   const services = {
     health: healthService({ healthModel: models.health, dbName: env.MONGODB_DB }),
     settings: settingsSvc,
+    featureAccess: featureAccessSvc,
     twoFactor: twoFactorSvc,
     invitation: invitationService({
       invitationModel: models.invitation,
@@ -241,8 +250,14 @@ export async function wireApp() {
 
   const controllers = {
     health: healthController({ healthService: services.health }),
-    settings: settingsController({ settingsService: services.settings }),
-    auth: authController({ authService: services.auth }),
+    settings: settingsController({
+      settingsService: services.settings,
+      featureAccess: services.featureAccess,
+    }),
+    auth: authController({
+      authService: services.auth,
+      featureAccess: services.featureAccess,
+    }),
     twoFactor: twoFactorController({ twoFactorService: services.twoFactor }),
     invitation: invitationController({ invitationService: services.invitation }),
     cashier: cashierController({ cashierService: services.cashier }),
@@ -262,6 +277,7 @@ export async function wireApp() {
 
   setupRoutes(controllers, {
     authenticate: authenticate({ userModel: models.user }),
+    featureAccess: services.featureAccess,
   });
   wired = true;
   wiredGraph = { models, services, controllers };

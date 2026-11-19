@@ -64,7 +64,7 @@ backend was archived under `archive/Backend/` and is not used at runtime.
    After filling them, run `cd server && npm run check:calendar` to verify the
    service-account key, Calendar API enablement, and calendar sharing.
    Optional reCAPTCHA uses `RECAPTCHA_SITE_KEY`/`RECAPTCHA_SECRET_KEY`, or the
-   admin Settings > API page (recommended). Saving a credential there writes it
+   super-admin API Integrations page (recommended). Saving a credential there writes it
    to the matching `*_OVERRIDE` key in `server/.env`; when an override is empty,
    the normal env key above is used. Set `SETTINGS_ENCRYPTION_KEY` before
    saving any secret key; generate one with
@@ -148,17 +148,20 @@ GameHub_2.0/
 * Cashiers register with a chosen username and password (no email required).
   The single administrator and the super administrator sign in with
   email + password or Google.
-* The super administrator owns API integration activation and credentials at
-  `/src/function/super-admin/integrations.html`. Administrators can view
+* The super administrator owns API integration activation and credentials on
+  the API Integrations page
+  (`/src/function/super-admin/integrations.html`); failed-login limits live on
+  the Login protection page and authenticator devices on the Security page.
+  Administrators can view
   integration state on Admin > Settings > API but cannot change credentials or
   toggle a service; the server rejects both. Super-admin sign-in is
   single-step; an authenticator app (TOTP) is only required to add, replace or
-  clear an integration credential. Up to five devices can be paired at once (Settings > API >
-  Security): each has its own secret and any one can approve a change, so a
-  backup phone keeps working if the first is lost. Remove a single device in
-  that panel. If every device is lost, run `npm run reset:2fa -- --email
+  clear an integration credential. Up to five devices can be paired at once
+  (Security page): each has its own secret and any one can approve a change, so
+  a backup phone keeps working if the first is lost. Remove a single device
+  there. If every device is lost, run `npm run reset:2fa -- --email
   <super-admin email> --yes` from `server/` (dry run without `--yes`), reload
-  the Security panel, and pair a new app — no old code is required. There is no
+  the Security page, and pair a new app — no old code is required. There is no
   in-app bypass by design (see AGENTS.md).
 * There is no OTP or email-code step: cashier signup is invitation-only
   (the emailed invite link carries the token) and archiving is a one-step
@@ -186,7 +189,7 @@ GameHub_2.0/
 | `GOOGLE_MAPS_API_KEY` | Optional Google Maps key for the landing page; the admin value is mirrored to `GOOGLE_MAPS_API_KEY_OVERRIDE` |
 | `GOOGLE_CALENDAR_ID` / `GOOGLE_CALENDAR_CLIENT_EMAIL` / `GOOGLE_CALENDAR_PRIVATE_KEY` | Optional service-account sync: accepted reservations become events on this shared calendar (blank = disabled); admin values use the matching `*_OVERRIDE` keys |
 | `RECAPTCHA_SITE_KEY` / `RECAPTCHA_SECRET_KEY` | Optional reCAPTCHA v2 defaults, used whenever the matching admin value is empty; admin values use `RECAPTCHA_SITE_KEY_OVERRIDE` / `RECAPTCHA_SECRET_KEY_OVERRIDE` |
-| `*_OVERRIDE` (all integrations) | Filled automatically by Admin > Settings > API. Precedence: override, then the normal env key, then the settings document. Clearing an admin value falls back to the normal env key |
+| `*_OVERRIDE` (all integrations) | Filled automatically by the super-admin API Integrations page. Precedence: override, then the normal env key, then the settings document. Clearing an admin value falls back to the normal env key |
 | `SETTINGS_ENCRYPTION_KEY` | 32 random bytes as 64 hex chars; required before saving secret credentials (reCAPTCHA secret key, Calendar private key, super-admin 2FA secrets). Stored secrets use AES-256-GCM |
 | `MAIL_USER` / `MAIL_PASS` | Gmail sender + app password (cashier invitations and accepted-reservation emails) |
 | `MAIL_FROM` | Display name on outgoing mail |

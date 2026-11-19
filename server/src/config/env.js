@@ -92,6 +92,33 @@ export const env = {
   RESERVATION_RATE_LIMIT_WINDOW_MS:
     process.env.RESERVATION_RATE_LIMIT_WINDOW_MS || "600000",
   RESERVATION_RATE_LIMIT_MAX: process.env.RESERVATION_RATE_LIMIT_MAX || "10",
+  // Expensive staff reads (reservation/session/transaction lists).
+  STAFF_LIST_RATE_LIMIT_WINDOW_MS:
+    process.env.STAFF_LIST_RATE_LIMIT_WINDOW_MS || "60000",
+  STAFF_LIST_RATE_LIMIT_MAX: process.env.STAFF_LIST_RATE_LIMIT_MAX || "60",
+  // Admin income reports (daily/monthly/income).
+  REPORT_RATE_LIMIT_WINDOW_MS: process.env.REPORT_RATE_LIMIT_WINDOW_MS || "60000",
+  REPORT_RATE_LIMIT_MAX: process.env.REPORT_RATE_LIMIT_MAX || "20",
+  // CSV report generation.
+  EXPORT_RATE_LIMIT_WINDOW_MS: process.env.EXPORT_RATE_LIMIT_WINDOW_MS || "600000",
+  EXPORT_RATE_LIMIT_MAX: process.env.EXPORT_RATE_LIMIT_MAX || "5",
+  // Activity-log reads (admin audit trail and self activity).
+  AUDIT_RATE_LIMIT_WINDOW_MS: process.env.AUDIT_RATE_LIMIT_WINDOW_MS || "60000",
+  AUDIT_RATE_LIMIT_MAX: process.env.AUDIT_RATE_LIMIT_MAX || "20",
+  // Reservation accept (calendar + mail) and admin invitations.
+  NOTIFICATION_RATE_LIMIT_WINDOW_MS:
+    process.env.NOTIFICATION_RATE_LIMIT_WINDOW_MS || "600000",
+  NOTIFICATION_RATE_LIMIT_MAX: process.env.NOTIFICATION_RATE_LIMIT_MAX || "10",
+  // Super-admin provider validation on credential changes.
+  INTEGRATION_RATE_LIMIT_WINDOW_MS:
+    process.env.INTEGRATION_RATE_LIMIT_WINDOW_MS || "900000",
+  INTEGRATION_RATE_LIMIT_MAX: process.env.INTEGRATION_RATE_LIMIT_MAX || "10",
+  // Self-service profile updates (2MB avatar payloads).
+  PROFILE_RATE_LIMIT_WINDOW_MS: process.env.PROFILE_RATE_LIMIT_WINDOW_MS || "60000",
+  PROFILE_RATE_LIMIT_MAX: process.env.PROFILE_RATE_LIMIT_MAX || "5",
+  // Public health probe (counts a DB read per call).
+  HEALTH_RATE_LIMIT_WINDOW_MS: process.env.HEALTH_RATE_LIMIT_WINDOW_MS || "60000",
+  HEALTH_RATE_LIMIT_MAX: process.env.HEALTH_RATE_LIMIT_MAX || "30",
 };
 
 export function validateEnv() {

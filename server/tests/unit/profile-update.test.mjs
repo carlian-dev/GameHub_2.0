@@ -8,16 +8,37 @@ import { ObjectId } from "mongodb";
 import { authService } from "../../src/services/auth.service.js";
 import { userModel } from "../../src/models/user.model.js";
 
+// Minimal Mongo filter matcher: _id equality, $or, plain fields, and
+// `{ field: { $exists: boolean } }` — everything the OCC update uses.
+function matches(doc, filter = {}) {
+  for (const [key, cond] of Object.entries(filter)) {
+    if (key === "$or") {
+      if (!cond.some((sub) => matches(doc, sub))) return false;
+      continue;
+    }
+    const actual = doc[key];
+    if (cond && typeof cond === "object" && "$exists" in cond) {
+      if ((actual !== undefined) !== cond.$exists) return false;
+      continue;
+    }
+    if (String(actual) !== String(cond)) return false;
+  }
+  return true;
+}
+
 function fakeCollection(docs) {
   return {
     docs,
     async findOne(filter = {}) {
-      return docs.find((d) => String(d._id) === String(filter._id)) || null;
+      return docs.find((d) => matches(d, filter)) || null;
     },
     async updateOne(filter, update) {
-      const doc = docs.find((d) => String(d._id) === String(filter._id));
+      const doc = docs.find((d) => matches(d, filter));
       if (!doc) return { matchedCount: 0, modifiedCount: 0 };
       Object.assign(doc, update.$set || {});
+      for (const [field, by] of Object.entries(update.$inc || {})) {
+        doc[field] = Number(doc[field] || 0) + by;
+      }
       return { matchedCount: 1, modifiedCount: 1 };
     },
     async insertOne(doc) {
@@ -30,6 +51,7 @@ function fakeCollection(docs) {
 function seedUser(overrides = {}) {
   return {
     _id: new ObjectId(),
+    version: 1,
     username: "cashier1",
     email: "cashier1@example.com",
     passwordHash: "secret-hash",
@@ -62,10 +84,16 @@ describe("authService.updateProfile", () => {
 
     const result = await service.updateProfile(String(user._id), {
       displayName: "  Kuya J  ",
+      version: 1,
     });
 
-    assert.deepStrictEqual(result, { displayName: "Kuya J", avatarUrl: null });
+    assert.deepStrictEqual(result, {
+      displayName: "Kuya J",
+      avatarUrl: null,
+      version: 2,
+    });
     assert.strictEqual(user.displayName, "Kuya J");
+    assert.strictEqual(user.version, 2);
     assert.strictEqual(activityLogs.length, 1);
 
     const log = activityLogs[0];
@@ -90,9 +118,11 @@ describe("authService.updateProfile", () => {
       role: "admin",
       password: "hunter2",
       passwordHash: "overwritten",
+      version: 1,
     });
 
     assert.strictEqual(user.displayName, "New Name");
+    assert.strictEqual(user.version, 2);
     assert.strictEqual(user.email, "cashier1@example.com");
     assert.strictEqual(user.username, "cashier1");
     assert.strictEqual(user.role, "cashier");
@@ -104,13 +134,13 @@ describe("authService.updateProfile", () => {
     const { service, activityLogs } = makeService(user);
 
     for (const payload of [
-      {},
-      { displayName: "" },
-      { displayName: "   " },
-      { displayName: "a" },
-      { displayName: "x".repeat(61) },
-      { displayName: { text: "Object" } },
-      { displayName: 12345 },
+      { version: 1 },
+      { displayName: "", version: 1 },
+      { displayName: "   ", version: 1 },
+      { displayName: "a", version: 1 },
+      { displayName: "x".repeat(61), version: 1 },
+      { displayName: { text: "Object" }, version: 1 },
+      { displayName: 12345, version: 1 },
     ]) {
       await assert.rejects(
         service.updateProfile(String(user._id), payload),
@@ -128,9 +158,17 @@ describe("authService.updateProfile", () => {
 
     const result = await service.updateProfile(String(user._id), {
       displayName: "  Same Name  ",
+      version: 99,
     });
 
-    assert.deepStrictEqual(result, { displayName: "Same Name", avatarUrl: null });
+    // No write, so a stale precondition cannot conflict; the current revision
+    // comes back so the client can catch up.
+    assert.deepStrictEqual(result, {
+      displayName: "Same Name",
+      avatarUrl: null,
+      version: 1,
+    });
+    assert.strictEqual(user.version, 1);
     assert.strictEqual(activityLogs.length, 0);
   });
 
@@ -140,11 +178,13 @@ describe("authService.updateProfile", () => {
 
     const adminRes = await makeService(admin).service.updateProfile(String(admin._id), {
       displayName: "New Admin",
+      version: admin.version,
     });
     assert.strictEqual(adminRes.displayName, "New Admin");
 
     const superRes = await makeService(superAdmin).service.updateProfile(String(superAdmin._id), {
       displayName: "New Super",
+      version: superAdmin.version,
     });
     assert.strictEqual(superRes.displayName, "New Super");
   });
@@ -156,17 +196,21 @@ describe("authService.updateProfile", () => {
 
     const res1 = await service.updateProfile(String(user._id), {
       avatarUrl: dataUrl,
+      version: user.version,
     });
     assert.strictEqual(res1.avatarUrl, dataUrl);
+    assert.strictEqual(res1.version, 2);
     assert.strictEqual(user.avatarUrl, dataUrl);
     assert.strictEqual(activityLogs.length, 1);
     assert.strictEqual(activityLogs[0].meta.field, "avatarUrl");
 
-    // Clear avatar
+    // Clear avatar, using the revision returned by the first save.
     const res2 = await service.updateProfile(String(user._id), {
       avatarUrl: null,
+      version: res1.version,
     });
     assert.strictEqual(res2.avatarUrl, null);
+    assert.strictEqual(res2.version, 3);
     assert.strictEqual(user.avatarUrl, null);
     assert.strictEqual(activityLogs.length, 2);
   });
@@ -176,7 +220,10 @@ describe("authService.updateProfile", () => {
     const { service } = makeService(user);
 
     await assert.rejects(
-      service.updateProfile(String(user._id), { avatarUrl: "not-an-image" }),
+      service.updateProfile(String(user._id), {
+        avatarUrl: "not-an-image",
+        version: 1,
+      }),
       (err) => err.status === 422
     );
   });
@@ -187,6 +234,7 @@ describe("authService.updateProfile", () => {
     await assert.rejects(
       makeService(archived).service.updateProfile(String(archived._id), {
         displayName: "Nope",
+        version: 1,
       }),
       (err) => err.status === 403
     );
@@ -195,8 +243,83 @@ describe("authService.updateProfile", () => {
   it("rejects an unknown user id", async () => {
     const { service } = makeService(null);
     await assert.rejects(
-      service.updateProfile(String(new ObjectId()), { displayName: "Ghost" }),
+      service.updateProfile(String(new ObjectId()), {
+        displayName: "Ghost",
+        version: 1,
+      }),
       (err) => err.status === 401
     );
+  });
+
+  it("requires the last-read version for an actual edit", async () => {
+    const user = seedUser();
+    const { service, activityLogs } = makeService(user);
+
+    await assert.rejects(
+      service.updateProfile(String(user._id), { displayName: "No Version" }),
+      (err) => err.status === 428 && /version is required/.test(err.message)
+    );
+
+    assert.strictEqual(user.displayName, "Old Name");
+    assert.strictEqual(user.version, 1);
+    assert.strictEqual(activityLogs.length, 0);
+  });
+
+  it("rejects a stale version with 409 and writes nothing", async () => {
+    const user = seedUser({ version: 4 });
+    const { service, activityLogs } = makeService(user);
+
+    await assert.rejects(
+      service.updateProfile(String(user._id), {
+        displayName: "Stale Name",
+        version: 3,
+      }),
+      (err) =>
+        err.status === 409 &&
+        err.currentVersion === 4 &&
+        /changed by someone else/.test(err.message)
+    );
+
+    assert.strictEqual(user.displayName, "Old Name");
+    assert.strictEqual(user.version, 4);
+    assert.strictEqual(activityLogs.length, 0);
+  });
+
+  it("lets only the first of two editors win", async () => {
+    const user = seedUser();
+    const { service } = makeService(user);
+
+    // Both tabs read version 1 before either saves.
+    const first = await service.updateProfile(String(user._id), {
+      displayName: "First Tab",
+      version: 1,
+    });
+    assert.strictEqual(first.version, 2);
+
+    await assert.rejects(
+      service.updateProfile(String(user._id), {
+        displayName: "Second Tab",
+        version: 1,
+      }),
+      (err) => err.status === 409 && err.currentVersion === 2
+    );
+
+    assert.strictEqual(user.displayName, "First Tab");
+    assert.strictEqual(user.version, 2);
+  });
+
+  it("treats a legacy document without version as version 1", async () => {
+    const user = seedUser();
+    delete user.version;
+    const { service } = makeService(user);
+
+    const result = await service.updateProfile(String(user._id), {
+      displayName: "First Edit",
+      version: 1,
+    });
+
+    assert.strictEqual(result.version, 2);
+    assert.strictEqual(user.version, 2);
+    assert.strictEqual(user.displayName, "First Edit");
   });
 });

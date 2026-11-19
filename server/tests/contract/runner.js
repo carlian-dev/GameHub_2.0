@@ -111,6 +111,7 @@ async function resolveDyn(db, c) {
   const find = (collection, query) => db.collection(collection).findOne(query);
 
   let dyn = null;
+  let dynDoc = null;
   const wantsArchived = id.includes("unarchive") || /unarchive$/.test(casePath);
   if (/\/invitations\/<dyn>/.test(casePath)) {
     dyn = (await find("invitations", {}))?._id;
@@ -122,7 +123,8 @@ async function resolveDyn(db, c) {
       : wantsArchived
         ? { role: "cashier", status: "archived" }
         : { role: "cashier" };
-    dyn = (await find("users", filter))?._id;
+    dynDoc = await find("users", filter);
+    dyn = dynDoc?._id;
   } else if (/\/tables\/<dyn>/.test(casePath)) {
     const filter = wantsArchived
       ? { archived: true }
@@ -150,6 +152,10 @@ async function resolveDyn(db, c) {
     if (outBody.sessionId === "<dyn>") {
       const session = await find("sessions", { status: "active" });
       outBody.sessionId = session ? String(session._id) : outBody.sessionId;
+    }
+    // Cashier updates carry the row's optimistic-concurrency revision.
+    if (outBody.version === "<dyn>" && dynDoc) {
+      outBody.version = Number(dynDoc.version || 1);
     }
   }
 

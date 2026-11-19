@@ -3,8 +3,8 @@
 // Guard: admin-only. One filter form feeds both the income cards and the table:
 // day+month = that date, month only = that month, no month = the whole year.
 // Table = client-side pagination (10/page), method badges, "Updated" stamp.
-// Export downloads CSV via anchor URL (cookies sent, not api() JSON) so the
-// file saves instead of parsing as JSON.
+// Export fetches the CSV as a blob so 403/429 responses surface as a toast
+// instead of downloading a JSON error document.
 
 let allRows = [];
 let csvExportEnabled = true;
@@ -237,27 +237,52 @@ document.getElementById("filterForm").addEventListener("submit", (e) => {
   loadIncome();
 });
 
-document.getElementById("export").addEventListener("click", () => {
+document.getElementById("export").addEventListener("click", async () => {
+  const btn = document.getElementById("export");
   if (!csvExportEnabled) {
     dashToast("CSV export is turned off by the super administrator.", "err");
     return;
   }
-  // CSV download: anchor navigation keeps the session cookie (credentials),
-  // while api() would try to parse the CSV as JSON and fail.
+  if (btn.disabled) return;
+  // CSV download: fetch with credentials so a 403/429 is showable as a toast,
+  // then save the blob with the filename the server chose.
   const f = currentFilter();
   const { from, to } = filterRange();
-  const url = exportReportUrl({ from, to, method: f.method });
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  dashToast(
-    `CSV for ${from === to ? from : `${from} → ${to}`} (${f.method}) is downloading.`,
-    "ok",
-    { title: "Export started" }
-  );
+  btn.disabled = true;
+  try {
+    const { blob, filename } = await downloadReportExport({
+      from,
+      to,
+      method: f.method,
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download =
+      filename || `gamehub-transactions-${from === to ? from : `${from}_to_${to}`}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Give the browser a moment to start saving before freeing the blob.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    dashToast(
+      `CSV for ${from === to ? from : `${from} → ${to}`} (${f.method}) is ready.`,
+      "ok",
+      { title: "Export downloaded" }
+    );
+  } catch (e) {
+    const wait = Number(e.retryAfterSeconds) > 0
+      ? ` Try again in ${e.retryAfterSeconds >= 60
+        ? `${Math.ceil(e.retryAfterSeconds / 60)} minute${Math.ceil(e.retryAfterSeconds / 60) === 1 ? "" : "s"}`
+        : `${e.retryAfterSeconds} second${e.retryAfterSeconds === 1 ? "" : "s"}`}.`
+      : "";
+    dashToast(`Export failed: ${e.message}${wait}`, "err", {
+      title: "Export failed",
+      timeout: 8000,
+    });
+  } finally {
+    btn.disabled = !csvExportEnabled;
+  }
 });
 
 // The super administrator can turn the CSV export off. The server rejects the

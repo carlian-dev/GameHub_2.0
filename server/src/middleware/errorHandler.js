@@ -1,6 +1,15 @@
 import { HttpError } from "../utils/HttpError.js";
 
-const ALLOWED_CODES = [400, 401, 403, 404, 409, 410, 422, 429, 502, 503];
+const ALLOWED_CODES = [400, 401, 403, 404, 409, 410, 422, 428, 429, 502, 503];
+
+/** Error payload, including the current revision for OCC conflicts. */
+function errorBody(err, message) {
+  const body = { ok: false, error: message };
+  if (Number.isInteger(err && err.currentVersion) && err.currentVersion > 0) {
+    body.currentVersion = err.currentVersion;
+  }
+  return body;
+}
 
 export function errorHandler(err, req, res, next) {
   // Malformed JSON body -> 400, always JSON.
@@ -23,12 +32,14 @@ export function errorHandler(err, req, res, next) {
   if (err instanceof HttpError) {
     const status = ALLOWED_CODES.includes(err.status) ? err.status : 500;
     const message = status === 500 ? "internal server error" : err.message;
-    return res.status(status).json({ ok: false, error: message });
+    return res.status(status).json(errorBody(err, message));
   }
 
   const status = err && (err.status || err.statusCode);
   if (typeof status === "number" && ALLOWED_CODES.includes(status)) {
-    return res.status(status).json({ ok: false, error: err.message || "internal server error" });
+    return res
+      .status(status)
+      .json(errorBody(err, err.message || "internal server error"));
   }
 
   // eslint-disable-next-line no-console

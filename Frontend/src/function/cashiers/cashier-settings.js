@@ -64,9 +64,12 @@
       dashEditProfile({
         user: me,
         onSave: async ({ displayName, avatarUrl }) => {
-          const result = await updateMyProfile({ displayName, avatarUrl });
+          // Send the revision this page read so a concurrent edit is a 409,
+          // not a silent overwrite.
+          const result = await updateMyProfile({ displayName, avatarUrl, version: me.version });
           me.displayName = result.displayName || displayName;
           me.avatarUrl = result.avatarUrl !== undefined ? result.avatarUrl : avatarUrl;
+          if (result.version !== undefined) me.version = result.version;
           paint();
           dashToast("Profile updated.", "ok");
         },

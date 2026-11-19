@@ -108,11 +108,19 @@ function row(c) {
     if (r === null) return;
     const undo = patchRow(c.id, { displayName: r.displayName, schedule: r.schedule });
     try {
-      await updateCashier(c.id, { displayName: r.displayName, schedule: r.schedule });
+      // version = the row this edit came from. If another admin changed the
+      // account in the meantime the server answers 409 and nothing is written.
+      await updateCashier(c.id, { displayName: r.displayName, schedule: r.schedule, version: c.version });
       done(c.id);
       load();
       dashToast(`${c.username || c.email} updated.`, "ok", { title: "Saved" });
-    } catch (err) { undo(); setMsg(err.message, "err"); dashToast(err.message, "err", { title: "Update failed" }); }
+    } catch (err) {
+      undo();
+      // A conflict means the cached row is stale: fetch the server truth.
+      if (err.status === 409) load();
+      setMsg(err.message, "err");
+      dashToast(err.message, "err", { title: "Update failed" });
+    }
   };
   act.appendChild(e);
   // AD-006.1: Archive hidden on admin rows — admins can never be archived.

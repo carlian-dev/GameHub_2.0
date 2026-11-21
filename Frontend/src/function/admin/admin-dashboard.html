@@ -64,12 +64,32 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
         </button>
         <div class="dash-top-right">
+          <div class="dash-top-clock" title="Local time">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+            <span id="topClock">--:--</span>
+          </div>
           <div data-admin-settings data-settings-url="./settings.html"></div>
         </div>
       </header>
 
       <main class="dash-content dash-home">
-        <div class="dash-pagehead"><h1>Dashboard</h1><span data-today></span></div>
+        <section class="dash-hero" aria-labelledby="dashTitle">
+          <div class="dash-hero-copy">
+            <p class="dash-hero-eyebrow"><span class="hero-live-dot" aria-hidden="true"></span>Live overview</p>
+            <h1 id="dashTitle">Dashboard</h1>
+            <p class="dash-hero-greet"><span data-greeting>Welcome back</span>, <strong id="heroName">Admin</strong> · <span data-today></span></p>
+          </div>
+          <div class="dash-hero-actions">
+            <a class="hero-btn primary" href="../tables/sessions.html">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg>
+              <span>View sessions</span>
+            </a>
+            <a class="hero-btn" href="./transactions.html">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 20V4" /><path d="M4 20h16" /><path d="M8 16v-5M12 16V8M16 16v-3M20 16V6" /></svg>
+              <span>Transactions</span>
+            </a>
+          </div>
+        </section>
 
         <p class="dash-msg" id="msg" role="status">Loading live stats…</p>
 
@@ -103,7 +123,11 @@
         <div class="dash-grid-2">
           <section class="dash-panel" aria-labelledby="tblstatus-h">
             <div class="panel-head">
-              <h2 id="tblstatus-h">Table status</h2>
+              <div class="panel-title">
+                <span class="panel-ic green" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.6" /></svg></span>
+                <h2 id="tblstatus-h">Table status</h2>
+                <span class="panel-count" id="tableStatusCount" title="Tables">–</span>
+              </div>
               <a class="view-all" href="../tables/tables.html">View all</a>
             </div>
             <div class="statuslist" id="tableStatus">
@@ -113,7 +137,11 @@
 
           <section class="dash-panel" aria-labelledby="recent-h">
             <div class="panel-head">
-              <h2 id="recent-h">Recent sessions</h2>
+              <div class="panel-title">
+                <span class="panel-ic blue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg></span>
+                <h2 id="recent-h">Recent sessions</h2>
+                <span class="panel-count" id="recentCount" title="Sessions">–</span>
+              </div>
               <a class="view-all" href="../tables/sessions.html">View all</a>
             </div>
             <div class="statuslist" id="recentSessions">
@@ -124,8 +152,14 @@
 
         <section class="dash-panel" aria-labelledby="chart-h">
           <div class="panel-head">
-            <h2 id="chart-h">Revenue — last 7 days</h2>
-            <a class="view-all" href="./transactions.html">View report</a>
+            <div class="panel-title">
+              <span class="panel-ic gold" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V4" /><path d="M4 20h16" /><path d="M8 16v-5M12 16V8M16 16v-3M20 16V6" /></svg></span>
+              <h2 id="chart-h">Revenue — last 7 days</h2>
+            </div>
+            <div class="panel-tools">
+              <span class="panel-total">7-day total<strong id="revTotal">–</strong></span>
+              <a class="view-all" href="./transactions.html">View report</a>
+            </div>
           </div>
           <div class="chart" id="revChart" role="img" aria-label="Bar chart of revenue for the last 7 days"></div>
         </section>

@@ -211,9 +211,33 @@
   border: 1px solid transparent;
 }
 .dash-nav a svg { width: 18px; height: 18px; flex-shrink: 0; transition: color 0.22s ease; }
-.dash-nav a:hover { background: rgba(241, 245, 249, 0.08); color: #F1F5F9; }
+/* Icon chip: mirrors the stat/panel icon tiles so the nav icons sit on the
+   same rounded, translucent surface language as the rest of the shell.
+   The 30px box (4px padding inside a 1px border) keeps the glyph at 20px. */
+.dash-nav a:not(.dash-back) > svg {
+  width: 30px;
+  height: 30px;
+  padding: 4px;
+  box-sizing: border-box;
+  border: 1px solid rgba(241, 245, 249, 0.09);
+  border-radius: 9px;
+  background: rgba(241, 245, 249, 0.05);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: color 0.22s var(--d-ease-fast), background-color 0.22s var(--d-ease-fast), border-color 0.22s var(--d-ease-fast);
+}
+.dash-nav a:hover:not(.active) { background: rgba(241, 245, 249, 0.08); color: #F1F5F9; }
+.dash-nav a:hover:not(.active) > svg {
+  background: rgba(37, 99, 235, 0.22);
+  border-color: rgba(96, 165, 250, 0.38);
+  color: #DBEAFE;
+}
 .dash-nav a.active { color: #FFFFFF; font-weight: 600; }
-.dash-nav a.active svg { color: var(--d-gold); }
+.dash-nav a.active svg { color: #FFFFFF; }
+.dash-nav a.active > svg {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.32);
+}
 .dash-nav a.disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Back link (receipt sidebar): bordered arrow tile + two-line label.
@@ -244,13 +268,13 @@
   top: 0;
   height: 0;
   border-radius: var(--d-radius-sm);
-  background: linear-gradient(90deg, var(--d-side-2), var(--d-side-3));
-  border: 1px solid rgba(241, 245, 249, 0.1);
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  border: 1px solid rgba(147, 197, 253, 0.45);
   z-index: 0;
   opacity: 0;
   pointer-events: none;
   transition: transform 0.32s var(--d-ease), height 0.32s var(--d-ease), opacity 0.2s ease;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .dash-user {
@@ -293,10 +317,10 @@
 .dash[data-theme="dark"] .dash-brand .brand-tag,
 .dash[data-theme="dark"] .dash-user small { color: rgba(241, 245, 249, 0.55); }
 .dash[data-theme="dark"] .dash-nav a { color: rgba(241, 245, 249, 0.72); }
-.dash[data-theme="dark"] .dash-nav a:hover { background: rgba(241, 245, 249, 0.08); color: var(--d-text); }
+.dash[data-theme="dark"] .dash-nav a:hover:not(.active) { background: rgba(241, 245, 249, 0.08); color: var(--d-text); }
 .dash[data-theme="dark"] .dash-nav a.active { color: #FFFFFF; }
-.dash[data-theme="dark"] .dash-nav a.active svg { color: var(--d-blue); }
-.dash[data-theme="dark"] .dash-nav-pill { border-color: rgba(241, 245, 249, 0.12); }
+.dash[data-theme="dark"] .dash-nav a.active svg { color: #FFFFFF; }
+.dash[data-theme="dark"] .dash-nav-pill { border-color: rgba(147, 197, 253, 0.45); }
 .dash[data-theme="dark"] .dash-back-ic { border-color: rgba(241, 245, 249, 0.42); color: var(--d-text); }
 .dash[data-theme="dark"] .dash-back:hover { background: rgba(241, 245, 249, 0.08); }
 .dash[data-theme="dark"] .dash-back:hover .dash-back-ic { border-color: rgba(241, 245, 249, 0.7); background: rgba(241, 245, 249, 0.06); }
@@ -422,7 +446,8 @@
   color: var(--d-text);
   line-height: 1.15;
 }
-.dash-pagehead span { color: var(--d-muted); font-size: 14px; display: block; margin-top: 4px; }
+.dash-pagehead > span,
+.dash-pagehead > div > span { color: var(--d-muted); font-size: 14px; display: block; margin-top: 4px; }
 .dash-stamp { font-variant-numeric: tabular-nums; }
 
 .dash-cards {
@@ -1810,4 +1835,713 @@ a.dash-stat:hover {
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+}
+/* ================================================
+   15. Dashboard home polish (admin + cashier)
+   Deep-navy hero banner, tone-coded stat cards, section
+   header icons + counts, status dots, a richer revenue
+   chart, and a compact top-bar clock. Everything is
+   scoped to .dash-home except the tone-coded stat cards,
+   which also carry the Transactions page.
+   ================================================ */
+
+/* ---- 15a. Hero banner ---- */
+.dash-home .dash-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+  padding: 26px 28px;
+  border-radius: 20px;
+  color: #F8FAFC;
+  background:
+    radial-gradient(520px 220px at 8% -30%, rgba(37, 99, 235, 0.55), transparent 65%),
+    radial-gradient(420px 200px at 92% 130%, rgba(212, 180, 77, 0.32), transparent 65%),
+    linear-gradient(118deg, #0F172A 0%, #14213A 55%, #1D3350 100%);
+  box-shadow: 0 20px 44px -18px rgba(15, 23, 42, 0.45);
+  isolation: isolate;
+}
+.dash-home .dash-hero::before {
+  content: "";
+  position: absolute;
+  right: -70px;
+  top: -90px;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  border: 1px solid rgba(248, 250, 252, 0.14);
+  box-shadow: 0 0 0 42px rgba(248, 250, 252, 0.035), 0 0 0 86px rgba(248, 250, 252, 0.02);
+  pointer-events: none;
+  z-index: 0;
+}
+.dash-home .dash-hero-copy,
+.dash-home .dash-hero-actions { position: relative; z-index: 1; }
+.dash-home .dash-hero-copy { min-width: 0; }
+.dash-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 4px 11px;
+  border: 1px solid rgba(248, 250, 252, 0.18);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.08);
+  color: rgba(248, 250, 252, 0.84);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+}
+.hero-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34D399;
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6);
+  animation: heroPulse 2.2s ease-out infinite;
+}
+@keyframes heroPulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+.dash-home .dash-hero-copy h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: #FFFFFF;
+}
+.dash-hero-greet {
+  margin: 8px 0 0;
+  color: rgba(241, 245, 249, 0.72);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.dash-hero-greet strong { color: #FFFFFF; font-weight: 700; }
+.dash-hero-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 17px;
+  border: 1px solid rgba(248, 250, 252, 0.24);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.08);
+  color: #F8FAFC;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+.hero-btn:hover { background: rgba(248, 250, 252, 0.16); border-color: rgba(248, 250, 252, 0.4); }
+.hero-btn:active { transform: scale(0.97); }
+.hero-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.hero-btn.primary {
+  background: #FFFFFF;
+  border-color: #FFFFFF;
+  color: #0F172A;
+  box-shadow: 0 10px 24px -8px rgba(3, 7, 18, 0.55);
+}
+.hero-btn.primary:hover { background: #F1F5F9; border-color: #F1F5F9; }
+
+.dash[data-theme="dark"] .dash-home .dash-hero {
+  border: 1px solid rgba(241, 245, 249, 0.08);
+  background:
+    radial-gradient(520px 220px at 8% -30%, rgba(96, 165, 250, 0.28), transparent 65%),
+    radial-gradient(420px 200px at 92% 130%, rgba(212, 175, 55, 0.22), transparent 65%),
+    linear-gradient(118deg, #0B1220 0%, #16243B 55%, #1E3A5F 100%);
+  box-shadow: 0 20px 44px -18px rgba(0, 0, 0, 0.7);
+}
+
+/* ---- 15b. Tone-coded stat cards (dashboard + Transactions) ---- */
+.dash-stat {
+  --stat-tone: var(--d-green);
+  --stat-tint: var(--d-tint-green);
+  padding: 20px;
+  border-radius: 16px;
+  background-color: var(--d-surface);
+  background-image: radial-gradient(150px 110px at 100% 0%, var(--stat-tint), transparent 72%);
+}
+/* Tone follows the icon modifier already in the markup; browsers without
+   :has() simply keep the green defaults above. */
+.dash-stat:has(.stat-ic.ic-blue) { --stat-tone: var(--d-blue); --stat-tint: var(--d-tint-blue); }
+.dash-stat:has(.stat-ic.ic-purple) { --stat-tone: var(--d-purple); --stat-tint: var(--d-tint-purple); }
+.dash-stat:has(.stat-ic.ic-gold) { --stat-tone: var(--d-gold-ink); --stat-tint: var(--d-tint-gold); }
+.dash-stat::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--stat-tone);
+  opacity: 0.95;
+}
+.dash-stat .stat-ic {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  margin-bottom: 15px;
+}
+.dash-stat strong { font-size: 32px; }
+.dash-stat em { margin-top: 8px; }
+a.dash-stat::after {
+  content: "";
+  position: absolute;
+  top: 21px;
+  right: 21px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid var(--stat-tone);
+  border-right: 2px solid var(--stat-tone);
+  transform: rotate(45deg) translate(-3px, 3px);
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s var(--d-ease);
+}
+a.dash-stat:hover::after,
+a.dash-stat:focus-visible::after { opacity: 1; transform: rotate(45deg) translate(0, 0); }
+
+/* ---- 15c. Section headers: icon tile + count pill ---- */
+.dash-home .panel-head {
+  padding-bottom: 13px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--d-border-soft);
+}
+.panel-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.panel-title h2 { margin: 0; }
+.panel-ic {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--d-surface-2);
+  color: var(--d-muted);
+}
+.panel-ic svg { width: 17px; height: 17px; }
+.panel-ic.green { background: var(--d-tint-green); color: var(--d-green); }
+.panel-ic.blue { background: var(--d-tint-blue); color: var(--d-blue); }
+.panel-ic.purple { background: var(--d-tint-purple); color: var(--d-purple); }
+.panel-ic.gold { background: var(--d-tint-gold); color: var(--d-gold-ink); }
+.panel-count {
+  min-width: 24px;
+  padding: 2px 9px;
+  border: 1px solid var(--d-border-soft);
+  border-radius: 999px;
+  background: var(--d-surface-2);
+  color: var(--d-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+.panel-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.panel-total {
+  color: var(--d-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.panel-total strong {
+  margin-left: 6px;
+  color: var(--d-text);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 15d. Status dots (table-status rows) ---- */
+.statuslist .sl-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--d-faint);
+}
+.sl-dot.available { background: var(--d-green); box-shadow: 0 0 0 3px var(--d-tint-green); }
+.sl-dot.occupied { background: var(--d-blue); box-shadow: 0 0 0 3px var(--d-tint-blue); }
+.sl-dot.reserved { background: var(--d-purple); box-shadow: 0 0 0 3px var(--d-tint-purple); }
+.sl-dot.maintenance { background: var(--d-red); box-shadow: 0 0 0 3px var(--d-tint-red); }
+.sl-dot.closed { background: var(--d-green); box-shadow: 0 0 0 3px var(--d-tint-green); }
+
+/* ---- 15e. Revenue chart: gridlines + highlighted today ---- */
+.dash-home .chart { border-bottom: 1px solid var(--d-border); }
+/* Gridlines sit in a pseudo layer above the chart background but below the
+   columns, and stop above the weekday labels so no line crosses the text. */
+.dash-home .chart::before {
+  content: "";
+  position: absolute;
+  inset: 8px 0 22px;
+  background-image: repeating-linear-gradient(
+    to top,
+    transparent 0,
+    transparent 36px,
+    var(--d-border-soft) 36px,
+    var(--d-border-soft) 37px
+  );
+  pointer-events: none;
+}
+.dash-home .chart .bar-col { position: relative; z-index: 1; }
+.dash-home .chart-empty { z-index: 2; }
+.chart .bar.is-today {
+  background: linear-gradient(180deg, #E8CE72, #C29C2E);
+  box-shadow: 0 6px 18px var(--d-tint-gold-strong);
+}
+.chart .bar.is-today.zero { background: var(--d-tint-gold-strong); box-shadow: none; }
+.chart .bar-lbl.is-today { color: var(--d-gold-ink); font-weight: 700; }
+
+/* ---- 15f. Cashier start panel + table cards ---- */
+.dash-home .start-panel {
+  background-image: radial-gradient(320px 180px at 100% 0%, var(--d-tint-gold), transparent 70%);
+}
+.dash-home .start-eyebrow { display: inline-flex; align-items: center; gap: 7px; }
+.dash-home .start-eyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--d-green);
+  box-shadow: 0 0 0 3px var(--d-tint-green);
+}
+.dash-home .tc-card {
+  background: var(--d-surface);
+  border-top: 3px solid var(--d-border);
+}
+.dash-home .tc-card.status-available { border-top-color: var(--d-green); }
+.dash-home .tc-card.status-occupied { border-top-color: var(--d-blue); }
+.dash-home .tc-card.status-reserved { border-top-color: var(--d-purple); }
+.dash-home .tc-card.status-maintenance { border-top-color: var(--d-red); }
+
+/* ---- 15g. Top-bar clock ---- */
+.dash-top-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--d-border);
+  border-radius: 999px;
+  background: var(--d-surface);
+  color: var(--d-muted);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.dash-top-clock svg { width: 15px; height: 15px; color: var(--d-faint); }
+
+/* ---- 15h. Responsive ---- */
+@media (max-width: 760px) {
+  .dash-home .dash-hero { padding: 22px 20px; }
+  .dash-home .dash-hero-copy h1 { font-size: 26px; }
+  .dash-hero-actions { width: 100%; }
+  .hero-btn { flex: 1; justify-content: center; }
+}
+@media (max-width: 640px) {
+  .dash-top-clock { display: none; }
+}
+@media (max-width: 430px) {
+  .dash-home .dash-hero { border-radius: 16px; }
+  .dash-home .dash-hero-copy h1 { font-size: 23px; }
+  .hero-btn { flex: 1 1 100%; }
+}
+/* ================================================
+   16. Unified staff pages (admin + cashier)
+   Carries the dashboard's navy banner, blue accents,
+   rounded surfaces and spacing to every other staff
+   page. Markup/IDs stay untouched; this layer only
+   restyles the shared shells and page components.
+   ================================================ */
+
+/* ---- 16a. Page banner ---- */
+.dash-content > .dash-pagehead {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: 22px;
+  row-gap: 2px;
+  margin: 0 0 20px;
+  padding: 22px 26px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  color: #F8FAFC;
+  background:
+    radial-gradient(460px 200px at 6% -30%, rgba(37, 99, 235, 0.45), transparent 65%),
+    radial-gradient(380px 190px at 94% 130%, rgba(212, 180, 77, 0.22), transparent 65%),
+    linear-gradient(118deg, #0F172A 0%, #14213A 55%, #1D3350 100%);
+  box-shadow: 0 18px 38px -22px rgba(15, 23, 42, 0.55);
+}
+.dash-content > .dash-pagehead::before {
+  content: "";
+  position: absolute;
+  right: -64px;
+  top: -84px;
+  z-index: 0;
+  width: 230px;
+  height: 230px;
+  border: 1px solid rgba(248, 250, 252, 0.12);
+  border-radius: 50%;
+  box-shadow: 0 0 0 38px rgba(248, 250, 252, 0.028), 0 0 0 78px rgba(248, 250, 252, 0.018);
+  pointer-events: none;
+}
+.dash-content > .dash-pagehead > * { position: relative; z-index: 1; }
+.dash-pagehead h1 {
+  grid-column: 1;
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: #FFFFFF;
+}
+.dash-pagehead h1::before {
+  content: "";
+  display: block;
+  width: 34px;
+  height: 3px;
+  margin-bottom: 10px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #60A5FA, #D4B44D);
+}
+.dash-pagehead > span,
+.dash-pagehead > div > span {
+  grid-column: 1;
+  display: block;
+  margin-top: 4px;
+  color: rgba(241, 245, 249, 0.7);
+  font-size: 13.5px;
+}
+.dash-pagehead > .dash-stamp:empty { display: none; }
+.dash-pagehead > .dash-stamp {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid rgba(248, 250, 252, 0.16);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.08);
+  color: rgba(248, 250, 252, 0.78);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.dash-pagehead > div { grid-column: 1; grid-row: 1 / span 2; min-width: 0; }
+.dash-content > .dash-pagehead.res-pagehead { align-items: center; }
+.dash-pagehead .res-sync {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  margin: 0;
+  color: rgba(241, 245, 249, 0.72);
+}
+.dash[data-theme="dark"] .dash-content > .dash-pagehead {
+  border-color: rgba(241, 245, 249, 0.08);
+  background:
+    radial-gradient(460px 200px at 6% -30%, rgba(96, 165, 250, 0.26), transparent 65%),
+    radial-gradient(380px 190px at 94% 130%, rgba(212, 175, 55, 0.2), transparent 65%),
+    linear-gradient(118deg, #0B1220 0%, #16243B 55%, #1E3A5F 100%);
+  box-shadow: 0 18px 38px -22px rgba(0, 0, 0, 0.8);
+}
+
+/* ---- 16b. Panels + section headers ---- */
+.dash-panel {
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 16px 30px -26px rgba(15, 23, 42, 0.35);
+}
+.dash[data-theme="dark"] .dash-panel {
+  box-shadow: 0 1px 2px rgba(3, 7, 18, 0.4), 0 16px 30px -26px rgba(0, 0, 0, 0.8);
+}
+.panel-head {
+  padding-bottom: 13px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--d-border-soft);
+}
+.panel-head > h2,
+.dash-panel > h2 {
+  position: relative;
+  padding-left: 14px;
+}
+.panel-head > h2::before,
+.dash-panel > h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 17px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--d-blue), var(--d-primary));
+}
+.panel-head .dash-stamp,
+.res-toolbar .dash-stamp {
+  padding: 4px 10px;
+  border: 1px solid var(--d-border-soft);
+  border-radius: 999px;
+  background: var(--d-surface-2);
+  color: var(--d-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+.dash-panel > p { margin: 6px 0 14px; }
+.dash-panel > h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 24px 0 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--d-border-soft);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: var(--d-muted);
+}
+.dash-panel > h3::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--d-blue);
+  box-shadow: 0 0 0 3px var(--d-tint-blue);
+}
+.start-eyebrow { color: var(--d-blue); }
+.dash-home .start-eyebrow::before { background: var(--d-blue); box-shadow: 0 0 0 3px var(--d-tint-blue); }
+
+/* ---- 16c. Tabs: one segmented control ---- */
+.dash-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  width: max-content;
+  max-width: 100%;
+  padding: 5px;
+  margin-bottom: 16px;
+  border: 1px solid var(--d-border);
+  border-radius: 999px;
+  background: var(--d-surface);
+  box-shadow: var(--d-shadow-sm);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dash-tabs::-webkit-scrollbar { display: none; }
+.dash-tabs button {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--d-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dash-tabs button:hover { color: var(--d-text); background: var(--d-surface-2); border-color: transparent; }
+.dash-tabs button.on {
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  border-color: transparent;
+  color: #FFFFFF;
+  box-shadow: 0 8px 18px -10px rgba(37, 99, 235, 0.75);
+}
+
+/* ---- 16d. Buttons ---- */
+.dash .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
+  line-height: 1.15;
+  text-transform: none;
+  white-space: nowrap;
+}
+.dash .btn-solid {
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  box-shadow: 0 10px 22px -12px rgba(37, 99, 235, 0.75);
+}
+.dash .btn-ghost { background: var(--d-surface); }
+.rowbtn {
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-weight: 600;
+}
+.rowbtn.go {
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  border-color: transparent;
+  box-shadow: 0 6px 14px -9px rgba(37, 99, 235, 0.8);
+}
+.rowbtn.go:hover { color: #FFFFFF; filter: brightness(1.07); }
+.rowbtn.gold {
+  background: linear-gradient(135deg, #E2C766, #C9A63B);
+  border-color: transparent;
+  color: #231A02;
+  box-shadow: 0 6px 14px -9px rgba(212, 180, 77, 0.8);
+}
+.page-btn { border-radius: 9px; }
+
+/* ---- 16e. Tables ---- */
+.dash-tablewrap {
+  border: 1px solid var(--d-border);
+  border-radius: 12px;
+  background: var(--d-surface);
+}
+.dash-tablewrap th { padding: 11px 16px; font-size: 10.5px; }
+.dash-tablewrap td { padding: 13px 16px; }
+.dash-tablewrap tbody tr:hover { background: rgba(37, 99, 235, 0.05); }
+.dash[data-theme="dark"] .dash-tablewrap tbody tr:hover { background: rgba(96, 165, 250, 0.08); }
+
+.dash-pager {
+  padding-top: 14px;
+  border-top: 1px solid var(--d-border-soft);
+}
+
+/* ---- 16f. Empty states + messages ---- */
+.dash-empty {
+  margin: 8px 0 0;
+  padding: 24px 18px;
+  border: 1px dashed var(--d-border);
+  border-radius: 12px;
+  background: var(--d-surface-2);
+  color: var(--d-muted);
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.dash-empty a { color: var(--d-blue); font-weight: 600; }
+.dash-msg { margin-bottom: 14px; }
+
+/* ---- 16g. Cashier menu ---- */
+.menu-toolbar {
+  padding-bottom: 14px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--d-border-soft);
+}
+.menu-groups { gap: 22px; margin-top: 16px; }
+.menu-group-head {
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--d-border-soft);
+}
+.menu-group-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.menu-group-head h3::before {
+  content: "";
+  width: 3px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--d-blue), var(--d-primary));
+}
+.menu-count {
+  padding: 2px 9px;
+  border: 1px solid var(--d-border-soft);
+  border-radius: 999px;
+  background: var(--d-surface-2);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.menu-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.menu-card {
+  background: var(--d-surface);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.18s ease, transform 0.18s var(--d-ease), box-shadow 0.2s ease;
+}
+.dash[data-theme="dark"] .menu-card { box-shadow: 0 1px 2px rgba(3, 7, 18, 0.4); }
+.menu-card:hover {
+  border-color: rgba(37, 99, 235, 0.4);
+  box-shadow: var(--d-shadow-md);
+  transform: translateY(-2px);
+}
+.menu-price {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--d-tint-gold);
+  color: var(--d-gold-ink);
+  font-size: 12.5px;
+}
+
+/* ---- 16h. Reservation queue ---- */
+.res-panel { padding: 22px; }
+.res-lede {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--d-border-soft);
+  border-radius: 12px;
+  background: var(--d-surface-2);
+}
+.res-lede strong { color: var(--d-blue); }
+.res-segment { padding: 5px; background: var(--d-surface-2); }
+.res-segment button.on {
+  background: linear-gradient(135deg, #2563EB, #1D4ED8);
+  color: #FFFFFF;
+  box-shadow: 0 8px 18px -10px rgba(37, 99, 235, 0.75);
+}
+.res-segment button:not(.on) span { background: var(--d-tint-blue); color: var(--d-blue); }
+.res-segment button.on span { background: rgba(255, 255, 255, 0.18); color: #FFFFFF; }
+.res-card { border-radius: 16px; }
+.res-card:hover { border-color: rgba(37, 99, 235, 0.35); }
+.res-card-contact a { color: var(--d-blue); }
+.res-btn { border-radius: 10px; }
+.dash[data-theme="dark"] .res-segment { background: var(--d-bg); }
+.dash[data-theme="dark"] .res-segment button.on { background: linear-gradient(135deg, #2563EB, #1D4ED8); box-shadow: none; }
+.dash[data-theme="dark"] .res-segment button:not(.on) span { background: var(--d-tint-blue); color: var(--d-blue); }
+.dash[data-theme="dark"] .res-segment button.on span { background: rgba(255, 255, 255, 0.18); }
+.dash[data-theme="dark"] .res-card:hover { border-color: rgba(96, 165, 250, 0.4); }
+
+/* ---- 16i. Responsive ---- */
+@media (max-width: 760px) {
+  .dash-content > .dash-pagehead {
+    grid-template-columns: 1fr;
+    align-items: start;
+    padding: 20px;
+    border-radius: 16px;
+  }
+  .dash-pagehead h1 { font-size: 23px; }
+  .dash-pagehead > .dash-stamp,
+  .dash-pagehead .res-sync {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+    margin-top: 8px;
+  }
+  .dash-pagehead > div { grid-row: auto; }
+  .res-panel { padding: 16px; }
+}
+@media (max-width: 640px) {
+  .dash-panel { padding: 17px 16px; border-radius: 14px; }
+  .menu-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 430px) {
+  .menu-grid { grid-template-columns: 1fr; }
 }

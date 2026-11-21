@@ -78,6 +78,8 @@ function renderTableStatus(tables, sessions) {
     .filter((t) => !t.archived)
     .sort((a, b) => (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) || String(a.name).localeCompare(String(b.name)));
 
+  const count = document.getElementById("tableStatusCount");
+  if (count) count.textContent = String(rows.length);
   if (!rows.length) {
     box.innerHTML = '<p class="sl-empty">No tables yet — add one on the Tables page.</p>';
     return;
@@ -104,7 +106,10 @@ function renderTableStatus(tables, sessions) {
     } else {
       meta.textContent = s ? "in session" : "—";
     }
-    row.append(name, badge, meta);
+    const dot = document.createElement("span");
+    dot.className = `sl-dot ${t.status || "archived"}`;
+    dot.setAttribute("aria-hidden", "true");
+    row.append(dot, name, badge, meta);
     box.appendChild(row);
   }
 }
@@ -113,6 +118,8 @@ function renderRecent(sessions) {
   const box = document.getElementById("recentSessions");
   if (!box) return;
   const rows = (sessions || []).slice(0, 6);
+  const count = document.getElementById("recentCount");
+  if (count) count.textContent = String(rows.length);
   if (!rows.length) {
     box.innerHTML = '<p class="sl-empty">No closed sessions yet — they appear here as they finish.</p>';
     return;
@@ -153,6 +160,8 @@ function renderChart(transactions) {
   const values = days.map((d) => sums.get(ymd(d)) || 0);
   const max = Math.max(...values, 1);
   const total = values.reduce((a, b) => a + b, 0);
+  const totalEl = document.getElementById("revTotal");
+  if (totalEl) totalEl.textContent = peso(total);
   chart.innerHTML = "";
   chart.setAttribute(
     "aria-label",
@@ -162,18 +171,19 @@ function renderChart(transactions) {
   );
   days.forEach((d, i) => {
     const v = values[i];
+    const isToday = i === days.length - 1;
     const col = document.createElement("div");
     col.className = "bar-col";
     const val = document.createElement("span");
     val.className = "bar-val";
     val.textContent = pesoShort(v);
     const bar = document.createElement("span");
-    bar.className = "bar" + (v <= 0 ? " zero" : "");
+    bar.className = "bar" + (v <= 0 ? " zero" : "") + (isToday ? " is-today" : "");
     bar.style.height = `${Math.max(6, Math.round((v / max) * 110))}px`;
     bar.title = `${d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}: ${peso(v)}`;
     const lbl = document.createElement("span");
-    lbl.className = "bar-lbl";
-    lbl.textContent = d.toLocaleDateString([], { weekday: "short" });
+    lbl.className = "bar-lbl" + (isToday ? " is-today" : "");
+    lbl.textContent = isToday ? "Today" : d.toLocaleDateString([], { weekday: "short" });
     col.append(val, bar, lbl);
     chart.appendChild(col);
   });
@@ -245,6 +255,11 @@ async function load() {
     const name = me.email || "admin";
     document.getElementById("who").textContent = name;
     document.getElementById("avatar").textContent = name.charAt(0).toUpperCase();
+    const heroName = document.getElementById("heroName");
+    if (heroName) {
+      const display = String(me.displayName || name).split("@")[0];
+      heroName.textContent = display.charAt(0).toUpperCase() + display.slice(1);
+    }
     await load();
     startTick();
   } catch (e) {

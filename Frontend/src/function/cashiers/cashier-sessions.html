@@ -74,7 +74,10 @@
 
         <section class="dash-panel" id="sessions-panel" aria-labelledby="active-h">
           <div class="panel-head">
-            <h2 id="active-h">Active sessions</h2>
+            <div class="panel-title">
+              <span class="panel-ic blue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.2 2" /></svg></span>
+              <h2 id="active-h">Active sessions</h2>
+            </div>
             <span class="dash-stamp" id="sessStamp"></span>
           </div>
           <p>Live timers; overtime shows in red.</p>
@@ -90,7 +93,10 @@
 
         <section class="dash-panel" id="to-bill" aria-labelledby="bill-h">
           <div class="panel-head">
-            <h2 id="bill-h">To bill</h2>
+            <div class="panel-title">
+              <span class="panel-ic gold" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16v12H4z" /><path d="M4 11h16" /><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none" /></svg></span>
+              <h2 id="bill-h">To bill</h2>
+            </div>
             <span class="dash-stamp" id="billStamp"></span>
           </div>
           <div class="dash-msg" id="billMsg" role="status">Loading…</div>

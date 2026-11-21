@@ -74,6 +74,8 @@ function renderTableGrid(tables) {
   if (!grid) return;
   grid.innerHTML = "";
   const rows = (tables || []).filter((t) => !t.archived);
+  const count = document.getElementById("tableStatusCount");
+  if (count) count.textContent = String(rows.length);
   if (!rows.length) {
     const p = document.createElement("p");
     p.className = "tcgrid-empty";
@@ -83,7 +85,7 @@ function renderTableGrid(tables) {
   }
   for (const t of rows) {
     const card = document.createElement("div");
-    card.className = "tc-card";
+    card.className = `tc-card status-${t.status || "idle"}`;
     const top = document.createElement("div");
     top.className = "tc-top";
     const name = document.createElement("span");
@@ -111,6 +113,8 @@ function renderActiveList(sessions) {
   if (!box) return;
   box.innerHTML = "";
   const rows = sessions || [];
+  const count = document.getElementById("activeCount");
+  if (count) count.textContent = String(rows.length);
   if (!rows.length) {
     const p = document.createElement("p");
     p.className = "sl-empty";
@@ -161,6 +165,8 @@ function renderReservations(reservations) {
   if (!container) return;
   container.innerHTML = "";
   const rows = reservations || [];
+  const count = document.getElementById("reservationCount");
+  if (count) count.textContent = String(rows.length);
   if (!rows.length) {
     const p = document.createElement("p");
     p.className = "sl-empty";
@@ -286,7 +292,12 @@ document.getElementById("startForm")?.addEventListener("submit", async (e) => {
 
 (async () => {
   try {
-    await cashierGuard();
+    const me = await cashierGuard();
+    const heroName = document.getElementById("heroName");
+    if (heroName) {
+      const display = String(me.displayName || me.email || me.username || "cashier").split("@")[0];
+      heroName.textContent = display.charAt(0).toUpperCase() + display.slice(1);
+    }
     bindCashierLogout();
     updateStartSummary();
     setSessionExpiryHandler(() => loadDashboard(true));

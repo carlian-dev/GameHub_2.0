@@ -217,7 +217,22 @@
     });
   });
 
-  // ---- Sidebar active indicator (slides the green highlight) ----
+  // Time-of-day greeting for dashboard heroes + optional top-bar clock.
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  document.querySelectorAll("[data-greeting]").forEach((el) => {
+    el.textContent = greeting;
+  });
+  const topClock = document.getElementById("topClock");
+  if (topClock) {
+    const tickClock = () => {
+      topClock.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    };
+    tickClock();
+    setInterval(tickClock, 15000);
+  }
+
+  // ---- Sidebar active indicator (slides the blue highlight) ----
   // Cashier sidebar mixes a page link (Dashboard) with in-page anchors
   // (#sessions-panel, #tables-panel). Without this, .active stays stuck on
   // Dashboard. This moves .active + a sliding pill on click, hash change,

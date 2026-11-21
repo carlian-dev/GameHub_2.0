@@ -103,7 +103,12 @@
         </div>
 
         <section class="dash-panel" aria-labelledby="filter-h">
-          <h2 id="filter-h">Filter</h2>
+          <div class="panel-head">
+            <div class="panel-title">
+              <span class="panel-ic blue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M7 12h10M10 17h4" /></svg></span>
+              <h2 id="filter-h">Filter</h2>
+            </div>
+          </div>
           <p>Pick Month + Day + Year, then press Apply to show that period's income and bills. Day empty = whole month, Month empty = whole year.</p>
           <form id="filterForm" class="filter-row">
             <label class="field" for="fMonth"><span class="field-label">Month</span>
@@ -131,7 +136,10 @@
 
         <section class="dash-panel" aria-labelledby="tx-h">
           <div class="panel-head">
-            <h2 id="tx-h">Bills</h2>
+            <div class="panel-title">
+              <span class="panel-ic gold" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16v12H4z" /><path d="M4 11h16" /><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none" /></svg></span>
+              <h2 id="tx-h">Bills</h2>
+            </div>
             <span class="dash-stamp" id="stamp"></span>
           </div>
           <div class="dash-msg" id="msg" role="status">Loading…</div>

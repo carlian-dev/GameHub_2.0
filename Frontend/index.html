@@ -33,6 +33,19 @@
       );
     } catch (e) { /* private mode */ }
   </script>
+  <script>
+    // Clean URL: show / instead of /index.html when a bookmark, old link or a
+    // typed address hits the file directly. Static hosts still need the file.
+    if (/\/index\.html$/.test(location.pathname)) {
+      try {
+        history.replaceState(
+          null,
+          "",
+          location.pathname.replace(/\/index\.html$/, "/") + location.search + location.hash
+        );
+      } catch (e) { /* file:// or blocked history API */ }
+    }
+  </script>
 </head>
 <body class="landing" id="top">
   <div class="hero-wrap">

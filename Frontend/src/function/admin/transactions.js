@@ -55,10 +55,8 @@ function renderPage() {
     tr.children[6].appendChild(badge);
     tr.children[7].textContent = fmtPeso(t.change);
     const link = document.createElement("a");
-    link.href = `../shared/receipt.html?ref=${encodeURIComponent(t.ref || "")}`;
+    link.href = `../shared/receipt.html?ref=${encodeURIComponent(t.ref || "")}&from=transactions`;
     link.textContent = "Receipt";
-    link.target = "_blank";
-    link.rel = "noopener";
     tr.children[8].appendChild(link);
     tb.appendChild(tr);
   }

@@ -3,7 +3,9 @@
 // the admin twin endpoint). Guard: any logged-in staff stays; guests go to
 // login. PDF = jsPDF (vendored UMD) -> in-page iframe preview + Download
 // button. No window.print(). Item tables paginate onto a new page when needed;
-// legacy transactions with no F&B data render exactly like Sprint 3.
+// legacy transactions with no F&B data render exactly like Sprint 3. The back
+// link/button returns to the list that opened the receipt (?from=sessions or
+// ?from=transactions), never the customer landing page.
 function peso(n) {
   return `₱${Number(n || 0).toFixed(2)}`;
 }
@@ -22,6 +24,28 @@ let lastDoc = null;
 let pdfEnabled = true;
 let lastRef = "";
 let lastUrl = "";
+// Where the sidebar "Back" link and the bottom Back button go. Cashiers return
+// to Sessions, admins to Transactions; updated once the role is known.
+let backHref = "../cashiers/cashier-sessions.html";
+
+function setBackLink(href, label) {
+  backHref = href;
+  const link = document.getElementById("backLink");
+  const text = document.getElementById("backLabel");
+  if (link) link.href = href;
+  if (text) text.textContent = label;
+}
+
+// `from` is set by the page that opened the receipt (sessions/transactions);
+// fall back to the role's natural list page so old links still go somewhere
+// sensible instead of the customer landing page.
+function resolveBackLink(me, from) {
+  if (from === "sessions") return ["../cashiers/cashier-sessions.html", "Back to Sessions"];
+  if (from === "transactions") return ["../admin/transactions.html", "Back to Transactions"];
+  if (me.role === "cashier") return ["../cashiers/cashier-sessions.html", "Back to Sessions"];
+  if (me.role === "admin") return ["../admin/transactions.html", "Back to Transactions"];
+  return [staffHome(me.role), "Back to Dashboard"];
+}
 
 function safeRef(ref) {
   const s = String(ref || "receipt").replace(/[^A-Za-z0-9-_]/g, "");
@@ -201,7 +225,9 @@ function showPreview() {
     return;
   }
   try {
-    await getMe();
+    const me = await getMe();
+    const [href, label] = resolveBackLink(me, q.get("from"));
+    setBackLink(href, label);
     try {
       const cfg = await getAppConfig();
       pdfEnabled = !(cfg && cfg.exports && cfg.exports.receiptPdf === false);
@@ -297,4 +323,6 @@ document.getElementById("download").addEventListener("click", () => {
   lastDoc.save(file);
   dashToast(`${file} saved to your downloads.`, "ok", { title: "Receipt downloaded" });
 });
-document.getElementById("back").addEventListener("click", () => history.back());
+document.getElementById("back").addEventListener("click", () => {
+  location.href = backHref;
+});

@@ -719,7 +719,7 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       '<div class="bill-state" id="billState" hidden>' +
       '<div class="modal-actions">' +
       '<button type="button" class="btn btn-ghost" id="billStateRetry" hidden>Retry</button>' +
-      '<a class="btn btn-solid" id="billStateReceipt" target="_blank" rel="noopener" hidden>Open receipt</a>' +
+      '<a class="btn btn-solid" id="billStateReceipt" hidden>Open receipt</a>' +
       '<button type="button" class="btn btn-ghost" id="billStateCancel" hidden>Cancel link</button>' +
       '<button type="button" class="btn btn-ghost" id="billStateClose">Close</button>' +
       "</div></div>" +
@@ -799,7 +799,7 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       stateReceipt.hidden = !receiptRef;
       stateReceipt.textContent = "Open receipt";
       if (receiptRef) {
-        stateReceipt.href = `../shared/receipt.html?ref=${encodeURIComponent(receiptRef)}`;
+        stateReceipt.href = `../shared/receipt.html?ref=${encodeURIComponent(receiptRef)}&from=sessions`;
       }
       stateClose.focus();
     }
@@ -1071,7 +1071,7 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
         "</div>" +
         '<div class="modal-actions">' +
         '<button type="button" class="btn btn-ghost" id="billDone">Done</button>' +
-        '<a class="btn btn-solid" id="billReceipt" target="_blank" rel="noopener">Open receipt</a>' +
+        '<a class="btn btn-solid" id="billReceipt">Open receipt</a>' +
         "</div></div>";
       pay.hidden = false;
       state.hidden = true;
@@ -1096,7 +1096,7 @@ function billSheet({ sessionId, tableName = "", customerName = "" }) {
       set("paid", `${peso2(t.received)} / ${peso2(t.change)}`);
       const done = pay.querySelector("#billDone");
       const receipt = pay.querySelector("#billReceipt");
-      receipt.href = `../shared/receipt.html?ref=${encodeURIComponent(receiptRef)}`;
+      receipt.href = `../shared/receipt.html?ref=${encodeURIComponent(receiptRef)}&from=sessions`;
       settled = true;
       closeValue = true;
       done.addEventListener("click", () => requestClose(true));
@@ -1481,10 +1481,8 @@ async function loadBilling(quiet = false) {
       tr.children[3].appendChild(m);
       tr.children[4].textContent = peso2(t.change);
       const a = document.createElement("a");
-      a.href = `../shared/receipt.html?ref=${encodeURIComponent(t.ref || "")}`;
+      a.href = `../shared/receipt.html?ref=${encodeURIComponent(t.ref || "")}&from=sessions`;
       a.textContent = "Receipt";
-      a.target = "_blank";
-      a.rel = "noopener";
       tr.children[5].appendChild(a);
       paidBody.appendChild(tr);
     }

@@ -1,10 +1,21 @@
-// Reservation model: named Mongo queries for reservations collection.
+// Reservation model: named Mongo queries for reservations collection,
+// with pessimistic locking for concurrency control.
 import { toObjectId } from "./bson.js";
+import { createReservationLockManager } from "../utils/reservationLock.js";
 
 export function reservationModel({ db }) {
   const coll = db.collection("reservations");
+  const lockManager = createReservationLockManager({ db });
 
   return {
+    // Locking operations (pessimistic concurrency control for reservations)
+    acquireLock: lockManager.acquireLock,
+    releaseLock: lockManager.releaseLock,
+    withLock: lockManager.withLock,
+    isLocked: lockManager.isLocked,
+    withTableLock: lockManager.withTableLock,
+    withReservationLock: lockManager.withReservationLock,
+
     async list(filter = {}) {
       return await coll.find(filter, { sort: { startTime: 1 } }).toArray();
     },
@@ -30,12 +41,14 @@ export function reservationModel({ db }) {
       return await coll.find(filter).toArray();
     },
     async create(doc) {
+      // Retain MVCC version: 1
       const res = await coll.insertOne({ version: 1, ...doc });
       return res.insertedId;
     },
     async update(id, set) {
       const oid = toObjectId(id);
       if (!oid) return null;
+      // Retain MVCC $inc: { version: 1 }
       return await coll.updateOne(
         { _id: oid },
         { $set: set, $inc: { version: 1 } }

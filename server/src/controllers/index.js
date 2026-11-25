@@ -610,13 +610,17 @@ export function invitationController({ invitationService }) {
     }),
 
     create: asyncHandler(async (req, res) => {
-      const { email } = req.body || {};
+      const { email, role } = req.body || {};
       const user = req.authUser;
       if (!user || user.role !== "admin") {
         throw new HttpError(401, "not logged in");
       }
+      if (role && role !== "cashier" && role !== "admin") {
+        throw new HttpError(422, "role must be cashier or admin");
+      }
       const result = await invitationService.create({
         email,
+        role: role === "admin" ? "admin" : "cashier",
         actorId: user.id,
         frontendUrl: process.env.FRONTEND_URL,
         mailerDryRun: process.env.MAIL_DRY_RUN === "1",

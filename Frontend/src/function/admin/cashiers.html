@@ -75,8 +75,9 @@
         </div>
 
         <div class="dash-tabs" role="tablist" aria-label="Staff views">
+          <button type="button" data-t="cashiers" class="on">Cashiers</button>
+          <button type="button" data-t="admins">Administrators</button>
           <button type="button" data-t="invites">Invitations</button>
-          <button type="button" data-t="active" class="on">Active</button>
           <button type="button" data-t="archived">Archived</button>
         </div>
 
@@ -86,7 +87,10 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
               <input id="q" type="search" placeholder="Search staff" aria-label="Search staff" />
             </label>
-            <button type="button" class="btn btn-solid" id="invite">Invite cashier</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline" id="inviteAdmin">Invite co-admin</button>
+              <button type="button" class="btn btn-solid" id="invite">Invite cashier</button>
+            </div>
           </div>
 
           <p class="dash-msg" id="msg" role="status">Loading…</p>
@@ -94,7 +98,7 @@
           <div class="dash-tablewrap">
             <table id="tbl">
               <thead id="tblHead">
-                <tr><th>Email / Username</th><th>Status</th><th>Name</th><th>Schedule</th><th>Actions</th></tr>
+                <tr><th>Email / Username</th><th>Role</th><th>Status</th><th>Name</th><th>Schedule</th><th>Actions</th></tr>
               </thead>
               <tbody></tbody>
             </table>

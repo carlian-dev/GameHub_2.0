@@ -115,11 +115,12 @@ export function profileView({ displayName, avatarUrl, version }) {
   };
 }
 
-export function invitationCheckView({ valid, email }) {
+export function invitationCheckView({ valid, email, role }) {
   return {
     ok: true,
     valid,
     email,
+    role: role ?? "cashier",
   };
 }
 

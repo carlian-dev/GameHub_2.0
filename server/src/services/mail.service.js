@@ -252,19 +252,24 @@ export function mailService({
 
   return {
     enabled,
-    sendInvite(email, link) {
+    sendInvite(email, link, role = "cashier") {
+      const isCoAdmin = role === "admin";
+      const roleTitle = isCoAdmin ? "co-admin" : "cashier";
+      const subject = isCoAdmin
+        ? "Your GameHub co-admin invitation"
+        : "Your GameHub cashier invitation";
       return deliver({
         to: email,
-        subject: "Your GameHub cashier invitation",
+        subject,
         text: [
-          "You have been invited to join GameHub as a cashier.",
+          `You have been invited to join GameHub as a ${roleTitle}.`,
           "",
           `Set up your account: ${link}`,
           "",
           "This link expires in 24 hours and can be used once.",
         ].join("\n"),
         html:
-          `<p>You have been invited to join GameHub as a cashier.</p>` +
+          `<p>You have been invited to join GameHub as a ${roleTitle}.</p>` +
           `<p><a href="${esc(link)}">Set up your account</a></p>` +
           `<p style="color:#64748B;font-size:13px;">This link expires in 24 hours and can be used once.</p>`,
       });

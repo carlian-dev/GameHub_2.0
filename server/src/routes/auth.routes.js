@@ -16,6 +16,7 @@ export function registerAuthRoutes(router, { authController, invitationControlle
   // Public (no login). These are the only password/token-guessing surfaces, so
   // they get the strict `auth` limiter (successful attempts are not counted).
   router.post("/cashiers/register", rateLimiters.auth, authController.register);
+  router.post("/auth/register", rateLimiters.auth, authController.register);
   router.get("/invitations/:token", rateLimiters.auth, invitationController.check);
   router.post("/login", rateLimiters.auth, authController.login);
   router.post("/auth/google", rateLimiters.auth, authController.google);

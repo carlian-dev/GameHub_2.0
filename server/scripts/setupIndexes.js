@@ -77,6 +77,10 @@ async function main() {
       { at: -1 },
       { name: "idx_activity_at" }
     );
+    await db.collection("reservationLocks").createIndex(
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0, name: "idx_reservation_locks_ttl" }
+    );
 
     // Optional active-session index: only create if no duplicates already exist.
     const sessions = db.collection("sessions");

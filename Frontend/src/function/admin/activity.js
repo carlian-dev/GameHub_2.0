@@ -158,7 +158,7 @@ function detailsOf(log) {
     return m.newValue ? `Display name → ${m.newValue}` : "Display name updated";
   }
 
-  if (action === "approve_cashier" || action === "archive_cashier" || action === "unarchive_cashier") {
+  if (action === "approve_cashier" || action === "approve_admin" || action === "archive_cashier" || action === "unarchive_cashier") {
     return log.targetName ? `Account: ${log.targetName}` : `Account ${shortId(log.target)}`;
   }
 

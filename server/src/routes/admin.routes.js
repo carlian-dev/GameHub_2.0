@@ -31,8 +31,12 @@ export function registerAdminRoutes(router, {
   router.get("/admin/settings/integrations", settingsController.adminIntegrations);
   // Read-only: only a super administrator can change integrations.
 
-  // Cashiers
+  // Cashiers & Admins
   router.get("/admin/cashiers", cashierController.list);
+  router.get("/admin/admins", (req, res, next) => {
+    req.query = { ...req.query, role: "admin" };
+    return cashierController.list(req, res, next);
+  });
   router.put("/admin/cashiers/:id", cashierController.update);
   router.post("/admin/cashiers/:id/archive", cashierController.archive);
   router.post("/admin/cashiers/:id/unarchive", cashierController.unarchive);

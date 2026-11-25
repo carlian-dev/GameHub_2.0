@@ -4,6 +4,7 @@
 import crypto from "node:crypto";
 import { HttpError } from "../utils/HttpError.js";
 import { toObjectId } from "../models/bson.js";
+import { createReservationLockManager } from "../utils/reservationLock.js";
 
 const NAME_RE = /^.{2,60}$/;
 const CONTACT_RE = /^[0-9+\-\s()]{7,25}$/;
@@ -61,7 +62,16 @@ export function reservationService({
   recaptchaService = null,
   sessionService = null,
 }) {
-  const activityLogs = db.collection("activityLogs");
+  const activityLogs = db && typeof db.collection === "function" ? db.collection("activityLogs") : null;
+  const internalLockManager = createReservationLockManager({ db });
+
+  // Use model locking if provided; fall back to internal lock manager.
+  function withLock(resource, fn, options) {
+    if (reservationModel && typeof reservationModel.withLock === "function") {
+      return reservationModel.withLock(resource, fn, options);
+    }
+    return internalLockManager.withLock(resource, fn, options);
+  }
 
   // Best-effort Google Calendar sync: a calendar outage must never fail a
   // booking, so failures are logged and the reservation stays unchanged.
@@ -148,53 +158,58 @@ export function reservationService({
     }
     const end = new Date(start.getTime() + duration * 60 * 1000);
 
-    const table = await tableModel.findById(tableId);
-    if (!table) throwErr(404, "table not found");
-    if (table.archived) throwErr(422, "table is archived");
-    if (table.status === "maintenance") throwErr(422, "table is under maintenance");
+    // Pessimistic lock on the requested table to prevent double-booking races.
+    return await withLock(`table:${tableId}`, async () => {
+      const table = await tableModel.findById(tableId);
+      if (!table) throwErr(404, "table not found");
+      if (table.archived) throwErr(422, "table is archived");
+      if (table.status === "maintenance") throwErr(422, "table is under maintenance");
 
-    const overlaps = await reservationModel.findOverlapping(tableId, start, end);
-    if (overlaps && overlaps.length > 0) {
-      throwErr(409, "selected table/time is unavailable");
-    }
+      const overlaps = await reservationModel.findOverlapping(tableId, start, end);
+      if (overlaps && overlaps.length > 0) {
+        throwErr(409, "selected table/time is unavailable");
+      }
 
-    // generate unique ref with retries
-    let ref = null;
-    for (let i = 0; i < 5; i++) {
-      const candidate = genRef(start);
-      const existing = await reservationModel.findByRef(candidate);
-      if (!existing) { ref = candidate; break; }
-    }
-    if (!ref) throwErr(500, "could not generate reservation reference");
+      // generate unique ref with retries
+      let ref = null;
+      for (let i = 0; i < 5; i++) {
+        const candidate = genRef(start);
+        const existing = await reservationModel.findByRef(candidate);
+        if (!existing) { ref = candidate; break; }
+      }
+      if (!ref) throwErr(500, "could not generate reservation reference");
 
-    const oid = toObjectId(tableId);
-    const now2 = new Date();
-    const id = await reservationModel.create({
-      ref,
-      tableId: oid || tableId,
-      tableName: table.name ?? "",
-      customerName,
-      customerEmail,
-      contactNumber,
-      startTime: start,
-      endTime: end,
-      durationMinutes: duration,
-      status: "reserved",
-      createdAt: now2,
-      updatedAt: now2,
-    });
-
-    const doc = await reservationModel.findById(id);
-    try {
-      await activityLogs.insertOne({
-        actorId: null,
-        action: "reservation_create",
-        target: ref,
-        at: now2,
+      const oid = toObjectId(tableId);
+      const now2 = new Date();
+      const id = await reservationModel.create({
+        ref,
+        tableId: oid || tableId,
+        tableName: table.name ?? "",
+        customerName,
+        customerEmail,
+        contactNumber,
+        startTime: start,
+        endTime: end,
+        durationMinutes: duration,
+        status: "reserved",
+        createdAt: now2,
+        updatedAt: now2,
       });
-    } catch (_) { /* audit best-effort */ }
 
-    return { ok: true, reservation: shape(doc) };
+      const doc = await reservationModel.findById(id);
+      if (activityLogs) {
+        try {
+          await activityLogs.insertOne({
+            actorId: null,
+            action: "reservation_create",
+            target: ref,
+            at: now2,
+          });
+        } catch (_) { /* audit best-effort */ }
+      }
+
+      return { ok: true, reservation: shape(doc) };
+    });
   }
 
   async function getByRef(ref, contactNumber) {
@@ -217,27 +232,30 @@ export function reservationService({
     const contact = String(contactNumber || "").trim();
     if (!contact) throwErr(422, "contact number is required");
 
-    const doc = await reservationModel.findByRef(r);
-    if (!doc) throwErr(404, "reservation not found");
-    if (String(doc.contactNumber).trim().toLowerCase() !== contact.toLowerCase()) {
-      throwErr(404, "reservation not found");
-    }
-    if (doc.status === "cancelled") throwErr(409, "reservation already cancelled");
-    if (doc.status === "checked-in") throwErr(409, "reservation is already checked in");
-    if (doc.status === "completed") throwErr(409, "reservation already completed");
-    if (doc.startTime instanceof Date && doc.startTime.getTime() <= Date.now()) {
-      throwErr(422, "cannot cancel after reservation time");
-    }
+    // Pessimistic lock on the reservation to serialize cancellations/status changes.
+    return await withLock(`reservation:${r}`, async () => {
+      const doc = await reservationModel.findByRef(r);
+      if (!doc) throwErr(404, "reservation not found");
+      if (String(doc.contactNumber).trim().toLowerCase() !== contact.toLowerCase()) {
+        throwErr(404, "reservation not found");
+      }
+      if (doc.status === "cancelled") throwErr(409, "reservation already cancelled");
+      if (doc.status === "checked-in") throwErr(409, "reservation is already checked in");
+      if (doc.status === "completed") throwErr(409, "reservation already completed");
+      if (doc.startTime instanceof Date && doc.startTime.getTime() <= Date.now()) {
+        throwErr(422, "cannot cancel after reservation time");
+      }
 
-    const now = new Date();
-    await reservationModel.update(doc._id, {
-      status: "cancelled",
-      cancelledAt: now,
-      updatedAt: now,
+      const now = new Date();
+      await reservationModel.update(doc._id, {
+        status: "cancelled",
+        cancelledAt: now,
+        updatedAt: now,
+      });
+      await removeCalendarEvent(doc);
+      const fresh = await reservationModel.findByRef(r);
+      return { ok: true, reservation: shape(fresh) };
     });
-    await removeCalendarEvent(doc);
-    const fresh = await reservationModel.findByRef(r);
-    return { ok: true, reservation: shape(fresh) };
   }
 
   // Cashier decision on a pending request. Accepting keeps the slot blocked;
@@ -247,28 +265,33 @@ export function reservationService({
     const r = String(ref || "").trim();
     if (!r) throwErr(422, "reservation reference is required");
 
-    const doc = await reservationModel.findByRef(r);
-    if (!doc) throwErr(404, "reservation not found");
-    if (doc.status === nextStatus) throwErr(409, `reservation already ${nextStatus}`);
-    if (doc.status !== "reserved") throwErr(409, `reservation is ${doc.status}`);
+    // Pessimistic lock on the reservation to serialize cashier decisions.
+    return await withLock(`reservation:${r}`, async () => {
+      const doc = await reservationModel.findByRef(r);
+      if (!doc) throwErr(404, "reservation not found");
+      if (doc.status === nextStatus) throwErr(409, `reservation already ${nextStatus}`);
+      if (doc.status !== "reserved") throwErr(409, `reservation is ${doc.status}`);
 
-    const now = new Date();
-    const set = { status: nextStatus, updatedAt: now };
-    if (nextStatus === "accepted") set.acceptedAt = now;
-    else set.rejectedAt = now;
-    await reservationModel.update(doc._id, set);
+      const now = new Date();
+      const set = { status: nextStatus, updatedAt: now };
+      if (nextStatus === "accepted") set.acceptedAt = now;
+      else set.rejectedAt = now;
+      await reservationModel.update(doc._id, set);
 
-    try {
-      await activityLogs.insertOne({ actorId: actorId || null, action, target: r, at: now });
-    } catch (_) { /* audit best-effort */ }
+      if (activityLogs) {
+        try {
+          await activityLogs.insertOne({ actorId: actorId || null, action, target: r, at: now });
+        } catch (_) { /* audit best-effort */ }
+      }
 
-    let fresh = await reservationModel.findByRef(r);
-    if (nextStatus === "accepted") {
-      fresh = await attachCalendarEvent(fresh);
-      const notified = await notifyAccepted(fresh);
-      return { ok: true, reservation: shape(fresh), notified };
-    }
-    return { ok: true, reservation: shape(fresh) };
+      let fresh = await reservationModel.findByRef(r);
+      if (nextStatus === "accepted") {
+        fresh = await attachCalendarEvent(fresh);
+        const notified = await notifyAccepted(fresh);
+        return { ok: true, reservation: shape(fresh), notified };
+      }
+      return { ok: true, reservation: shape(fresh) };
+    });
   }
 
   async function accept(ref, actorId) {
@@ -281,8 +304,8 @@ export function reservationService({
 
   // Cashier check-in (CA-008/CA-015): an accepted reservation opens a real
   // session, which is what marks the table occupied (session.service.start).
-  // The accepted -> checked-in transition is claimed first so a double click
-  // can never open two sessions; a failed start releases the claim again.
+  // The accepted -> checked-in transition is claimed first under lock so a
+  // double click can never open two sessions; a failed start releases the claim again.
   async function checkIn(ref, actor) {
     const r = String(ref || "").trim();
     if (!r) throwErr(422, "reservation reference is required");
@@ -290,93 +313,98 @@ export function reservationService({
       throwErr(500, "session service is unavailable");
     }
 
-    const doc = await reservationModel.findByRef(r);
-    if (!doc) throwErr(404, "reservation not found");
-    if (doc.status === "checked-in") throwErr(409, "reservation is already checked in");
-    if (doc.status === "completed") throwErr(409, "reservation already completed");
-    if (doc.status !== "accepted") throwErr(409, `reservation is ${doc.status}`);
-    if (doc.endTime instanceof Date && doc.endTime.getTime() <= Date.now()) {
-      throwErr(422, "reservation time has already ended");
-    }
+    // Pessimistic lock on the reservation to serialize check-in transitions.
+    return await withLock(`reservation:${r}`, async () => {
+      const doc = await reservationModel.findByRef(r);
+      if (!doc) throwErr(404, "reservation not found");
+      if (doc.status === "checked-in") throwErr(409, "reservation is already checked in");
+      if (doc.status === "completed") throwErr(409, "reservation already completed");
+      if (doc.status !== "accepted") throwErr(409, `reservation is ${doc.status}`);
+      if (doc.endTime instanceof Date && doc.endTime.getTime() <= Date.now()) {
+        throwErr(422, "reservation time has already ended");
+      }
 
-    // Legacy rows may have no durationMinutes; derive it from the slot.
-    let duration = Number(doc.durationMinutes);
-    if (!Number.isFinite(duration) || duration <= 0) {
-      const startMs = doc.startTime instanceof Date ? doc.startTime.getTime() : NaN;
-      const endMs = doc.endTime instanceof Date ? doc.endTime.getTime() : NaN;
-      duration =
-        Number.isFinite(startMs) && Number.isFinite(endMs)
-          ? Math.round((endMs - startMs) / 60000)
-          : 60;
-    }
-    duration = Math.min(1440, Math.max(60, Math.round(duration)));
+      // Legacy rows may have no durationMinutes; derive it from the slot.
+      let duration = Number(doc.durationMinutes);
+      if (!Number.isFinite(duration) || duration <= 0) {
+        const startMs = doc.startTime instanceof Date ? doc.startTime.getTime() : NaN;
+        const endMs = doc.endTime instanceof Date ? doc.endTime.getTime() : NaN;
+        duration =
+          Number.isFinite(startMs) && Number.isFinite(endMs)
+            ? Math.round((endMs - startMs) / 60000)
+            : 60;
+      }
+      duration = Math.min(1440, Math.max(60, Math.round(duration)));
 
-    const now = new Date();
-    const claimed = await reservationModel.claim(doc._id, "accepted", {
-      status: "checked-in",
-      checkedInAt: now,
-      checkedInBy: actor && actor.id ? String(actor.id) : null,
-      updatedAt: now,
-    });
-    if (!claimed) throwErr(409, "reservation is already checked in");
-
-    let started;
-    try {
-      started = await sessionService.start(
-        {
-          tableId: String(doc.tableId),
-          customerName: doc.customerName,
-          durationMinutes: duration,
-          reservationRef: r,
-        },
-        actor || {}
-      );
-    } catch (e) {
-      // The table could not be occupied (already in use, under maintenance,
-      // archived, ...). Restore the request so the cashier can retry/reject.
-      await reservationModel.update(doc._id, {
-        status: "accepted",
-        checkedInAt: null,
-        checkedInBy: null,
-        sessionId: null,
-        sessionEndsAt: null,
-        updatedAt: new Date(),
+      const now = new Date();
+      const claimed = await reservationModel.claim(doc._id, "accepted", {
+        status: "checked-in",
+        checkedInAt: now,
+        checkedInBy: actor && actor.id ? String(actor.id) : null,
+        updatedAt: now,
       });
-      throw e;
-    }
+      if (!claimed) throwErr(409, "reservation is already checked in");
 
-    const session = started && started.session ? started.session : null;
-    try {
-      await reservationModel.update(doc._id, {
-        sessionId: session ? session.id : null,
-        sessionEndsAt:
-          session && session.endTime ? new Date(session.endTime) : null,
-        updatedAt: new Date(),
-      });
-    } catch (e) {
-      // The session is already live; never roll it back for a link failure.
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[gamehub] reservation session link failed:",
-        e && e.message ? e.message : e
-      );
-    }
+      let started;
+      try {
+        started = await sessionService.start(
+          {
+            tableId: String(doc.tableId),
+            customerName: doc.customerName,
+            durationMinutes: duration,
+            reservationRef: r,
+          },
+          actor || {}
+        );
+      } catch (e) {
+        // The table could not be occupied (already in use, under maintenance,
+        // archived, ...). Restore the request so the cashier can retry/reject.
+        await reservationModel.update(doc._id, {
+          status: "accepted",
+          checkedInAt: null,
+          checkedInBy: null,
+          sessionId: null,
+          sessionEndsAt: null,
+          updatedAt: new Date(),
+        });
+        throw e;
+      }
 
-    try {
-      await activityLogs.insertOne({
-        actorId: actor && actor.id ? actor.id : null,
-        action: "reservation_check_in",
-        target: r,
-        at: now,
-        meta: {
+      const session = started && started.session ? started.session : null;
+      try {
+        await reservationModel.update(doc._id, {
           sessionId: session ? session.id : null,
-          tableName: doc.tableName ?? "",
-        },
-      });
-    } catch (_) { /* audit best-effort */ }
+          sessionEndsAt:
+            session && session.endTime ? new Date(session.endTime) : null,
+          updatedAt: new Date(),
+        });
+      } catch (e) {
+        // The session is already live; never roll it back for a link failure.
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[gamehub] reservation session link failed:",
+          e && e.message ? e.message : e
+        );
+      }
 
-    const fresh = await reservationModel.findByRef(r);
-    return { ok: true, reservation: shape(fresh), session };
+      if (activityLogs) {
+        try {
+          await activityLogs.insertOne({
+            actorId: actor && actor.id ? actor.id : null,
+            action: "reservation_check_in",
+            target: r,
+            at: now,
+            meta: {
+              sessionId: session ? session.id : null,
+              tableName: doc.tableName ?? "",
+            },
+          });
+        } catch (_) { /* audit best-effort */ }
+      }
+
+      const fresh = await reservationModel.findByRef(r);
+      return { ok: true, reservation: shape(fresh), session };
+    });
   }
 
   async function listAll() {

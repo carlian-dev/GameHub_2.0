@@ -1386,6 +1386,100 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .pw-eye:hover { color: var(--brass-bright); background: rgba(216, 182, 92, 0.08); }
 .pw-eye:active { transform: translateY(-50%) scale(0.94); }
 .pw-eye svg { width: 17px; height: 17px; }
+
+/* Password strength meter and security hints */
+.pw-strength-box {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.pw-strength-track {
+  display: flex;
+  gap: 5px;
+  height: 4px;
+  width: 100%;
+}
+.pw-strength-bar {
+  flex: 1;
+  height: 100%;
+  border-radius: 2px;
+  background: rgba(244, 238, 222, 0.12);
+  transition: background-color 0.25s ease, opacity 0.25s ease;
+}
+.pw-strength-box[data-strength="weak"] .pw-strength-bar:nth-child(1) {
+  background: #F87171;
+}
+.pw-strength-box[data-strength="moderate"] .pw-strength-bar:nth-child(1),
+.pw-strength-box[data-strength="moderate"] .pw-strength-bar:nth-child(2) {
+  background: #D8B65C;
+}
+.pw-strength-box[data-strength="strong"] .pw-strength-bar:nth-child(1),
+.pw-strength-box[data-strength="strong"] .pw-strength-bar:nth-child(2),
+.pw-strength-box[data-strength="strong"] .pw-strength-bar:nth-child(3) {
+  background: #7FEBC0;
+}
+.pw-strength-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.pw-strength-label {
+  color: var(--cream-faint);
+}
+.pw-strength-val {
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--cream-faint);
+}
+.pw-strength-box[data-strength="weak"] .pw-strength-val {
+  color: #F87171;
+}
+.pw-strength-box[data-strength="moderate"] .pw-strength-val {
+  color: #D8B65C;
+}
+.pw-strength-box[data-strength="strong"] .pw-strength-val {
+  color: #7FEBC0;
+}
+.pw-rules {
+  list-style: none;
+  margin: 8px 0 2px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+.pw-rule-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cream-faint);
+  transition: color 0.2s ease;
+}
+.pw-rule-item.valid {
+  color: #7FEBC0;
+}
+.pw-rule-item svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+.field-hint {
+  font-size: 11px;
+  color: var(--cream-faint);
+  margin-top: 4px;
+  line-height: 1.4;
+  transition: color 0.2s ease;
+}
+.field-hint.valid {
+  color: #7FEBC0;
+}
+.field-hint.invalid {
+  color: #F87171;
+}
 #msg { min-height: 20px; margin-top: 10px; font-size: 12.5px; line-height: 1.55; }
 #msg.ok { color: var(--live-on-night); }
 #msg.err { color: var(--danger-on-night); }

@@ -8,7 +8,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#08111F" />
-  <title>Create cashier account — GameHub</title>
+  <title>Create account — GameHub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" />
@@ -40,7 +40,7 @@
 
   <main class="staff-main">
     <p class="eyebrow eyebrow-gold"><span></span>Create account<span></span></p>
-    <h1 class="staff-title">Create cashier <em>account.</em></h1>
+    <h1 class="staff-title" id="pageTitle">Create <em>account.</em></h1>
     <p class="staff-sub" id="lede">Your invitation is pre-approved — your account is active right away.</p>
 
     <section class="staff-card" id="dead" hidden>
@@ -49,7 +49,8 @@
 
     <section class="staff-card" id="form" hidden>
       <div class="staff-card-head">
-        <span>Invitation details</span>
+        <span>Account details</span>
+        <span id="roleBadge" class="badge"></span>
         <span class="staff-lock" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
         </span>
@@ -70,14 +71,61 @@
         <label class="field" for="username">
           <span>Username (3-30: letters, numbers, . _ -)</span>
           <input id="username" name="username" type="text" placeholder="juan.cashier" autocomplete="username" required />
+          <div class="field-hint" id="usernameHint">3-30 characters: letters, numbers, dot, underscore, dash. Must start and end with a letter or number.</div>
         </label>
         <label class="field" for="password">
-          <span>Password (min 8)</span>
-          <input id="password" name="password" type="password" autocomplete="new-password" required />
+          <span>Password</span>
+          <span class="pw-wrap">
+            <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="new-password" required />
+            <button type="button" class="pw-eye" aria-label="Show password" aria-pressed="false" data-target="password">
+              <svg class="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s3.6-6.4 10-6.4S22 12 22 12s-3.6 6.4-10 6.4S2 12 2 12Z" /><circle cx="12" cy="12" r="2.8" /></svg>
+              <svg class="ic-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" hidden><path d="M4 4l16 16" /><path d="M9.9 5.7A9.9 9.9 0 0 1 12 5.5c6.4 0 10 6.4 10 6.4a17.6 17.6 0 0 1-3.4 4.1M6.2 7.9A17.4 17.4 0 0 0 2 12s3.6 6.4 10 6.4c1.3 0 2.4-.2 3.5-.6" /><path d="M9.9 10a2.8 2.8 0 0 0 4 4" /></svg>
+            </button>
+          </span>
+          <div class="pw-strength-box" id="pwStrengthBox" data-strength="" aria-live="polite">
+            <div class="pw-strength-track">
+              <span class="pw-strength-bar"></span>
+              <span class="pw-strength-bar"></span>
+              <span class="pw-strength-bar"></span>
+            </div>
+            <div class="pw-strength-meta">
+              <span class="pw-strength-label">Password strength:</span>
+              <span class="pw-strength-val" id="pwStrengthVal">—</span>
+            </div>
+          </div>
+          <ul class="pw-rules" id="pwRules">
+            <li class="pw-rule-item" id="rule-length">
+              <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="4"/></svg>
+              <span>At least 8 characters</span>
+            </li>
+            <li class="pw-rule-item" id="rule-cases">
+              <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="4"/></svg>
+              <span>Upper &amp; lowercase letters</span>
+            </li>
+            <li class="pw-rule-item" id="rule-number">
+              <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="4"/></svg>
+              <span>At least one number</span>
+            </li>
+            <li class="pw-rule-item" id="rule-symbol">
+              <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="4"/></svg>
+              <span>At least one symbol (!@#$%^&amp;*)</span>
+            </li>
+            <li class="pw-rule-item" id="rule-nouser">
+              <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="4"/></svg>
+              <span>Does not contain username</span>
+            </li>
+          </ul>
         </label>
         <label class="field" for="confirm">
           <span>Confirm password</span>
-          <input id="confirm" name="confirm" type="password" autocomplete="new-password" required />
+          <span class="pw-wrap">
+            <input id="confirm" name="confirm" type="password" placeholder="••••••••" autocomplete="new-password" required />
+            <button type="button" class="pw-eye" aria-label="Show password" aria-pressed="false" data-target="confirm">
+              <svg class="ic-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s3.6-6.4 10-6.4S22 12 22 12s-3.6 6.4-10 6.4S2 12 2 12Z" /><circle cx="12" cy="12" r="2.8" /></svg>
+              <svg class="ic-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" hidden><path d="M4 4l16 16" /><path d="M9.9 5.7A9.9 9.9 0 0 1 12 5.5c6.4 0 10 6.4 10 6.4a17.6 17.6 0 0 1-3.4 4.1M6.2 7.9A17.4 17.4 0 0 0 2 12s3.6 6.4 10 6.4c1.3 0 2.4-.2 3.5-.6" /><path d="M9.9 10a2.8 2.8 0 0 0 4 4" /></svg>
+            </button>
+          </span>
+          <div class="field-hint" id="confirmHint" hidden></div>
         </label>
         <div class="recaptcha-slot" id="recaptchaSlot" data-recaptcha-theme="dark" hidden></div>
         <button id="go" type="submit" class="btn btn-solid btn-block">Create account</button>

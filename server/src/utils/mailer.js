@@ -7,10 +7,11 @@ import { env } from "../config/env.js";
 
 const SUBJECT = "Your GameHub cashier invitation";
 
-function inviteText(link) {
+function inviteText(link, role = "cashier") {
+  const roleTitle = role === "admin" ? "co-admin" : "cashier";
   return (
     "Hi there,\n\n" +
-    "You have been invited to create a GameHub cashier account.\n" +
+    `You have been invited to create a GameHub ${roleTitle} account.\n` +
     "Open this link within 24 hours (single use):\n\n" +
     `${link}\n\n` +
     "If you did not expect this, ignore this mail.\n"
@@ -31,14 +32,18 @@ export function createMailer() {
   });
 
   return {
-    /** Send the cashier invitation link. Throws a 502-mapped error on failure. */
-    async sendInvite(toEmail, link) {
+    /** Send the invitation link (cashier or co-admin). Throws a 502-mapped error on failure. */
+    async sendInvite(toEmail, link, role = "cashier") {
+      const isCoAdmin = role === "admin";
+      const subject = isCoAdmin
+        ? "Your GameHub co-admin invitation"
+        : SUBJECT;
       try {
         await transporter.sendMail({
           from: `"${env.MAIL_FROM || "GameHub"}" <${env.MAIL_USER}>`,
           to: toEmail,
-          subject: SUBJECT,
-          text: inviteText(link),
+          subject,
+          text: inviteText(link, role),
         });
       } catch (err) {
         // Log the driver detail for the admin (never leaks to Frontend).

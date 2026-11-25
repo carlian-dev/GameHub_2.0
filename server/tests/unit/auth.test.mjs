@@ -195,3 +195,159 @@ describe("stateless JWT sign-in", () => {
     });
   });
 });
+
+describe("cashier registration security (username & password)", () => {
+  const token = "invite-token-1234567890abcdef1234567890abcdef";
+  const validInvite = {
+    _id: "inv-1",
+    email: "cashier@example.com",
+    used: false,
+    expiresAt: new Date(Date.now() + 86400000),
+    createdBy: "admin-1",
+  };
+
+  function regService(userDoc = null, customInvite = null) {
+    const users = [];
+    const logs = [];
+    return {
+      svc: authService({
+        userModel: {
+          findByEmail: async (email) => (userDoc?.email === email ? userDoc : null),
+          findByUsername: async (username) => (userDoc?.username === username ? userDoc : null),
+          findById: async () => null,
+        },
+        invitationModel: {
+          findByTokenHashAny: async () => customInvite || validInvite,
+          markUsed: async () => true,
+        },
+        db: {
+          collection: (name) => ({
+            insertOne: async (doc) => {
+              if (name === "users") users.push(doc);
+              else logs.push(doc);
+              return { insertedId: "new-user-1" };
+            },
+          }),
+        },
+      }),
+      users,
+      logs,
+    };
+  }
+
+  it("rejects invalid or reserved usernames", async () => {
+    const { svc } = regService();
+
+    // Reserved username
+    await assert.rejects(
+      () =>
+        svc.register({
+          token,
+          firstName: "Juan",
+          lastName: "Dela Cruz",
+          email: "cashier@example.com",
+          username: "admin",
+          password: "ValidPass123!",
+        }),
+      (err) => err.status === 422 && /reserved/i.test(err.message)
+    );
+
+    // Starts with dot
+    await assert.rejects(
+      () =>
+        svc.register({
+          token,
+          firstName: "Juan",
+          lastName: "Dela Cruz",
+          email: "cashier@example.com",
+          username: ".juan",
+          password: "ValidPass123!",
+        }),
+      (err) => err.status === 422 && /start and end with a letter/i.test(err.message)
+    );
+  });
+
+  it("rejects weak passwords (too short, only numbers, common, personal info)", async () => {
+    const { svc } = regService();
+
+    // Password containing username
+    await assert.rejects(
+      () =>
+        svc.register({
+          token,
+          firstName: "Juan",
+          lastName: "Dela Cruz",
+          email: "cashier@example.com",
+          username: "juan.cashier",
+          password: "juan.cashier123",
+        }),
+      (err) => err.status === 422 && /weak/i.test(err.message)
+    );
+
+    // Common weak password
+    await assert.rejects(
+      () =>
+        svc.register({
+          token,
+          firstName: "Juan",
+          lastName: "Dela Cruz",
+          email: "cashier@example.com",
+          username: "juan.c",
+          password: "password123",
+        }),
+      (err) => err.status === 422 && /weak/i.test(err.message)
+    );
+  });
+
+  it("accepts valid registration with moderate or strong password", async () => {
+    const { svc, users } = regService();
+
+    const res = await svc.register({
+      token,
+      firstName: "Juan",
+      lastName: "Dela Cruz",
+      email: "cashier@example.com",
+      username: "juan.cashier",
+      password: "StrongPass#2026",
+    });
+
+    assert.equal(res.username, "juan.cashier");
+    assert.equal(res.role, "cashier");
+    assert.equal(users.length, 1);
+    assert.equal(users[0].username, "juan.cashier");
+    assert.equal(users[0].role, "cashier");
+  });
+
+  it("accepts valid co-admin registration when invitation has admin role", async () => {
+    const adminInvite = {
+      _id: "admin-invite-1",
+      email: "coadmin@example.com",
+      role: "admin",
+      tokenHash: "hashed-token",
+      used: false,
+      expiresAt: new Date(Date.now() + 86400000),
+      createdBy: "main-admin-id",
+    };
+    const { svc, users, logs } = regService(null, adminInvite);
+
+    const res = await svc.register({
+      token,
+      firstName: "Maria",
+      lastName: "Santos",
+      email: "coadmin@example.com",
+      username: "maria.admin",
+      password: "StrongAdmin#2026",
+    });
+
+    assert.equal(res.username, "maria.admin");
+    assert.equal(res.role, "admin");
+    assert.equal(users.length, 1);
+    assert.equal(users[0].username, "maria.admin");
+    assert.equal(users[0].role, "admin");
+    assert.equal(users[0].status, "active");
+
+    const approvalLog = logs.find((l) => l.action === "approve_admin");
+    assert.ok(approvalLog, "should log approve_admin");
+    assert.equal(approvalLog.actorId, "main-admin-id");
+  });
+});

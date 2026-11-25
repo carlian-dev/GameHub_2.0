@@ -35,13 +35,18 @@ export function invitationService({ invitationModel, db, mailer }) {
         err.status = 410;
         throw err;
       }
-      return { valid: true, email: invitation.email };
+      return { valid: true, email: invitation.email, role: invitation.role || "cashier" };
     },
 
-    async create({ email, actorId, frontendUrl, mailerDryRun = false }) {
+    async create({ email, role = "cashier", actorId, frontendUrl, mailerDryRun = false }) {
       const lowerEmail = String(email).toLowerCase().trim();
       if (!lowerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lowerEmail)) {
         const err = new Error("valid email is required");
+        err.status = 422;
+        throw err;
+      }
+      if (role && role !== "cashier" && role !== "admin") {
+        const err = new Error("role must be cashier or admin");
         err.status = 422;
         throw err;
       }
@@ -53,6 +58,8 @@ export function invitationService({ invitationModel, db, mailer }) {
         throw err;
       }
 
+      const targetRole = role === "admin" ? "admin" : "cashier";
+
       // Resend replaces: one live invitation per email at a time.
       await invitationsColl.deleteMany({ email: lowerEmail, used: false });
 
@@ -63,6 +70,7 @@ export function invitationService({ invitationModel, db, mailer }) {
       const insertedId = await invitationModel.create({
         email: lowerEmail,
         tokenHash: crypto.createHash("sha256").update(token).digest("hex"),
+        role: targetRole,
         expiresAt,
         createdBy: actorId,
         createdAt: now,
@@ -75,9 +83,9 @@ export function invitationService({ invitationModel, db, mailer }) {
         if (mailerDryRun) {
           // Do not send real email in tests.
           // eslint-disable-next-line no-console
-          console.log(`[invite] DRY-RUN invite mail to ${lowerEmail}: ${link}`);
+          console.log(`[invite] DRY-RUN invite mail (${targetRole}) to ${lowerEmail}: ${link}`);
         } else if (mailer && mailer.sendInvite) {
-          await mailer.sendInvite(lowerEmail, link);
+          await mailer.sendInvite(lowerEmail, link, targetRole);
         } else {
           const err = new Error(
             "mail sending is not configured (set MAIL_USER/MAIL_PASS)"
@@ -94,7 +102,7 @@ export function invitationService({ invitationModel, db, mailer }) {
       // Invite IS the approval: log with inviter as actor.
       await activityLogs.insertOne({
         actorId,
-        action: "approve_cashier",
+        action: targetRole === "admin" ? "approve_admin" : "approve_cashier",
         target: String(insertedId),
         at: now,
       });
@@ -103,6 +111,7 @@ export function invitationService({ invitationModel, db, mailer }) {
         ok: true,
         id: String(insertedId),
         email: lowerEmail,
+        role: targetRole,
         link,
         message: "invitation sent (valid 24 hours, single use)",
       };
@@ -120,6 +129,7 @@ export function invitationService({ invitationModel, db, mailer }) {
           return {
             id: String(doc._id),
             email: doc.email ?? "",
+            role: doc.role ?? "cashier",
             status,
             createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : null,
           };

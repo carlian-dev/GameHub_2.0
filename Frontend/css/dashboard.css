@@ -671,6 +671,8 @@ a.dash-stat:hover {
 .badge.pending { background: #FCF6DE; color: #8A6A0C; } /* was 3.35:1 on this chip; #8A6A0C = 4.67:1 */
 .badge.archived { background: #F3F4F6; color: #4B5563; } /* #6B7280 was 4.39:1; #4B5563 = 6.9:1 */
 .badge.declined, .badge.maintenance { background: #FEE2E2; color: #B91C1C; } /* #DC2626 was 3.95:1; #B91C1C = 5.3:1 */
+.badge.admin { background: #FEF3C7; color: #92400E; }
+.badge.cashier { background: #E0E7FF; color: #3730A3; }
 .badge.method-cash { background: #D1FAE5; color: #047857; }
 .badge.method-gcash { background: #E0F2FE; color: #0E7490; } /* photo table-blue */
 /* Dark status colors follow the Midnight Navy spec: green = available,
@@ -688,6 +690,8 @@ a.dash-stat:hover {
 .dash[data-theme="dark"] .badge.pending { background: #46463B; color: #FBBF24; }
 .dash[data-theme="dark"] .badge.archived { background: #28364D; color: #94A3B8; }
 .dash[data-theme="dark"] .badge.declined, .dash[data-theme="dark"] .badge.maintenance { background: #2F2F44; color: #F87171; }
+.dash[data-theme="dark"] .badge.admin { background: #453418; color: #FCD34D; }
+.dash[data-theme="dark"] .badge.cashier { background: #282C54; color: #A5B4FC; }
 
 .rowbtn {
   border: 1px solid var(--d-border);

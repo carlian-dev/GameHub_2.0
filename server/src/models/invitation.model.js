@@ -20,11 +20,11 @@ export function invitationModel({ db }) {
         { $set: { used: true, usedAt } }
       );
     },
-    async create({ email, tokenHash, expiresAt, createdBy, createdAt }) {
+    async create({ email, tokenHash, role = "cashier", expiresAt, createdBy, createdAt }) {
       const res = await coll.insertOne({
         email,
         tokenHash,
-        role: "cashier",
+        role: role === "admin" ? "admin" : "cashier",
         expiresAt,
         used: false,
         createdBy,

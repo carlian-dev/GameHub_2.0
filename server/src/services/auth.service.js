@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import { toObjectId } from "../models/bson.js";
 import { isValidGoogleClientId } from "../utils/google.js";
 import { signAuthToken } from "../utils/authToken.js";
+import { evaluatePassword, validateUsername } from "../utils/passwordStrength.js";
 import {
   parseUserVersion,
   userVersion,
@@ -337,8 +338,27 @@ export function authService({
         err.status = 422;
         throw err;
       }
-      if (password.length < 8) {
+
+      const usernameLower = String(username).toLowerCase().trim();
+      const usernameCheck = validateUsername(usernameLower);
+      if (!usernameCheck.valid) {
+        const err = new Error(usernameCheck.error);
+        err.status = 422;
+        throw err;
+      }
+
+      if (!password || password.length < 8) {
         const err = new Error("password must be at least 8 characters");
+        err.status = 422;
+        throw err;
+      }
+      const pwEval = evaluatePassword(password, {
+        username: usernameLower,
+        firstName,
+        lastName,
+      });
+      if (pwEval.level === "weak") {
+        const err = new Error(pwEval.message || "password is too weak — must be at least moderate with a mix of uppercase, lowercase, numbers, or symbols");
         err.status = 422;
         throw err;
       }
@@ -368,13 +388,6 @@ export function authService({
         throw err;
       }
 
-      const usernameLower = String(username).toLowerCase().trim();
-      if (!/^[a-z0-9._-]{3,30}$/.test(usernameLower)) {
-        const err = new Error("username must be 3-30 chars: letters, numbers, . _ -");
-        err.status = 422;
-        throw err;
-      }
-
       if (await userModel.findByUsername(usernameLower)) {
         const err = new Error("username already used");
         err.status = 409;
@@ -389,6 +402,7 @@ export function authService({
       const passwordHash = await bcrypt.hash(password, 10);
       const displayName = `${firstName} ${lastName}`;
       const now = new Date();
+      const targetRole = invitation.role === "admin" ? "admin" : "cashier";
 
       const res = await usersColl.insertOne({
         version: 1,
@@ -399,7 +413,7 @@ export function authService({
         firstName,
         lastName,
         displayName,
-        role: "cashier",
+        role: targetRole,
         status: "active",
         emailVerified: true,
         createdAt: now,
@@ -411,7 +425,7 @@ export function authService({
       // Invite IS the approval: log with inviter as actor.
       await activityLogsColl.insertOne({
         actorId: String(invitation.createdBy || "invite"),
-        action: "approve_cashier",
+        action: targetRole === "admin" ? "approve_admin" : "approve_cashier",
         target: String(res.insertedId),
         at: now,
       });
@@ -419,7 +433,7 @@ export function authService({
       return {
         username: usernameLower,
         email: lowerEmail,
-        role: "cashier",
+        role: targetRole,
       };
     },
 
@@ -688,6 +702,17 @@ export function authService({
       if (user.status !== "active") {
         const err = new Error("account is not active");
         err.status = 403;
+        throw err;
+      }
+
+      const pwEval = evaluatePassword(password, {
+        username: user.username || "",
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+      });
+      if (pwEval.level === "weak") {
+        const err = new Error(pwEval.message || "password is too weak — must be at least moderate with a mix of uppercase, lowercase, numbers, or symbols");
+        err.status = 422;
         throw err;
       }
 

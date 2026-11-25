@@ -258,7 +258,7 @@ async function getHealth() {
 // register() takes one object: token, firstName, lastName, username,
 // email (must equal the invited email), password.
 async function register(fields) {
-  return api("/api/cashiers/register", {
+  return api("/api/auth/register", {
     method: "POST",
     body: JSON.stringify(fields),
   });
@@ -267,10 +267,10 @@ async function register(fields) {
 async function checkInvite(token) {
   return api(`/api/invitations/${encodeURIComponent(token)}`);
 }
-async function createInvite(email) {
+async function createInvite(email, role = "cashier") {
   return api("/api/admin/invitations", {
     method: "POST",
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, role }),
   });
 }
 async function listInvites() {

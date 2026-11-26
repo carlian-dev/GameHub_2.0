@@ -14,6 +14,10 @@ Node/Express JSON API backed by MongoDB Atlas, and a dependency-free
 HTML/CSS/JS frontend. Express is the one and only backend; the former PHP
 backend was archived under `archive/Backend/` and is not used at runtime.
 
+## Preview
+
+![GameHub customer landing page: hero, live table availability, and location map](docs/screenshots/landing.png)
+
 ## Features (by delivery)
 
 * **Sprint 1 — Identity & staff administration.** Cashier self-registration
@@ -128,7 +132,7 @@ GameHub_2.0/
     src/function/shared/  Old health check
     .env / .env.example   Archived secrets (ignored) / old template
   Frontend/
-    index.html              Customer landing (hero, location map)
+    index.html              Customer landing (hero, live table availability, location map)
     login/index.html        Redirect so bare /login resolves
     src/function/auth/      Login, registration pages + logic
     src/function/admin/     Admin dashboard, staff, credentials, operations
